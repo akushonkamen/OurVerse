@@ -1,0 +1,1592 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ReInvent Demo - 附近分享演示版</title>
+            <script src="https://webapi.amap.com/maps?v=2.0&key=c8cb70e52409857f684c6fb41fc6e7b4"></script>
+        <script src="https://cdn.jsdelivr.net/npm/exif-js@2.3.0/exif.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #000000;
+            color: #ffffff;
+            line-height: 1.6;
+            font-weight: 300;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 极简导航 */
+        .nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            padding: 0 20px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav h1 {
+            font-size: 20px;
+            font-weight: 200;
+            letter-spacing: 1px;
+            color: #111;
+        }
+
+        .demo-badge {
+            background: #FF6B6B;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 400;
+        }
+
+        .admin-btn {
+            background: none;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            color: #111;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 300;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .admin-btn:hover {
+            background: #111;
+            color: #fff;
+        }
+
+        .admin-btn.active {
+            background: #111;
+            color: #fff;
+        }
+
+        .container {
+            margin-top: 60px;
+            padding: 0;
+            min-height: calc(100vh - 60px);
+        }
+
+        /* 状态指示器 */
+        .status {
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 300;
+            color: #666;
+            background: #fff;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .status.success {
+            color: #27AE60;
+        }
+
+        .status.error {
+            color: #E74C3C;
+        }
+
+        .status.loading {
+            color: #666;
+        }
+
+        .status.loading::after {
+            content: '';
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #666;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 地图容器 */
+        .map-container {
+            height: 45vh;
+            position: relative;
+            background: #f5f5f5;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .map-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #000000, transparent);
+            animation: scan 3s ease-in-out infinite;
+            z-index: 10;
+        }
+
+        @keyframes scan {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* 点击波纹效果 */
+        .click-ripple {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #000000;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+            animation: ripple 0.6s ease-out;
+            transform: translate(-50%, -50%);
+        }
+
+        @keyframes ripple {
+            0% {
+                width: 20px;
+                height: 20px;
+                opacity: 1;
+                border-width: 2px;
+            }
+            100% {
+                width: 100px;
+                height: 100px;
+                opacity: 0;
+                border-width: 1px;
+            }
+        }
+
+        .map-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8ZGVmcz4KICAgIDxwYXR0ZXJuIGlkPSJncmlkIiB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8cGF0aCBkPSJNIDIwIDAgTCAwIDAgMCAyMCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMSkiIHN0cm9rZS13aWR0aD0iMSIvPgogICAgPC9wYXR0ZXJuPgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSJ1cmwoI2dyaWQpIi8+Cjwvc3ZnPgo=');
+            opacity: 0.3;
+        }
+
+        .user-location {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 16px;
+            height: 16px;
+            background: #111;
+            border-radius: 50%;
+            border: 3px solid #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 3;
+        }
+
+        .range-circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border: 2px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            z-index: 1;
+        }
+
+        .photo-marker {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            border: 2px solid #111;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 4;
+        }
+
+        .photo-marker:hover {
+            transform: scale(1.2);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .photo-marker::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 6px;
+            background: #111;
+            border-radius: 1px;
+        }
+
+        /* 上传区域 */
+        .upload-section {
+            background: #fff;
+            padding: 30px 20px;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .upload-title {
+            font-size: 16px;
+            font-weight: 300;
+            margin-bottom: 20px;
+            color: #111;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .file-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-input-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100px;
+            border: 1px dashed rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            background: #fafafa;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            color: #666;
+            cursor: pointer;
+        }
+
+        .file-input-display:hover {
+            border-color: #111;
+            background: #f5f5f5;
+        }
+
+        .file-input-display.has-image {
+            border-color: #27AE60;
+            background: #f0f9f0;
+        }
+
+        .image-preview {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .caption-input {
+            width: 100%;
+            border: none;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 15px 0;
+            font-size: 16px;
+            font-weight: 300;
+            background: transparent;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .caption-input:focus {
+            border-bottom-color: #111;
+        }
+
+        .caption-input::placeholder {
+            color: #999;
+        }
+
+        .char-count {
+            text-align: right;
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+
+        .upload-btn {
+            width: 100%;
+            background: #111;
+            color: #fff;
+            border: none;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 300;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .upload-btn:hover {
+            background: #333;
+            transform: translateY(-1px);
+        }
+
+        .upload-btn:active {
+            transform: translateY(0);
+        }
+
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 照片网格 */
+        .photos-section {
+            padding: 30px 20px;
+            background: #fff;
+        }
+
+        .photos-title {
+            font-size: 16px;
+            font-weight: 300;
+            margin-bottom: 20px;
+            color: #111;
+        }
+
+        .photos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 20px;
+        }
+
+        .photo-item {
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
+            position: relative;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .photo-item:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .photo-info {
+            padding: 15px;
+        }
+
+        .photo-caption {
+            font-size: 14px;
+            font-weight: 300;
+            color: #111;
+            margin-bottom: 8px;
+            line-height: 1.3;
+        }
+
+        .photo-distance {
+            font-size: 12px;
+            color: #999;
+            font-weight: 300;
+        }
+
+        .photo-marker-grid {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 400;
+            color: #111;
+        }
+
+        /* 模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 2000;
+            overflow-y: auto;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: #fff;
+            margin: 40px 20px;
+            border-radius: 16px;
+            overflow: hidden;
+            max-width: 500px;
+            margin: 40px auto;
+            animation: slideUp 0.4s ease;
+        }
+
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            font-weight: 300;
+            color: #111;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .close-btn:hover {
+            background: #f5f5f5;
+            color: #111;
+        }
+
+        .modal-body {
+            padding: 0;
+        }
+
+        .modal-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .modal-caption {
+            padding: 20px;
+            font-size: 16px;
+            font-weight: 300;
+            color: #111;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        /* 评论区域 */
+        .comments-section {
+            padding: 20px;
+        }
+
+        .comments-title {
+            font-size: 14px;
+            font-weight: 400;
+            margin-bottom: 15px;
+            color: #111;
+        }
+
+        .comment-form {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .comment-input {
+            flex: 1;
+            border: none;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 12px 0;
+            font-size: 14px;
+            font-weight: 300;
+            background: transparent;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .comment-input:focus {
+            border-bottom-color: #111;
+        }
+
+        .comment-submit {
+            background: none;
+            border: none;
+            color: #111;
+            font-size: 14px;
+            font-weight: 400;
+            cursor: pointer;
+            padding: 8px;
+            transition: opacity 0.3s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .comment-submit:hover {
+            opacity: 0.7;
+        }
+
+        .comment-submit:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .comments-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .comment {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .comment:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .comment-author {
+            font-size: 12px;
+            font-weight: 400;
+            color: #111;
+            margin-bottom: 4px;
+        }
+
+        .comment-text {
+            font-size: 14px;
+            font-weight: 300;
+            color: #333;
+        }
+
+        .comment-time {
+            font-size: 11px;
+            color: #999;
+            margin-top: 4px;
+        }
+
+        /* 管理员控制 */
+        .admin-controls {
+            display: none;
+            padding: 20px;
+            border-top: 0.5px solid rgba(0, 0, 0, 0.05);
+            background: #fafafa;
+        }
+
+        .admin-controls.show {
+            display: block;
+        }
+
+        .admin-controls button {
+            background: none;
+            border: 1px solid rgba(231, 76, 60, 0.5);
+            color: #E74C3C;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 300;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: all 0.3s ease;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .admin-controls button:hover {
+            background: #E74C3C;
+            color: #fff;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .nav {
+                padding: 0 15px;
+            }
+            
+            .nav h1 {
+                font-size: 18px;
+            }
+            
+            .upload-section,
+            .photos-section {
+                padding: 20px 15px;
+            }
+            
+            .photos-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            
+            .modal-content {
+                margin: 20px 15px;
+            }
+            
+            .photo-item img {
+                height: 120px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .modal-content {
+                margin: 10px;
+            }
+            
+            .photos-grid {
+                grid-template-columns: 1fr;
+                gap: 15px;
+            }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+            font-size: 14px;
+            font-weight: 300;
+        }
+
+        /* 通知提示 */
+        .notification {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 300;
+            z-index: 3000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .notification.show {
+            opacity: 1;
+        }
+
+        /* 触摸反馈 */
+        @media (hover: none) {
+            .photo-item:hover {
+                transform: none;
+                box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
+            }
+            
+            .upload-btn:hover {
+                transform: none;
+            }
+        }
+
+        /* 无障碍支持 */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <h1>ReInvent <span class="demo-badge">DEMO</span></h1>
+        <button class="admin-btn" onclick="toggleAdmin()" aria-label="管理员模式">Admin</button>
+    </nav>
+
+    <div class="container">
+        <div class="status" id="status">正在定位你的坐标...</div>
+
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-title">捕捉瞬间</div>
+            <div class="form-group">
+                <div class="file-input-wrapper">
+                    <input type="file" id="photoInput" class="file-input" accept="image/*" capture="camera">
+                    <div class="file-input-display" onclick="document.getElementById('photoInput').click()">
+                        <span id="fileDisplayText">点击上传你的作品</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <input type="text" 
+                       id="captionInput" 
+                       class="caption-input" 
+                       maxlength="20" 
+                       placeholder="说点什么酷的...">
+                <div class="char-count" id="charCount">0/20</div>
+            </div>
+            <button class="upload-btn" onclick="uploadPhoto()" id="uploadBtn">发射</button>
+        </div>
+
+        <div class="photos-section">
+            <div class="photos-title">500米内的精彩</div>
+            <div class="photos-grid" id="photosGrid">
+                <!-- 照片将在这里动态加载 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 照片详情模态框 -->
+    <div class="modal" id="photoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>详情</h3>
+                <button class="close-btn" onclick="closeModal()" aria-label="关闭">×</button>
+            </div>
+            <div class="modal-body">
+                <img id="modalImage" class="modal-image" src="" alt="">
+                <div class="modal-caption" id="modalCaption"></div>
+                
+                <div class="comments-section">
+                    <div class="comments-title">评论</div>
+                    <div class="comment-form">
+                        <input type="text" id="commentInput" class="comment-input" placeholder="说点什么...">
+                        <button class="comment-submit" onclick="addComment()" id="commentSubmit">发布</button>
+                    </div>
+                    <div class="comments-list" id="commentsList"></div>
+                </div>
+                
+                <div class="admin-controls" id="adminControls">
+                    <button onclick="deletePhoto()">删除</button>
+                    <button onclick="editLocation()">修改位置</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知提示 -->
+    <div class="notification" id="notification"></div>
+
+    <script>
+        let map;
+        let userLocation;
+        let photos = [];
+        let currentPhotoId;
+        let isAdmin = false;
+        let markers = [];
+
+        // 初始化应用
+        window.onload = function() {
+            initMap();
+            getLocation();
+            loadPhotos();
+            setupEventListeners();
+        };
+
+        // 初始化地图
+        function initMap() {
+            try {
+                map = new AMap.Map('map', {
+                    zoom: 17,
+                    center: [116.397428, 39.90923],
+                    mapStyle: 'amap://styles/light',
+                    features: ['bg', 'road', 'building'],
+                    pitch: 45,
+                    viewMode: '3D',
+                    expandZoomRange: true,
+                    zooms: [10, 20]
+                });
+
+                // 添加卡通风格的控件
+                map.addControl(new AMap.Scale({
+                    position: 'LB',
+                    offset: [20, 20]
+                }));
+
+                // 添加可爱的地图样式
+                map.setMapStyle('amap://styles/whitesmoke');
+                
+                // 添加一些有趣的交互效果
+                map.on('complete', function() {
+                    console.log('地图加载完成！');
+                });
+
+                // 添加点击地图的反馈效果
+                map.on('click', function(e) {
+                    // 创建点击波纹效果
+                    createClickRipple(e.pixel.x, e.pixel.y);
+                });
+
+                // 添加地图加载完成的动画
+                setTimeout(() => {
+                    map.getContainer().style.opacity = '0';
+                    map.getContainer().style.transition = 'opacity 0.5s ease';
+                    setTimeout(() => {
+                        map.getContainer().style.opacity = '1';
+                    }, 100);
+                }, 500);
+
+            } catch (error) {
+                console.error('地图初始化失败:', error);
+                showNotification('地图加载失败，网络可能有问题');
+            }
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 字符计数
+            document.getElementById('captionInput').addEventListener('input', function(e) {
+                const count = e.target.value.length;
+                document.getElementById('charCount').textContent = `${count}/20`;
+            });
+
+            // 文件选择预览
+            document.getElementById('photoInput').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                const display = document.getElementById('fileDisplayText');
+                const wrapper = document.querySelector('.file-input-display');
+                
+                if (file) {
+                    // 验证文件类型和大小
+                    if (!file.type.startsWith('image/')) {
+                        showNotification('请选择图片文件');
+                        return;
+                    }
+                    
+                    if (file.size > 10 * 1024 * 1024) { // 10MB限制
+                        showNotification('图片大小不能超过10MB');
+                        return;
+                    }
+                    
+                    // 显示预览
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        wrapper.innerHTML = `<img src="${e.target.result}" class="image-preview" alt="预览">`;
+                        wrapper.classList.add('has-image');
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    display.textContent = '轻触选择照片';
+                    wrapper.classList.remove('has-image');
+                }
+            });
+
+            // 评论输入回车提交
+            document.getElementById('commentInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    addComment();
+                }
+            });
+
+            // ESC键关闭模态框
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeModal();
+                }
+            });
+
+            // 模态框外部点击关闭
+            document.getElementById('photoModal').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeModal();
+                }
+            });
+        }
+
+        // 获取用户位置
+        function getLocation() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = '正在定位你的坐标...';
+            statusEl.className = 'status loading';
+
+            if (navigator.geolocation) {
+                const options = {
+                    enableHighAccuracy: true,
+                    timeout: 20000,
+                    maximumAge: 300000
+                };
+
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        userLocation = {
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude,
+                            accuracy: position.coords.accuracy
+                        };
+                        
+                        updateMapWithLocation();
+                        statusEl.textContent = `定位成功！精度: ${Math.round(position.coords.accuracy)}米`;
+                        statusEl.className = 'status success';
+                        
+                        loadReInventPhotos();
+                    },
+                    function(error) {
+                        console.error('位置获取失败:', error);
+                        let errorMessage = '定位失败';
+                        
+                        switch(error.code) {
+                            case error.PERMISSION_DENIED:
+                                errorMessage = '需要位置权限才能继续';
+                                break;
+                            case error.POSITION_UNAVAILABLE:
+                                errorMessage = '位置信息不可用';
+                                break;
+                            case error.TIMEOUT:
+                                errorMessage = '定位超时，请重试';
+                                break;
+                        }
+                        
+                        statusEl.textContent = errorMessage;
+                        statusEl.className = 'status error';
+                        
+                        // 使用默认位置
+                        userLocation = {
+                            lat: 39.90923,
+                            lng: 116.397428,
+                            accuracy: 100
+                        };
+                        loadReInventPhotos();
+                    },
+                    options
+                );
+            } else {
+                statusEl.textContent = '浏览器不支持定位功能';
+                statusEl.className = 'status error';
+            }
+        }
+
+        // 加载照片数据
+        function loadPhotos() {
+            // 从本地存储加载照片
+            const savedPhotos = localStorage.getItem('ReInventphotosdemo');
+            if (savedPhotos) {
+                photos = JSON.parse(savedPhotos);
+            } else {
+                // 默认示例照片
+                photos = [
+                    {
+                        id: 1,
+                        url: 'data:image/svg+xml;base64,' + btoa(`
+                            <svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+                                <rect fill="#111111" width="300" height="200"/>
+                                <rect fill="#333333" x="50" y="50" width="200" height="100"/>
+                                <circle fill="#ffffff" cx="150" cy="100" r="20"/>
+                                <rect fill="#666666" x="100" y="80" width="100" height="40"/>
+                            </svg>
+                        `),
+                        caption: '极简美学',
+                        lat: 39.90923 + (Math.random() - 0.5) * 0.008,
+                        lng: 116.397428 + (Math.random() - 0.5) * 0.008,
+                        comments: [
+                            { author: '设计师', text: '黑白灰的完美平衡', time: new Date().toISOString() },
+                            { author: '摄影师', text: '简约而不简单', time: new Date().toISOString() }
+                        ],
+                        timestamp: new Date().toISOString()
+                    },
+                    {
+                        id: 2,
+                        url: 'data:image/svg+xml;base64,' + btoa(`
+                            <svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200">
+                                <rect fill="#000000" width="300" height="200"/>
+                                <rect fill="#ffffff" x="75" y="75" width="150" height="50"/>
+                                <rect fill="#888888" x="100" y="85" width="100" height="30"/>
+                                <circle fill="#ffffff" cx="150" cy="100" r="5"/>
+                            </svg>
+                        `),
+                        caption: '现代主义',
+                        lat: 39.90823 + (Math.random() - 0.5) * 0.008,
+                        lng: 116.398428 + (Math.random() - 0.5) * 0.008,
+                        comments: [],
+                        timestamp: new Date().toISOString()
+                    }
+                ];
+                savePhotos();
+            }
+        }
+
+        // 保存照片到本地存储
+        function savePhotos() {
+            localStorage.setItem('ReInventphotosdemo', JSON.stringify(photos));
+        }
+
+        // 创建点击波纹效果
+        function createClickRipple(x, y) {
+            const ripple = document.createElement('div');
+            ripple.className = 'click-ripple';
+            ripple.style.left = x + 'px';
+            ripple.style.top = y + 'px';
+            
+            document.querySelector('.map-container').appendChild(ripple);
+            
+            setTimeout(() => {
+                ripple.remove();
+            }, 600);
+        }
+
+        // 更新地图显示用户位置
+        function updateMapWithLocation() {
+            if (!map || !userLocation) return;
+            
+            try {
+                // 清除现有标记
+                markers.forEach(marker => marker.remove());
+                markers = [];
+                
+                // 更新地图中心
+                map.setCenter([userLocation.lng, userLocation.lat]);
+                
+                // 添加用户位置标记
+                const userMarker = new AMap.Marker({
+                    position: [userLocation.lng, userLocation.lat],
+                    map: map,
+                    icon: new AMap.Icon({
+                        image: 'data:image/svg+xml;base64,' + btoa(`
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+                                <circle cx="8" cy="8" r="6" fill="#ffffff" opacity="0.9"/>
+                                <circle cx="8" cy="8" r="3" fill="#000000"/>
+                            </svg>
+                        `),
+                        size: new AMap.Size(16, 16)
+                    })
+                });
+                markers.push(userMarker);
+                
+                // 添加500米范围圆圈
+                const circle = new AMap.Circle({
+                    center: [userLocation.lng, userLocation.lat],
+                    radius: 500,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 1,
+                    strokeOpacity: 0.3,
+                    fillColor: '#ffffff',
+                    fillOpacity: 0.05,
+                    map: map
+                });
+                markers.push(circle);
+            } catch (error) {
+                console.error('地图更新失败:', error);
+            }
+        }
+
+        // 加载附近照片
+        function loadReInventPhotos() {
+            if (!userLocation) return;
+            
+            const photosGrid = document.getElementById('photosGrid');
+            photosGrid.innerHTML = '';
+            
+            // 清除地图上的照片标记
+            markers.forEach((marker, index) => {
+                if (index > 1) { // 保留用户位置和圆圈标记
+                    marker.remove();
+                }
+            });
+            markers = markers.slice(0, 2);
+            
+            const ReInventPhotos = photos.filter(photo => {
+                const distance = calculateDistance(
+                    userLocation.lat, userLocation.lng,
+                    photo.lat, photo.lng
+                );
+                return distance <= 500;
+            }).map(photo => ({
+                ...photo,
+                distance: calculateDistance(userLocation.lat, userLocation.lng, photo.lat, photo.lng)
+            }));
+            
+            // 在地图上添加照片标记
+            ReInventPhotos.forEach(photo => {
+                try {
+                    const marker = new AMap.Marker({
+                        position: [photo.lng, photo.lat],
+                        map: map,
+                        icon: new AMap.Icon({
+                            image: 'data:image/svg+xml;base64,' + btoa(`
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+                                    <circle cx="10" cy="10" r="8" fill="#ffffff" stroke="#000000" stroke-width="1" opacity="0.9"/>
+                                    <rect x="6" y="7" width="8" height="6" rx="1" fill="none" stroke="#000000" stroke-width="1"/>
+                                    <circle cx="8" cy="9.5" r="1" fill="#000000"/>
+                                </svg>
+                            `),
+                            size: new AMap.Size(20, 20)
+                        })
+                    });
+                    
+                    marker.on('click', () => openPhotoModal(photo.id));
+                    markers.push(marker);
+                } catch (error) {
+                    console.error('添加地图标记失败:', error);
+                }
+            });
+            
+            // 显示照片网格
+            if (ReInventPhotos.length === 0) {
+                photosGrid.innerHTML = '<div class="empty-state">附近还没有作品，来当第一个吧</div>';
+            } else {
+                ReInventPhotos.forEach(photo => {
+                    const photoDiv = document.createElement('div');
+                    photoDiv.className = 'photo-item';
+                    photoDiv.onclick = () => openPhotoModal(photo.id);
+                    
+                    photoDiv.innerHTML = `
+                        <img src="${photo.url}" alt="用户照片" loading="lazy">
+                        <div class="photo-marker-grid">${Math.round(photo.distance)}m</div>
+                        <div class="photo-info">
+                            <div class="photo-caption">${photo.caption}</div>
+                            <div class="photo-distance">${photo.comments.length} 条评论</div>
+                        </div>
+                    `;
+                    
+                    photosGrid.appendChild(photoDiv);
+                });
+            }
+        }
+
+
+
+        // 计算两点间距离
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371000; // 地球半径（米）
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // 读取图片EXIF数据
+        function getImageLocation(file) {
+            return new Promise((resolve, reject) => {
+                EXIF.getData(file, function() {
+                    const gpsLatitude = EXIF.getTag(this, "GPSLatitude");
+                    const gpsLongitude = EXIF.getTag(this, "GPSLongitude");
+                    const gpsLatitudeRef = EXIF.getTag(this, "GPSLatitudeRef");
+                    const gpsLongitudeRef = EXIF.getTag(this, "GPSLongitudeRef");
+                    
+                    if (gpsLatitude && gpsLongitude) {
+                        const lat = convertDMSToDD(gpsLatitude, gpsLatitudeRef);
+                        const lng = convertDMSToDD(gpsLongitude, gpsLongitudeRef);
+                        resolve({ lat, lng });
+                    } else {
+                        resolve(null);
+                    }
+                });
+            });
+        }
+
+        // 转换GPS坐标格式
+        function convertDMSToDD(dms, ref) {
+            const degrees = dms[0];
+            const minutes = dms[1];
+            const seconds = dms[2];
+            
+            let dd = degrees + minutes / 60 + seconds / 3600;
+            
+            if (ref === "S" || ref === "W") {
+                dd = -dd;
+            }
+            
+            return dd;
+        }
+
+        // 验证位置匹配
+        function validateLocationMatch(imageLocation, userLocation, maxDistance = 100) {
+            if (!imageLocation || !userLocation) {
+                return false;
+            }
+            
+            const distance = calculateDistance(
+                imageLocation.lat, imageLocation.lng,
+                userLocation.lat, userLocation.lng
+            );
+            
+            return distance <= maxDistance;
+        }
+
+        // 上传照片
+        function uploadPhoto() {
+            if (!userLocation) {
+                showNotification('先定位一下你的位置吧');
+                return;
+            }
+            
+            const photoInput = document.getElementById('photoInput');
+            const captionInput = document.getElementById('captionInput');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            if (!photoInput.files[0]) {
+                showNotification('选一张照片吧');
+                return;
+            }
+            
+            if (!captionInput.value.trim()) {
+                showNotification('写点什么吧');
+                return;
+            }
+            
+            // 禁用上传按钮
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = '验证中...';
+            
+            // 读取图片位置信息
+            getImageLocation(photoInput.files[0]).then(imageLocation => {
+                if (imageLocation) {
+                    // 验证位置匹配
+                    if (!validateLocationMatch(imageLocation, userLocation, 100)) {
+                        uploadBtn.disabled = false;
+                        uploadBtn.textContent = '发射';
+                        showNotification('照片位置与当前位置不匹配，请确保照片是在当前位置拍摄的');
+                        return;
+                    }
+                }
+                
+                // 继续上传流程
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // 压缩图片
+                    compressImage(e.target.result, function(compressedUrl) {
+                        const newPhoto = {
+                            id: Date.now(),
+                            url: compressedUrl,
+                            caption: captionInput.value.trim(),
+                            lat: userLocation.lat,
+                            lng: userLocation.lng,
+                            comments: [],
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        photos.unshift(newPhoto); // 添加到开头
+                        savePhotos();
+                        loadReInventPhotos();
+                        
+                        // 重置表单
+                        photoInput.value = '';
+                        captionInput.value = '';
+                        document.getElementById('charCount').textContent = '0/20';
+                        document.querySelector('.file-input-display').innerHTML = '<span>点击上传你的作品</span>';
+                        document.querySelector('.file-input-display').classList.remove('has-image');
+                        
+                        // 恢复上传按钮
+                        uploadBtn.disabled = false;
+                        uploadBtn.textContent = '发射';
+                        
+                        showNotification('发射成功！');
+                    });
+                };
+                
+                reader.onerror = function() {
+                    showNotification('图片读取失败');
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = '发射';
+                };
+                
+                reader.readAsDataURL(photoInput.files[0]);
+            });
+        }
+
+        // 压缩图片
+        function compressImage(dataUrl, callback) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // 计算压缩后的尺寸
+                let { width, height } = img;
+                const maxSize = 800;
+                
+                if (width > height) {
+                    if (width > maxSize) {
+                        height = (height * maxSize) / width;
+                        width = maxSize;
+                    }
+                } else {
+                    if (height > maxSize) {
+                        width = (width * maxSize) / height;
+                        height = maxSize;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                
+                // 绘制压缩后的图片
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                // 转换为base64，质量0.8
+                const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+                callback(compressedDataUrl);
+            };
+            
+            img.onerror = function() {
+                callback(dataUrl); // 如果压缩失败，使用原图
+            };
+            
+            img.src = dataUrl;
+        }
+
+        // 打开照片模态框
+        function openPhotoModal(photoId) {
+            currentPhotoId = photoId;
+            const photo = photos.find(p => p.id === photoId);
+            
+            if (photo) {
+                document.getElementById('modalImage').src = photo.url;
+                document.getElementById('modalCaption').textContent = photo.caption;
+                
+                loadComments(photo.comments);
+                
+                if (isAdmin) {
+                    document.getElementById('adminControls').classList.add('show');
+                } else {
+                    document.getElementById('adminControls').classList.remove('show');
+                }
+                
+                document.getElementById('photoModal').style.display = 'block';
+                document.body.style.overflow = 'hidden';
+                
+                // 聚焦到评论输入框
+                setTimeout(() => {
+                    document.getElementById('commentInput').focus();
+                }, 300);
+            }
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('photoModal').style.display = 'none';
+            document.getElementById('adminControls').classList.remove('show');
+            document.body.style.overflow = 'auto';
+            currentPhotoId = null;
+        }
+
+        // 加载评论
+        function loadComments(comments) {
+            const commentsList = document.getElementById('commentsList');
+            commentsList.innerHTML = '';
+            
+            if (comments.length === 0) {
+                commentsList.innerHTML = '<div class="empty-state" style="padding: 20px 0;">暂无评论</div>';
+                return;
+            }
+            
+            comments.forEach(comment => {
+                const commentDiv = document.createElement('div');
+                commentDiv.className = 'comment';
+                
+                const time = new Date(comment.time);
+                const timeStr = formatTime(time);
+                
+                commentDiv.innerHTML = `
+                    <div class="comment-author">${comment.author}</div>
+                    <div class="comment-text">${comment.text}</div>
+                    <div class="comment-time">${timeStr}</div>
+                `;
+                
+                commentsList.appendChild(commentDiv);
+            });
+        }
+
+        // 格式化时间
+        function formatTime(date) {
+            const now = new Date();
+            const diff = now - date;
+            
+            if (diff < 60000) { // 1分钟内
+                return '刚刚';
+            } else if (diff < 3600000) { // 1小时内
+                return `${Math.floor(diff / 60000)}分钟前`;
+            } else if (diff < 86400000) { // 1天内
+                return `${Math.floor(diff / 3600000)}小时前`;
+            } else {
+                return date.toLocaleDateString();
+            }
+        }
+
+        // 添加评论
+        function addComment() {
+            if (!currentPhotoId) return;
+            
+            const commentInput = document.getElementById('commentInput');
+            const commentSubmit = document.getElementById('commentSubmit');
+            const text = commentInput.value.trim();
+            
+            if (!text) {
+                showNotification('请输入评论内容');
+                return;
+            }
+            
+            // 禁用提交按钮
+            commentSubmit.disabled = true;
+            commentSubmit.textContent = '发布中...';
+            
+            const photo = photos.find(p => p.id === currentPhotoId);
+            if (photo) {
+                const newComment = {
+                    author: `用户${Math.floor(Math.random() * 1000)}`,
+                    text: text,
+                    time: new Date().toISOString()
+                };
+                
+                photo.comments.push(newComment);
+                savePhotos();
+                loadComments(photo.comments);
+                
+                commentInput.value = '';
+                showNotification('评论发布成功！');
+            }
+            
+            // 恢复提交按钮
+            commentSubmit.disabled = false;
+            commentSubmit.textContent = '发布';
+        }
+
+        // 切换管理员模式
+        function toggleAdmin() {
+            isAdmin = !isAdmin;
+            const adminBtn = document.querySelector('.admin-btn');
+            
+            if (isAdmin) {
+                adminBtn.classList.add('active');
+                adminBtn.textContent = 'Admin ✓';
+                showNotification('已进入管理员模式');
+            } else {
+                adminBtn.classList.remove('active');
+                adminBtn.textContent = 'Admin';
+                document.getElementById('adminControls').classList.remove('show');
+            }
+        }
+
+        // 删除照片
+        function deletePhoto() {
+            if (!currentPhotoId || !isAdmin) return;
+            
+            if (confirm('确定要删除这张照片吗？')) {
+                const index = photos.findIndex(p => p.id === currentPhotoId);
+                if (index > -1) {
+                    photos.splice(index, 1);
+                    savePhotos();
+                    loadReInventPhotos();
+                    closeModal();
+                    showNotification('照片已删除');
+                }
+            }
+        }
+
+        // 修改位置
+        function editLocation() {
+            if (!currentPhotoId || !isAdmin) return;
+            
+            const photo = photos.find(p => p.id === currentPhotoId);
+            if (photo) {
+                const newLat = prompt('请输入新的纬度:', photo.lat);
+                const newLng = prompt('请输入新的经度:', photo.lng);
+                
+                if (newLat && newLng && !isNaN(newLat) && !isNaN(newLng)) {
+                    photo.lat = parseFloat(newLat);
+                    photo.lng = parseFloat(newLng);
+                    savePhotos();
+                    loadReInventPhotos();
+                    closeModal();
+                    showNotification('位置已更新');
+                }
+            }
+        }
+
+        // 显示通知
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+
+        // 页面可见性变化处理
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden && userLocation) {
+                loadReInventPhotos();
+            }
+        });
+
+        // 网络状态监听
+        window.addEventListener('online', function() {
+            showNotification('网络已连接');
+        });
+
+        window.addEventListener('offline', function() {
+            showNotification('网络已断开，部分功能可能受限');
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>定位功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #fafafa;
+        }
+        .status {
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            background: #fff;
+            border: 1px solid #ddd;
+        }
+        .success { background: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .info-box {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌍 定位功能测试</h1>
+    
+    <div class="info-box">
+        <h3>当前环境信息：</h3>
+        <p><strong>协议：</strong> <span id="protocol"></span></p>
+        <p><strong>用户代理：</strong> <span id="userAgent"></span></p>
+        <p><strong>地理位置支持：</strong> <span id="geolocationSupport"></span></p>
+        <p><strong>权限API支持：</strong> <span id="permissionsSupport"></span></p>
+    </div>
+
+    <div class="status info" id="status">
+        点击下方按钮开始测试定位功能
+    </div>
+
+    <div>
+        <button onclick="testLocation()">🧭 测试定位</button>
+        <button onclick="checkPermissions()">🔐 检查权限</button>
+        <button onclick="clearStatus()">🗑️ 清除状态</button>
+    </div>
+
+    <div id="result"></div>
+
+    <script>
+        // 显示环境信息
+        document.getElementById('protocol').textContent = location.protocol;
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+        document.getElementById('geolocationSupport').textContent = navigator.geolocation ? '✅ 支持' : '❌ 不支持';
+        document.getElementById('permissionsSupport').textContent = 'permissions' in navigator ? '✅ 支持' : '❌ 不支持';
+
+        function updateStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+
+        function clearStatus() {
+            updateStatus('状态已清除', 'info');
+            document.getElementById('result').innerHTML = '';
+        }
+
+        async function checkPermissions() {
+            updateStatus('正在检查权限状态...', 'info');
+            
+            if (!('permissions' in navigator)) {
+                updateStatus('浏览器不支持权限API', 'error');
+                return;
+            }
+
+            try {
+                const permission = await navigator.permissions.query({name: 'geolocation'});
+                updateStatus(`权限状态: ${permission.state}`, 'info');
+                
+                // 监听权限变化
+                permission.onchange = function() {
+                    updateStatus(`权限状态已更改为: ${this.state}`, 'info');
+                };
+            } catch (error) {
+                updateStatus(`权限检查失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testLocation() {
+            updateStatus('正在请求位置权限...', 'info');
+            
+            if (!navigator.geolocation) {
+                updateStatus('浏览器不支持地理定位功能', 'error');
+                return;
+            }
+
+            if (location.protocol === 'file:') {
+                updateStatus('❌ file://协议不支持位置访问，请使用HTTPS', 'error');
+                return;
+            }
+
+            const options = {
+                enableHighAccuracy: false,
+                timeout: 15000,
+                maximumAge: 300000
+            };
+
+            try {
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+                });
+
+                updateStatus('✅ 定位成功！', 'success');
+                
+                const resultHtml = `
+                    <div class="status success">
+                        <h3>定位结果：</h3>
+                        <p><strong>纬度：</strong> ${position.coords.latitude}</p>
+                        <p><strong>经度：</strong> ${position.coords.longitude}</p>
+                        <p><strong>精度：</strong> ${Math.round(position.coords.accuracy)} 米</p>
+                        <p><strong>高度：</strong> ${position.coords.altitude ? Math.round(position.coords.altitude) + ' 米' : '不可用'}</p>
+                        <p><strong>时间戳：</strong> ${new Date(position.timestamp).toLocaleString()}</p>
+                    </div>
+                `;
+                
+                document.getElementById('result').innerHTML = resultHtml;
+                
+            } catch (error) {
+                let errorMessage = '定位失败';
+                
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage = '❌ 位置权限被拒绝';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage = '❌ 位置信息不可用';
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage = '❌ 定位请求超时';
+                        break;
+                    default:
+                        errorMessage = `❌ 定位失败: ${error.message}`;
+                }
+                
+                updateStatus(errorMessage, 'error');
+            }
+        }
+    </script>
+</body>
+</html> 
