@@ -8,18 +8,19 @@
     "dev": "nodemon server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
-    "dotenv": "^16.3.1",
-    "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
-    "sharp": "^0.32.5",
-    "exif-parser": "^0.1.12",
-    "express-rate-limit": "^6.10.0",
+    "axios": "^1.6.0",
+    "bcrypt": "^6.0.0",
     "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "exif-parser": "^0.1.12",
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.10.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.6.0",
-    "axios": "^1.6.0"
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.32.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
@@ -28,5 +29,3 @@
     "node": ">=16.0.0"
   }
 }
-
-

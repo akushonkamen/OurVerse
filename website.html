@@ -769,25 +769,24 @@
             </div>
             <div class="modal-body">
                 <div class="login-options">
-                    <button class="login-btn github-btn" onclick="loginWithGitHub()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                        </svg>
-                        使用 GitHub 登录
-                    </button>
-                    <button class="login-btn wechat-btn" onclick="loginWithWeChat()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.162 4.203 2.985 5.55l-.666 3.097 3.540-1.77c.571.098 1.176.196 1.832.196.313 0 .619-.024.918-.066-.195-.668-.313-1.37-.313-2.103 0-4.142 3.405-7.497 7.606-7.497.177 0 .35.012.521.024C14.691 4.181 11.999 2.188 8.691 2.188zm-2.46 2.716c.329 0 .595.266.595.595a.594.594 0 01-.595.595.594.594 0 01-.595-.595c0-.329.266-.595.595-.595zm4.919 0c.329 0 .595.266.595.595a.594.594 0 01-.595.595.594.594 0 01-.595-.595c0-.329.266-.595.595-.595z"/>
-                            <path d="M17.362 11.094c-3.918 0-7.345 2.645-7.345 6.334 0 2.006 1.031 3.791 2.692 5.016l-.553 2.549 2.918-1.456c.472.08.967.16 1.515.16 3.918 0 7.345-2.645 7.345-6.334s-3.427-6.269-7.572-6.269zm-2.544 1.888c.264 0 .478.214.478.478a.478.478 0 11-.956 0c0-.264.214-.478.478-.478zm5.088 0c.264 0 .478.214.478.478a.478.478 0 11-.956 0c0-.264.214-.478.478-.478z"/>
-                        </svg>
-                        使用微信登录
-                    </button>
-                    <button class="login-btn" style="background: #666; color: white;" onclick="mockLogin()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 1H5C3.89 1 3 1.89 3 3V21C3 22.11 3.89 23 5 23H19C20.11 23 21 22.11 21 21V9M19 9H14V4H19V9Z"/>
-                        </svg>
-                        模拟登录（测试用）
-                    </button>
+                    <!-- 登录表单 -->
+                    <div class="auth-form" id="loginForm">
+                        <h4 style="text-align: center; margin-bottom: 20px; color: #111;">登录</h4>
+                        <input type="text" id="loginUsername" placeholder="用户名" style="width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <input type="password" id="loginPassword" placeholder="密码" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <button class="login-btn" style="width: 100%; background: #111; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 10px;" onclick="login()">登录</button>
+                        <button class="login-btn" style="width: 100%; background: #666; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer;" onclick="showRegisterForm()">还没有账号？注册</button>
+                    </div>
+
+                    <!-- 注册表单 -->
+                    <div class="auth-form" id="registerForm" style="display: none;">
+                        <h4 style="text-align: center; margin-bottom: 20px; color: #111;">注册</h4>
+                        <input type="text" id="registerUsername" placeholder="用户名" style="width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <input type="email" id="registerEmail" placeholder="邮箱" style="width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <input type="password" id="registerPassword" placeholder="密码（至少6位）" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <button class="login-btn" style="width: 100%; background: #27AE60; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 10px;" onclick="register()">注册</button>
+                        <button class="login-btn" style="width: 100%; background: #666; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer;" onclick="showLoginForm()">已有账号？登录</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -802,8 +801,8 @@
         let currentUser = null;
         let authToken = null;
         
-        // 本地存储版本，无需API
-        const API_BASE_URL = null;
+        // API服务器地址
+        const API_BASE_URL = window.location.origin;
 
         // IndexedDB 数据库
         let db;
@@ -926,6 +925,7 @@
         function showLoginModal() {
             document.getElementById('loginModal').style.display = 'block';
             document.body.style.overflow = 'hidden';
+            showLoginForm(); // 默认显示登录表单
         }
 
         // 关闭登录模态框
@@ -934,115 +934,87 @@
             document.body.style.overflow = 'auto';
         }
 
-        // GitHub登录
-        async function loginWithGitHub() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/auth/github`);
-                const data = await response.json();
-                
-                // 保存state用于验证
-                sessionStorage.setItem('oauth_state', data.state);
-                
-                // 跳转到GitHub OAuth页面
-                window.location.href = data.url;
-            } catch (error) {
-                console.error('GitHub登录错误:', error);
-                alert('登录失败，请重试');
-            }
+        // 显示登录表单
+        function showLoginForm() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('registerForm').style.display = 'none';
         }
 
-        // 微信登录
-        async function loginWithWeChat() {
-            try {
-                const response = await fetch(`${API_BASE_URL}/auth/wechat`);
-                const data = await response.json();
-                
-                // 保存state用于验证
-                sessionStorage.setItem('oauth_state', data.state);
-                
-                // 跳转到微信OAuth页面
-                window.location.href = data.url;
-            } catch (error) {
-                console.error('微信登录错误:', error);
-                alert('登录失败，请重试');
-            }
+        // 显示注册表单
+        function showRegisterForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
         }
 
-        // 处理OAuth回调
-        function handleOAuthCallback() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const code = urlParams.get('code');
-            const state = urlParams.get('state');
-            const provider = window.location.pathname.includes('github') ? 'github' : 'wechat';
-            
-            if (code && state && sessionStorage.getItem('oauth_state') === state) {
-                processOAuthCallback(provider, code, state);
-            }
-        }
+        // 注册
+        async function register() {
+            const username = document.getElementById('registerUsername').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value.trim();
 
-        // 处理OAuth回调
-        async function processOAuthCallback(provider, code, state) {
+            if (!username || !email || !password) {
+                alert('请填写所有字段');
+                return;
+            }
+
             try {
-                const response = await fetch(`${API_BASE_URL}/auth/${provider}/callback`, {
+                const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ code, state })
+                    body: JSON.stringify({ username, email, password })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (response.ok) {
                     setCurrentUser(data.user, data.token);
-                    sessionStorage.removeItem('oauth_state');
-                    
-                    // 清除URL参数并刷新页面
-                    window.history.replaceState({}, document.title, window.location.pathname);
-                    window.location.reload();
+                    closeLoginModal();
+                    alert('注册成功！');
                 } else {
-                    throw new Error(data.error || '登录失败');
+                    alert(data.error || '注册失败');
                 }
             } catch (error) {
-                console.error('OAuth回调处理错误:', error);
-                alert('登录失败: ' + error.message);
+                console.error('注册错误:', error);
+                alert('注册失败，请重试');
             }
         }
 
-        // 模拟登录（测试用）
-        async function mockLogin() {
-            try {
-                // 模拟用户数据
-                const mockUser = {
-                    id: 'mock_user_123',
-                    username: '测试用户',
-                    avatar: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzIiBmaWxsPSJub25lIj48Y2lyY2xlIGN4PSIxNiIgY3k9IjE2IiByPSIxNiIgZmlsbD0iI2VlZSIvPjxjaXJjbGUgY3g9IjE2IiBjeT0iMTIiIHI9IjUiIGZpbGw9IiM5OTkiLz48cGF0aCBkPSJNNiAyNmMwLTUgNC05IDEwLTlzMTAgNCAxMCA5IiBmaWxsPSIjOTk5Ii8+PC9zdmc+'
-                };
+        // 登录
+        async function login() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
 
-                // 保存用户到IndexedDB
-                const transaction = db.transaction(['users'], 'readwrite');
-                const userStore = transaction.objectStore('users');
-                await new Promise((resolve, reject) => {
-                    const request = userStore.put(mockUser);
-                    request.onsuccess = () => resolve();
-                    request.onerror = () => reject(request.error);
+            if (!username || !password) {
+                alert('请输入用户名和密码');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
                 });
 
-                // 设置用户状态
-                setCurrentUser(mockUser, 'mock_token');
+                const data = await response.json();
 
-                // 关闭登录模态框
-                closeLoginModal();
-
-                // 加载附近照片
-                await loadNearbyPhotos();
-
-                alert('模拟登录成功！现在可以测试上传照片和其他功能了。');
+                if (response.ok) {
+                    setCurrentUser(data.user, data.token);
+                    closeLoginModal();
+                } else {
+                    alert(data.error || '登录失败');
+                }
             } catch (error) {
-                console.error('模拟登录错误:', error);
-                alert('模拟登录失败，请重试');
+                console.error('登录错误:', error);
+                alert('登录失败，请重试');
             }
         }
+
+
 
         // 退出登录
         function logout() {
@@ -1056,10 +1028,6 @@
             showLoginRequired();
         }
 
-        // 检查OAuth回调
-        if (window.location.search.includes('code=')) {
-            handleOAuthCallback();
-        }
 
         // 初始化地图
         function initMap() {
@@ -1779,4 +1747,5 @@
         });
     </script>
 </body>
+</html>
 </html>

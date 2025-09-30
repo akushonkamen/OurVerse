@@ -9,10 +9,10 @@ const exifParser = require('exif-parser');
 const rateLimit = require('express-rate-limit');
 const compression = require('compression');
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
-const axios = require('axios');
 
 // Load environment variables
 dotenv.config();
@@ -28,9 +28,8 @@ mongoose.connect(process.env.MONGODB_URI, {
 const userSchema = new mongoose.Schema({
   username: String,
   email: String,
+  password: String, // 密码哈希
   avatar: String,
-  provider: String,
-  providerId: String,
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -102,102 +101,94 @@ const authenticate = (req, res, next) => {
   });
 };
 
-// Auth Routes - GitHub
-app.get('/api/auth/github', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
-  const url = ` https://github.com/login/oauth/authorize?client_id=${process.env.GITHUB_CLIENT_ID}&redirect_uri=${process.env.GITHUB_CALLBACK_URL}&scope=user:email&state=${state}`;
-  res.json({ url, state });
-});
-
-app.post('/api/auth/github/callback', async (req, res) => {
-  const { code, state } = req.body;
-  
+// Auth Routes - Simple Registration and Login
+app.post('/api/auth/register', async (req, res) => {
   try {
-    // Exchange code for access token
-    const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
-      client_id: process.env.GITHUB_CLIENT_ID,
-      client_secret: process.env.GITHUB_CLIENT_SECRET,
-      code,
-      redirect_uri: process.env.GITHUB_CALLBACK_URL
-    }, {
-      headers: { Accept: 'application/json' },
-      timeout: 10000  // 10秒超时
-    });
+    const { username, email, password } = req.body;
 
-    const accessToken = tokenResponse.data.access_token;
-
-    // Get user info
-    const userResponse = await axios.get('https://api.github.com/user', {
-      headers: { Authorization: `token ${accessToken}` },
-      timeout: 10000  // 10秒超时
-    });
-
-    const userData = userResponse.data;
-
-    // Find or create user
-    let user = await User.findOne({ provider: 'github', providerId: userData.id });
-    if (!user) {
-      user = new User({
-        username: userData.login,
-        email: userData.email,
-        avatar: userData.avatar_url,
-        provider: 'github',
-        providerId: userData.id
-      });
-      await user.save();
+    // Validate input
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: '用户名、邮箱和密码都是必需的' });
     }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: '密码至少需要6个字符' });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    if (existingUser) {
+      return res.status(400).json({ error: '用户名或邮箱已被注册' });
+    }
+
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Create user
+    const user = new User({
+      username,
+      email,
+      password: hashedPassword,
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+    });
+
+    await user.save();
 
     // Generate JWT
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.json({ token, user: { id: user._id, username: user.username, avatar: user.avatar } });
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar
+      }
+    });
   } catch (error) {
-    console.error('GitHub auth error:', error.response?.data || error.message);
-    console.error('Error details:', error);
-    res.status(500).json({ error: 'Authentication failed', details: error.message });
+    console.error('Registration error:', error);
+    res.status(500).json({ error: '注册失败，请重试' });
   }
 });
 
-// Similar for WeChat (WeChat OAuth is more complex, requires appid, secret, and proper configuration)
-app.get('/api/auth/wechat', (req, res) => {
-  const state = crypto.randomBytes(16).toString('hex');
-  const url = `https://open.weixin.qq.com/connect/oauth2/authorize?appid=${process.env.WECHAT_APP_ID}&redirect_uri=${encodeURIComponent(process.env.WECHAT_CALLBACK_URL)}&response_type=code&scope=snsapi_userinfo&state=${state}#wechat_redirect`;
-  res.json({ url, state });
-});
-
-app.post('/api/auth/wechat/callback', async (req, res) => {
-  const { code, state } = req.body;
-  
+app.post('/api/auth/login', async (req, res) => {
   try {
-    // Exchange code for access token
-    const tokenResponse = await axios.get(`https://api.weixin.qq.com/sns/oauth2/access_token?appid=${process.env.WECHAT_APP_ID}&secret=${process.env.WECHAT_APP_SECRET}&code=${code}&grant_type=authorization_code`);
+    const { username, password } = req.body;
 
-    const { access_token, openid } = tokenResponse.data;
+    // Validate input
+    if (!username || !password) {
+      return res.status(400).json({ error: '用户名和密码都是必需的' });
+    }
 
-    // Get user info
-    const userResponse = await axios.get(`https://api.weixin.qq.com/sns/userinfo?access_token=${access_token}&openid=${openid}&lang=zh_CN`);
-
-    const userData = userResponse.data;
-
-    // Find or create user
-    let user = await User.findOne({ provider: 'wechat', providerId: openid });
+    // Find user
+    const user = await User.findOne({ username });
     if (!user) {
-      user = new User({
-        username: userData.nickname,
-        avatar: userData.headimgurl,
-        provider: 'wechat',
-        providerId: openid
-      });
-      await user.save();
+      return res.status(401).json({ error: '用户名或密码错误' });
+    }
+
+    // Check password
+    const isValidPassword = await bcrypt.compare(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({ error: '用户名或密码错误' });
     }
 
     // Generate JWT
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-    res.json({ token, user: { id: user._id, username: user.username, avatar: user.avatar } });
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar
+      }
+    });
   } catch (error) {
-    console.error('WeChat auth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    console.error('Login error:', error);
+    res.status(500).json({ error: '登录失败，请重试' });
   }
 });
 
@@ -380,6 +371,15 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const d = R * c * 1000; // meters
   return d;
 }
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
 
 // Start server
 const PORT = process.env.PORT || 3000;
