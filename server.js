@@ -14,6 +14,11 @@ const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
+// Passport OAuth
+const passport = require('passport');
+const GitHubStrategy = require('passport-github2').Strategy;
+const session = require('express-session');
+
 // Load environment variables
 dotenv.config();
 
@@ -24,12 +29,86 @@ mongoose.connect(process.env.MONGODB_URI, {
 }).then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
 
+// Passport Configuration
+passport.use(new GitHubStrategy({
+    clientID: process.env.GITHUB_CLIENT_ID,
+    clientSecret: process.env.GITHUB_CLIENT_SECRET,
+    callbackURL: process.env.GITHUB_CALLBACK_URL,
+    scope: ['user:email']
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+      console.log('GitHub profile:', {
+        id: profile.id,
+        username: profile.username,
+        emails: profile.emails,
+        photos: profile.photos
+      });
+
+      // 检查是否已有该GitHub用户
+      let user = await User.findOne({ githubId: profile.id });
+
+      if (user) {
+        // 更新用户信息
+        user.githubUsername = profile.username;
+        if (profile.photos && profile.photos[0]) {
+          user.avatar = profile.photos[0].value;
+        }
+        await user.save();
+        return done(null, user);
+      }
+
+      // 创建新用户
+      const email = (profile.emails && profile.emails[0]) ?
+        profile.emails[0].value :
+        `${profile.username}@github.local`; // 默认email
+
+      const avatar = (profile.photos && profile.photos[0]) ?
+        profile.photos[0].value :
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${profile.username}`;
+
+      user = new User({
+        username: profile.username,
+        email: email,
+        avatar: avatar,
+        provider: 'github',
+        githubId: profile.id,
+        githubUsername: profile.username
+      });
+
+      await user.save();
+      console.log('Created new GitHub user:', user.username);
+      return done(null, user);
+    } catch (error) {
+      console.error('GitHub strategy error:', error);
+      return done(error, null);
+    }
+  }
+));
+
+passport.serializeUser((user, done) => {
+  done(null, user._id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (error) {
+    done(error, null);
+  }
+});
+
 // Schemas
 const userSchema = new mongoose.Schema({
   username: String,
   email: String,
-  password: String, // 密码哈希
+  password: String, // 密码哈希（传统注册用户）
   avatar: String,
+  // OAuth相关字段
+  provider: { type: String, enum: ['local', 'github'], default: 'local' },
+  githubId: String,
+  githubUsername: String,
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -58,7 +137,23 @@ const Photo = mongoose.model('Photo', photoSchema);
 const app = express();
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://webapi.amap.com", "https://restapi.amap.com", "blob:"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:", "blob:"],
+      connectSrc: ["'self'", "https://webapi.amap.com", "https://restapi.amap.com", "https://vdata.amap.com"],
+      workerSrc: ["'self'", "blob:"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"]
+    }
+  }
+}));
 app.use(cors());
 app.use(compression());
 app.use(express.json());
@@ -66,6 +161,21 @@ app.use(rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100
 }));
+
+// Session configuration for Passport
+app.use(session({
+  secret: process.env.JWT_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false, // 本地开发用false，生产环境用true
+    maxAge: 24 * 60 * 60 * 1000 // 24小时
+  }
+}));
+
+// Passport middleware
+app.use(passport.initialize());
+app.use(passport.session());
 
 // File upload setup
 const storage = multer.memoryStorage();
@@ -83,6 +193,11 @@ const upload = multer({
 
 // Static files for uploaded photos
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Static files for website (development only)
+if (process.env.NODE_ENV === 'development') {
+  app.use(express.static(path.join(__dirname)));
+}
 
 // Ensure uploads directory exists
 if (!fs.existsSync('./uploads')) {
@@ -202,6 +317,71 @@ app.get('/api/auth/verify', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// GitHub OAuth Routes
+app.get('/api/auth/github', (req, res) => {
+  // 生成state参数用于CSRF保护，并存储在内存中（临时解决方案）
+  const state = crypto.randomBytes(16).toString('hex');
+
+  // 临时存储state（在生产环境中应该使用数据库）
+  global.tempOAuthState = state;
+
+  // 构建GitHub OAuth URL
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?` +
+    `client_id=${process.env.GITHUB_CLIENT_ID}&` +
+    `redirect_uri=${encodeURIComponent(process.env.GITHUB_CALLBACK_URL)}&` +
+    `scope=user:email&` +
+    `state=${state}`;
+
+  res.json({
+    url: githubAuthUrl,
+    state: state
+  });
+});
+
+app.get('/api/auth/github/callback',
+  async (req, res) => {
+    try {
+      const { code, state } = req.query;
+
+      console.log('GitHub callback received:', { code: !!code, state, tempState: global.tempOAuthState });
+
+      // 验证state参数（使用临时存储）
+      if (!state || state !== global.tempOAuthState) {
+        console.error('State validation failed:', { received: state, expected: global.tempOAuthState });
+        return res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=invalid_state`);
+      }
+
+      // 清除临时state
+      delete global.tempOAuthState;
+
+      // 使用Passport处理GitHub回调
+      passport.authenticate('github', { session: false }, async (err, user, info) => {
+        if (err || !user) {
+          console.error('GitHub OAuth error:', err || info);
+          return res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=github_auth_failed`);
+        }
+
+        try {
+          // 生成JWT token
+          const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+          console.log('GitHub login successful for user:', user.username);
+
+          // 重定向到前端页面，带上token参数
+          res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?token=${token}`);
+        } catch (error) {
+          console.error('Token generation error:', error);
+          res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=token_generation_failed`);
+        }
+      })(req, res);
+
+    } catch (error) {
+      console.error('GitHub OAuth callback error:', error);
+      res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=auth_callback_error`);
+    }
+  }
+);
 
 // Photo upload
 app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req, res) => {
@@ -382,7 +562,17 @@ app.get('/health', (req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+const PORT = process.env.PORT || 8444;
+
+if (process.env.NODE_ENV === 'development') {
+  // Use HTTP for development to avoid SSL issues with OAuth
+  app.listen(PORT, () => {
+    console.log(`HTTP Server running on port ${PORT}`);
+    console.log(`GitHub callback URL: http://localhost:${PORT}/api/auth/github/callback`);
+    console.log(`Access website at: http://localhost:${PORT}/website.html`);
+  });
+} else {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}

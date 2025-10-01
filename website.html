@@ -769,6 +769,20 @@
             </div>
             <div class="modal-body">
                 <div class="login-options">
+                    <!-- GitHub登录按钮 -->
+                    <button class="login-btn github-btn" onclick="loginWithGitHub()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                        </svg>
+                        使用 GitHub 登录
+                    </button>
+
+                    <!-- 分隔线 -->
+                    <div style="text-align: center; margin: 20px 0; position: relative;">
+                        <span style="background: white; padding: 0 10px; color: #666; font-size: 12px;">或</span>
+                        <hr style="border: none; border-top: 1px solid #ddd; position: absolute; top: 50%; left: 0; right: 0; z-index: -1;">
+                    </div>
+
                     <!-- 登录表单 -->
                     <div class="auth-form" id="loginForm">
                         <h4 style="text-align: center; margin-bottom: 20px; color: #111;">登录</h4>
@@ -802,7 +816,9 @@
         let authToken = null;
         
         // API服务器地址
-        const API_BASE_URL = window.location.origin;
+        // API服务器地址（开发环境）
+        const API_BASE_URL = 'http://localhost:8444';
+        console.log('API_BASE_URL:', API_BASE_URL); // 调试信息
 
         // IndexedDB 数据库
         let db;
@@ -843,6 +859,7 @@
                 await initDB();
                 initMap();
                 checkAuthStatus();
+                checkOAuthCallback(); // 检查OAuth回调
             } catch (error) {
                 console.error('初始化失败:', error);
                 alert('应用初始化失败，请刷新页面重试');
@@ -864,7 +881,7 @@
             const token = localStorage.getItem('authToken');
             if (token) {
                 try {
-                    const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+                    const response = await fetch(`${API_BASE_URL}/api/auth/verify`, {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
@@ -893,11 +910,16 @@
             currentUser = user;
             authToken = token;
             localStorage.setItem('authToken', token);
-            
+
+            updateNavUser(user);
+        }
+
+        // 更新导航栏用户信息
+        function updateNavUser(user) {
             const navUser = document.getElementById('navUser');
             navUser.innerHTML = `
                 <div class="user-info">
-                    <img src="${user.avatar || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNlZWUiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjEyIiByPSI1IiBmaWxsPSIjOTk5Ii8+PHBhdGggZD0iTTYgMjZjMC01IDQtOSAxMC05czEwIDQgMTAgOSIgZmlsbD0iIzk5OSIvPjwvc3ZnPg=='}" 
+                    <img src="${user.avatar || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNlZWUiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjEyIiByPSI1IiBmaWxsPSIjOTk5Ii8+PHBhdGggZD0iTTYgMjZjMC01IDQtOSAxMC05czEwIDQgMTAgOSIgZmlsbD0iIzk5OSIvPjwvc3ZnPg=='}"
                           alt="${user.username}" class="user-avatar">
                     <span>${user.username}</span>
                 </div>
@@ -945,6 +967,98 @@
             document.getElementById('loginForm').style.display = 'none';
             document.getElementById('registerForm').style.display = 'block';
         }
+
+        // GitHub登录
+        async function loginWithGitHub() {
+            try {
+                console.log('GitHub login URL:', `${API_BASE_URL}/api/auth/github`);
+                const response = await fetch(`${API_BASE_URL}/api/auth/github`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 保存state用于验证
+                    sessionStorage.setItem('oauth_state', data.state);
+
+                    // 跳转到GitHub OAuth页面
+                    window.location.href = data.url;
+                } else {
+                    throw new Error(data.error || '获取GitHub登录链接失败');
+                }
+            } catch (error) {
+                console.error('GitHub登录错误:', error);
+                alert('登录失败，请重试');
+            }
+        }
+
+        // 处理页面加载时的OAuth回调
+        function checkOAuthCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const error = urlParams.get('error');
+
+            if (error) {
+                console.error('OAuth错误:', error);
+                let errorMsg = '登录失败';
+                switch(error) {
+                    case 'invalid_state':
+                        errorMsg += ': state参数验证失败';
+                        break;
+                    case 'github_auth_failed':
+                        errorMsg += ': GitHub认证失败';
+                        break;
+                    case 'token_generation_failed':
+                        errorMsg += ': 令牌生成失败';
+                        break;
+                    case 'auth_callback_error':
+                        errorMsg += ': 认证回调错误';
+                        break;
+                    default:
+                        errorMsg += ': ' + error;
+                }
+                alert(errorMsg);
+
+                // 清除URL参数
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+            }
+
+            if (token) {
+                console.log('收到OAuth token，自动登录...');
+                // 设置当前用户并清除URL参数
+                setCurrentUserFromToken(token);
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        // 从token设置当前用户
+        async function setCurrentUserFromToken(token) {
+            try {
+                authToken = token;
+                localStorage.setItem('authToken', token);
+
+                // 获取用户信息
+                const response = await fetch(`${API_BASE_URL}/api/auth/verify`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setCurrentUser(data.user, token);
+                    console.log('自动登录成功:', data.user.username);
+                    alert('GitHub登录成功！欢迎 ' + data.user.username);
+                } else {
+                    throw new Error('验证失败');
+                }
+            } catch (error) {
+                console.error('自动登录失败:', error);
+                authToken = null;
+                localStorage.removeItem('authToken');
+                alert('自动登录失败，请重新登录');
+            }
+        }
+
 
         // 注册
         async function register() {
@@ -1362,7 +1476,7 @@
                     photoDiv.onclick = () => openPhotoModal(photo.id);
                     
                     photoDiv.innerHTML = `
-                        <img src="${API_BASE_URL.replace('/api', '')}${photo.url}" alt="用户照片">
+                        <img src="${photo.url}" alt="用户照片">
                         <div class="photo-marker">${photo.distance}m</div>
                         <div class="photo-info">
                             <div class="photo-caption">${photo.caption}</div>
@@ -1747,5 +1861,4 @@
         });
     </script>
 </body>
-</html>
 </html>
