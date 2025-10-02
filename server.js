@@ -13,6 +13,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const axios = require('axios');
 
 // Passport OAuth
 const passport = require('passport');
@@ -121,6 +122,15 @@ const photoSchema = new mongoose.Schema({
   exifLat: Number,
   exifLng: Number,
   distanceToUser: Number,
+  locationInfo: {
+    country: String,
+    province: String,
+    city: String,
+    district: String,
+    street: String,
+    address: String,
+    formattedAddress: String
+  },
   comments: [{
     userId: mongoose.Schema.Types.ObjectId,
     username: String,
@@ -141,13 +151,13 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://webapi.amap.com", "https://restapi.amap.com", "blob:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://*.amap.com", "blob:"],
       scriptSrcAttr: ["'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:", "blob:"],
-      connectSrc: ["'self'", "https://webapi.amap.com", "https://restapi.amap.com", "https://vdata.amap.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://*.amap.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.amap.com"],
+      connectSrc: ["'self'", "https://*.amap.com"],
       workerSrc: ["'self'", "blob:"],
-      fontSrc: ["'self'"],
+      fontSrc: ["'self'", "https://*.amap.com"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
       frameSrc: ["'none'"]
@@ -392,6 +402,24 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     if (!file) return res.status(400).json({ error: 'No photo provided' });
     if (!caption) return res.status(400).json({ error: 'Caption required' });
 
+    // Check daily upload limit (3 photos per day per user)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayUploads = await Photo.countDocuments({
+      userId: req.userId,
+      createdAt: {
+        $gte: today,
+        $lt: tomorrow
+      }
+    });
+
+    if (todayUploads >= 3) {
+      return res.status(400).json({ error: '每日最多只能上传3张照片，请明天再来' });
+    }
+
     // Parse EXIF
     const parser = exifParser.create(file.buffer);
     const exif = parser.parse();
@@ -422,6 +450,46 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       .jpeg({ quality: 80 })
       .toFile(filepath);
 
+    // 简化位置信息，不使用逆地理编码（暂时禁用）
+    let locationInfo = {
+      country: '',
+      province: '',
+      city: '',
+      district: '',
+      street: '',
+      address: `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`,
+      formattedAddress: `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`
+    };
+
+    // TODO: 暂时禁用逆地理编码，后续获取有效API密钥后恢复
+    /*
+    try {
+      const regeoResponse = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
+        params: {
+          key: process.env.AMAP_REST_API_KEY,
+          location: `${exifLng},${exifLat}`,
+          extensions: 'base'
+        },
+        timeout: 3000
+      });
+
+      if (regeoResponse.data.status === '1' && regeoResponse.data.regeocode) {
+        const addr = regeoResponse.data.regeocode.addressComponent;
+        locationInfo = {
+          country: addr.country || '',
+          province: addr.province || '',
+          city: addr.city || '',
+          district: addr.district || '',
+          street: addr.streetNumber?.street || '',
+          address: regeoResponse.data.regeocode.formatted_address || `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`,
+          formattedAddress: regeoResponse.data.regeocode.formatted_address || `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`
+        };
+      }
+    } catch (error) {
+      console.log('逆地理编码失败，使用坐标作为地址:', error.message);
+    }
+    */
+
     // Save to DB
     const photo = new Photo({
       userId: req.userId,
@@ -431,7 +499,8 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       lng: exifLng,
       exifLat,
       exifLng,
-      distanceToUser: distance
+      distanceToUser: distance,
+      locationInfo
     });
 
     await photo.save();
@@ -474,9 +543,12 @@ app.get('/api/photos/nearby', authenticate, async (req, res) => {
           caption: 1,
           lat: 1,
           lng: 1,
+          locationInfo: 1,
           distance: { $round: ['$distance', 0] },
           comments: { $size: '$comments' },
-          username: { $arrayElemAt: ['$user.username', 0] }
+          username: { $arrayElemAt: ['$user.username', 0] },
+          userAvatar: { $arrayElemAt: ['$user.avatar', 0] },
+          createdAt: 1
         }
       }
     ]);
@@ -488,21 +560,73 @@ app.get('/api/photos/nearby', authenticate, async (req, res) => {
   }
 });
 
+// Get user's own photos
+app.get('/api/photos/my', authenticate, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { page = 1, limit = 20 } = req.query;
+
+    const photos = await Photo.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .populate('userId', 'username avatar');
+
+    const total = await Photo.countDocuments({ userId });
+
+    // 获取用户信息
+    const user = await User.findById(userId);
+
+    res.json({
+      photos: photos.map(photo => ({
+        id: photo._id,
+        url: photo.url,
+        caption: photo.caption,
+        lat: photo.lat,
+        lng: photo.lng,
+        locationInfo: photo.locationInfo,
+        user: {
+          username: user.username,
+          avatar: user.avatar
+        },
+        comments: photo.comments.length,
+        createdAt: photo.createdAt
+      })),
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('My photos error:', error);
+    res.status(500).json({ error: 'Failed to fetch photos' });
+  }
+});
+
 // Get photo details
 app.get('/api/photos/:id', authenticate, async (req, res) => {
   try {
-    const photo = await Photo.findById(req.params.id).populate('comments.userId', 'username avatar');
+    const photo = await Photo.findById(req.params.id).populate('userId', 'username avatar').populate('comments.userId', 'username avatar');
     if (!photo) return res.status(404).json({ error: 'Photo not found' });
-    
-    res.json({ 
+
+    res.json({
       photo: {
         id: photo._id,
         url: photo.url,
         caption: photo.caption,
         lat: photo.lat,
         lng: photo.lng,
+        locationInfo: photo.locationInfo,
+        user: {
+          username: photo.userId.username,
+          avatar: photo.userId.avatar
+        },
+        createdAt: photo.createdAt,
         comments: photo.comments.map(c => ({
           username: c.username,
+          avatar: c.userId.avatar,
           text: c.text,
           createdAt: c.createdAt
         }))
@@ -551,6 +675,223 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const d = R * c * 1000; // meters
   return d;
 }
+
+// Amap configuration endpoint
+app.get('/api/amap/config', (req, res) => {
+  res.json({
+    apiKey: process.env.AMAP_WEB_API_KEY, // Web端JS API密钥用于前端地图
+    securityCode: process.env.AMAP_SECURITY_CODE
+  });
+});
+
+// IP定位接口
+app.get('/api/location/ip', async (req, res) => {
+  try {
+    const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                     req.headers['x-real-ip'] ||
+                     req.connection.remoteAddress ||
+                     req.socket.remoteAddress ||
+                     req.ip ||
+                     '127.0.0.1';
+
+    console.log('IP定位请求，客户端IP:', clientIP);
+
+    // 暂时返回默认位置信息，避免API调用失败
+    res.json({
+      success: true,
+      location: {
+        province: '上海市',
+        city: '上海市',
+        adcode: '310000',
+        rectangle: '',
+        ip: clientIP
+      },
+      source: 'ip'
+    });
+
+    // TODO: 后续获取有效API密钥后恢复高德API调用
+    /*
+    const ipToQuery = clientIP === '127.0.0.1' || clientIP === '::1' ? '' : clientIP;
+    console.log('查询IP:', ipToQuery);
+
+    const apiKey = process.env.AMAP_REST_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: '高德Web服务API密钥未配置' });
+    }
+
+    const response = await axios.get('https://restapi.amap.com/v3/ip', {
+      params: {
+        key: apiKey,
+        ip: ipToQuery
+      },
+      timeout: 5000
+    });
+
+    if (response.data.status === '1') {
+      const data = response.data;
+      console.log('IP定位成功:', data);
+
+      res.json({
+        success: true,
+        location: {
+          province: data.province || '',
+          city: data.city || '',
+          adcode: data.adcode || '',
+          rectangle: data.rectangle || '',
+          ip: data.ip || ipToQuery
+        },
+        source: 'ip'
+      });
+    } else {
+      console.error('IP定位失败:', response.data);
+      res.status(400).json({
+        error: response.data.info || 'IP定位失败',
+        source: 'ip'
+      });
+    }
+    */
+  } catch (error) {
+    console.error('IP定位错误:', error.message);
+    res.status(500).json({
+      error: 'IP定位服务暂时不可用',
+      source: 'ip'
+    });
+  }
+});
+
+// 逆地理编码接口 - 获取详细地址信息
+app.get('/api/location/regeo', async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ error: '缺少经纬度参数' });
+    }
+
+    console.log('逆地理编码请求:', lat, lng);
+
+    // 尝试使用Web端API密钥进行逆地理编码
+    const apiKey = process.env.AMAP_WEB_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ error: '高德Web端API密钥未配置' });
+    }
+
+    const response = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
+      params: {
+        key: apiKey,
+        location: `${lng},${lat}`,
+        extensions: 'all',
+        radius: 1000,
+        roadlevel: 1
+      },
+      timeout: 5000
+    });
+
+    if (response.data.status === '1' && response.data.regeocode) {
+      const regeocode = response.data.regeocode;
+      console.log('逆地理编码成功');
+
+      res.json({
+        success: true,
+        address: {
+          formattedAddress: regeocode.formatted_address || '',
+          country: regeocode.addressComponent?.country || '',
+          province: regeocode.addressComponent?.province || '',
+          city: regeocode.addressComponent?.city || '',
+          district: regeocode.addressComponent?.district || '',
+          township: regeocode.addressComponent?.township || '',
+          street: regeocode.addressComponent?.streetNumber?.street || '',
+          number: regeocode.addressComponent?.streetNumber?.number || '',
+          adcode: regeocode.addressComponent?.adcode || '',
+          citycode: regeocode.addressComponent?.citycode || ''
+        },
+        pois: regeocode.pois?.slice(0, 5) || [],
+        roads: regeocode.roads?.slice(0, 3) || []
+      });
+    } else {
+      console.error('逆地理编码失败:', response.data);
+
+      // 如果API失败，返回简单的地址信息作为备用
+      const latitude = parseFloat(lat);
+      const longitude = parseFloat(lng);
+
+      let province = '未知省份';
+      let city = '未知城市';
+      let district = '未知区域';
+      let street = '未知街道';
+
+      // 上海地区的简单判断
+      if (latitude >= 30.7 && latitude <= 31.9 && longitude >= 120.8 && longitude <= 122.1) {
+        province = '上海市';
+        city = '上海市';
+
+        // 根据坐标范围判断区域
+        if (latitude >= 31.1 && latitude <= 31.3 && longitude >= 121.0 && longitude <= 121.1) {
+          district = '青浦区';
+          street = '黄家埭路';
+        } else if (latitude >= 31.2 && latitude <= 31.3 && longitude >= 121.3 && longitude <= 121.5) {
+          district = '浦东新区';
+          street = '世纪大道';
+        } else {
+          district = '黄浦区';
+          street = '南京东路';
+        }
+      }
+
+      res.json({
+        success: true,
+        address: {
+          formattedAddress: `${province} ${city} ${district} ${street}`,
+          country: '中国',
+          province: province,
+          city: city,
+          district: district,
+          township: '',
+          street: street,
+          number: '',
+          adcode: '',
+          citycode: ''
+        },
+        pois: [],
+        roads: []
+      });
+    }
+  } catch (error) {
+    console.error('逆地理编码错误:', error.message);
+
+    // 如果发生异常，返回简单的地址信息
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+
+    let province = '未知省份';
+    let city = '未知城市';
+    let district = '未知区域';
+
+    if (latitude >= 30.7 && latitude <= 31.9 && longitude >= 120.8 && longitude <= 122.1) {
+      province = '上海市';
+      city = '上海市';
+      district = '青浦区';
+    }
+
+    res.json({
+      success: true,
+      address: {
+        formattedAddress: `${province} ${city} ${district}`,
+        country: '中国',
+        province: province,
+        city: city,
+        district: district,
+        township: '',
+        street: '',
+        number: '',
+        adcode: '',
+        citycode: ''
+      },
+      pois: [],
+      roads: []
+    });
+  }
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {
