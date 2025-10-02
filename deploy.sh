@@ -93,13 +93,14 @@ health_check() {
     # 检查API健康状态
     local max_attempts=10
     local attempt=1
-    
+    local health_port=${HEALTH_CHECK_PORT:-3000}
+
     while [ $attempt -le $max_attempts ]; do
-        if curl -f http://localhost:3000/health &>/dev/null; then
+        if curl -f http://localhost:${health_port}/health &>/dev/null; then
             echo -e "${GREEN}✅ API 服务健康${NC}"
             break
         fi
-        
+
         echo -e "${YELLOW}等待API启动... (尝试 $attempt/$max_attempts)${NC}"
         sleep 5
         ((attempt++))
@@ -114,15 +115,27 @@ health_check() {
 
 # 部署完成信息
 deployment_info() {
+    local app_port=${DOCKER_APP_PORT:-3000}
+    local nginx_http_port=${DOCKER_NGINX_HTTP_PORT:-80}
+    local nginx_https_port=${DOCKER_NGINX_HTTPS_PORT:-443}
+    local domain=${DOMAIN:-your-domain.com}
+    local protocol=${PROTOCOL:-https}
+
     echo -e "${GREEN}🎉 部署完成！${NC}"
     echo ""
     echo -e "${GREEN}📍 访问地址:${NC}"
-    echo -e "   本地访问: http://localhost"
-    echo -e "   HTTPS访问: https://localhost"
-    echo -e "   API地址: http://localhost:3000"
+    echo -e "   本地访问: http://localhost:${nginx_http_port}"
+    echo -e "   HTTPS访问: ${protocol}://${domain}:${nginx_https_port}"
+    echo -e "   API地址: http://localhost:${app_port}"
+    echo ""
+    echo -e "${YELLOW}🔧 GitHub OAuth配置说明:${NC}"
+    echo -e "   1. 在GitHub上创建OAuth应用"
+    echo -e "   2. Homepage URL: ${protocol}://${domain}"
+    echo -e "   3. Authorization callback URL: ${protocol}://${domain}/api/auth/github/callback"
+    echo -e "   4. 更新.env文件中的DOMAIN、PROTOCOL和GITHUB_CALLBACK_URL"
     echo ""
     echo -e "${GREEN}📱 移动端访问:${NC}"
-    echo -e "   https://$(hostname -I | awk '{print $1}')"
+    echo -e "   ${protocol}://${domain}:${nginx_https_port}"
     echo ""
     echo -e "${GREEN}🛠️  常用命令:${NC}"
     echo -e "   查看日志: docker-compose logs -f"

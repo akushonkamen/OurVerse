@@ -31,10 +31,19 @@ mongoose.connect(process.env.MONGODB_URI, {
   .catch(err => console.error('MongoDB connection error:', err));
 
 // Passport Configuration
+const getGitHubCallbackURL = () => {
+  // 根据环境自动生成回调URL
+  if (process.env.NODE_ENV === 'development') {
+    return `http://localhost:${process.env.PORT || 8444}/api/auth/github/callback`;
+  } else {
+    return process.env.GITHUB_CALLBACK_URL || `https://${process.env.DOMAIN || 'localhost'}/api/auth/github/callback`;
+  }
+};
+
 passport.use(new GitHubStrategy({
     clientID: process.env.GITHUB_CLIENT_ID,
     clientSecret: process.env.GITHUB_CLIENT_SECRET,
-    callbackURL: process.env.GITHUB_CALLBACK_URL,
+    callbackURL: getGitHubCallbackURL(),
     scope: ['user:email']
   },
   async (accessToken, refreshToken, profile, done) => {
@@ -168,18 +177,18 @@ app.use(cors());
 app.use(compression());
 app.use(express.json());
 app.use(rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100
 }));
 
 // Session configuration for Passport
 app.use(session({
-  secret: process.env.JWT_SECRET,
+  secret: process.env.SESSION_SECRET || process.env.JWT_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false, // 本地开发用false，生产环境用true
-    maxAge: 24 * 60 * 60 * 1000 // 24小时
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: parseInt(process.env.SESSION_COOKIE_MAX_AGE) || 24 * 60 * 60 * 1000
   }
 }));
 
@@ -191,18 +200,22 @@ app.use(passport.session());
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: {
+    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024
+  },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    const allowedTypes = (process.env.ALLOWED_FILE_TYPES || 'image/jpeg,image/png,image/gif,image/webp').split(',');
+    if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Not an image!'), false);
+      cb(new Error(`不支持的文件类型: ${file.mimetype}`), false);
     }
   }
 });
 
 // Static files for uploaded photos
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const uploadsDir = process.env.UPLOADS_DIR || 'uploads';
+app.use(`/${uploadsDir}`, express.static(path.join(__dirname, uploadsDir)));
 
 // Static files for website (development only)
 if (process.env.NODE_ENV === 'development') {
@@ -210,8 +223,9 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Ensure uploads directory exists
-if (!fs.existsSync('./uploads')) {
-  fs.mkdirSync('./uploads');
+const uploadsPath = path.join(__dirname, uploadsDir);
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
 }
 
 // JWT Middleware
@@ -247,7 +261,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     // Hash password
-    const saltRounds = 10;
+    const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
 
     // Create user
@@ -339,7 +353,7 @@ app.get('/api/auth/github', (req, res) => {
   // 构建GitHub OAuth URL
   const githubAuthUrl = `https://github.com/login/oauth/authorize?` +
     `client_id=${process.env.GITHUB_CLIENT_ID}&` +
-    `redirect_uri=${encodeURIComponent(process.env.GITHUB_CALLBACK_URL)}&` +
+    `redirect_uri=${encodeURIComponent(getGitHubCallbackURL())}&` +
     `scope=user:email&` +
     `state=${state}`;
 
@@ -359,7 +373,10 @@ app.get('/api/auth/github/callback',
       // 验证state参数（使用临时存储）
       if (!state || state !== global.tempOAuthState) {
         console.error('State validation failed:', { received: state, expected: global.tempOAuthState });
-        return res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=invalid_state`);
+        const baseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'development'
+          ? `http://localhost:${process.env.PORT || 8444}`
+          : `${process.env.PROTOCOL || 'https'}://${process.env.DOMAIN || 'localhost'}`);
+        return res.redirect(`${baseUrl}/website.html?error=invalid_state`);
       }
 
       // 清除临时state
@@ -369,7 +386,10 @@ app.get('/api/auth/github/callback',
       passport.authenticate('github', { session: false }, async (err, user, info) => {
         if (err || !user) {
           console.error('GitHub OAuth error:', err || info);
-          return res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=github_auth_failed`);
+          const baseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'development'
+            ? `http://localhost:${process.env.PORT || 8444}`
+            : `${process.env.PROTOCOL || 'https'}://${process.env.DOMAIN || 'localhost'}`);
+          return res.redirect(`${baseUrl}/website.html?error=github_auth_failed`);
         }
 
         try {
@@ -379,16 +399,25 @@ app.get('/api/auth/github/callback',
           console.log('GitHub login successful for user:', user.username);
 
           // 重定向到前端页面，带上token参数
-          res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?token=${token}`);
+          const baseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'development'
+            ? `http://localhost:${process.env.PORT || 8444}`
+            : `${process.env.PROTOCOL || 'https'}://${process.env.DOMAIN || 'localhost'}`);
+          res.redirect(`${baseUrl}/website.html?token=${token}`);
         } catch (error) {
           console.error('Token generation error:', error);
-          res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=token_generation_failed`);
+          const baseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'development'
+            ? `http://localhost:${process.env.PORT || 8444}`
+            : `${process.env.PROTOCOL || 'https'}://${process.env.DOMAIN || 'localhost'}`);
+          res.redirect(`${baseUrl}/website.html?error=token_generation_failed`);
         }
       })(req, res);
 
     } catch (error) {
       console.error('GitHub OAuth callback error:', error);
-      res.redirect(`${process.env.NODE_ENV === 'development' ? 'http' : 'https'}://localhost:8444/website.html?error=auth_callback_error`);
+      const baseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'development'
+        ? `http://localhost:${process.env.PORT || 8444}`
+        : `${process.env.PROTOCOL || 'https'}://${process.env.DOMAIN || 'localhost'}`);
+      res.redirect(`${baseUrl}/website.html?error=auth_callback_error`);
     }
   }
 );
@@ -396,7 +425,7 @@ app.get('/api/auth/github/callback',
 // Photo upload
 app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req, res) => {
   try {
-    const { caption, userLat, userLng } = req.body;
+    const { caption, userLat, userLng, locationSource } = req.body;
     const file = req.file;
 
     if (!file) return res.status(400).json({ error: 'No photo provided' });
@@ -416,8 +445,9 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       }
     });
 
-    if (todayUploads >= 3) {
-      return res.status(400).json({ error: '每日最多只能上传3张照片，请明天再来' });
+    const dailyLimit = parseInt(process.env.DAILY_UPLOAD_LIMIT) || 3;
+    if (todayUploads >= dailyLimit) {
+      return res.status(400).json({ error: `每日最多只能上传${dailyLimit}张照片，请明天再来` });
     }
 
     // Parse EXIF
@@ -425,20 +455,32 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     const exif = parser.parse();
     const gps = exif.tags;
 
-    let exifLat, exifLng;
-    if (gps.GPSLatitude && gps.GPSLongitude) {
-      exifLat = gps.GPSLatitude;
-      exifLng = gps.GPSLongitude;
-      if (gps.GPSLatitudeRef === 'S') exifLat = -exifLat;
-      if (gps.GPSLongitudeRef === 'W') exifLng = -exifLng;
-    } else {
-      return res.status(400).json({ error: 'Photo must contain GPS location data' });
-    }
+    let photoLat, photoLng, distanceToUser = 0;
 
-    // Verify distance (max 50m)
-    const distance = calculateDistance(parseFloat(userLat), parseFloat(userLng), exifLat, exifLng);
-    if (distance > 50) {
-      return res.status(400).json({ error: `Photo location too far from user (${Math.round(distance)}m)` });
+    if (gps.GPSLatitude && gps.GPSLongitude) {
+      // 照片包含GPS信息
+      photoLat = gps.GPSLatitude;
+      photoLng = gps.GPSLongitude;
+      if (gps.GPSLatitudeRef === 'S') photoLat = -photoLat;
+      if (gps.GPSLongitudeRef === 'W') photoLng = -photoLng;
+
+      // 验证照片GPS与用户位置的距离
+      distanceToUser = calculateDistance(parseFloat(userLat), parseFloat(userLng), photoLat, photoLng);
+      const maxDistance = parseInt(process.env.MAX_DISTANCE_VERIFICATION) || 50;
+      if (distanceToUser > maxDistance) {
+        return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
+      }
+    } else {
+      // 照片不包含GPS信息
+      if (locationSource === 'gps') {
+        // 用户使用GPS定位，直接使用用户位置
+        photoLat = parseFloat(userLat);
+        photoLng = parseFloat(userLng);
+        distanceToUser = 0; // 距离为0，因为直接使用用户位置
+      } else {
+        // 用户使用IP定位，要求照片必须有GPS信息
+        return res.status(400).json({ error: '为了确保照片真实性，请使用GPS定位后再上传照片，或选择包含位置信息的照片' });
+      }
     }
 
     // Process image
@@ -446,7 +488,7 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     const filepath = path.join(__dirname, 'uploads', filename);
 
     await sharp(file.buffer)
-      .resize({ width: 800, withoutEnlargement: true })
+      .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 80 })
       .toFile(filepath);
 
@@ -457,8 +499,8 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       city: '',
       district: '',
       street: '',
-      address: `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`,
-      formattedAddress: `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`
+      address: `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
+      formattedAddress: `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`
     };
 
     // TODO: 暂时禁用逆地理编码，后续获取有效API密钥后恢复
@@ -467,7 +509,7 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       const regeoResponse = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
         params: {
           key: process.env.AMAP_REST_API_KEY,
-          location: `${exifLng},${exifLat}`,
+          location: `${photoLng},${photoLat}`,
           extensions: 'base'
         },
         timeout: 3000
@@ -481,8 +523,8 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
           city: addr.city || '',
           district: addr.district || '',
           street: addr.streetNumber?.street || '',
-          address: regeoResponse.data.regeocode.formatted_address || `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`,
-          formattedAddress: regeoResponse.data.regeocode.formatted_address || `${exifLat.toFixed(6)}, ${exifLng.toFixed(6)}`
+          address: regeoResponse.data.regeocode.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
+          formattedAddress: regeoResponse.data.regeocode.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`
         };
       }
     } catch (error) {
@@ -495,11 +537,11 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       userId: req.userId,
       url: `/uploads/${filename}`,
       caption,
-      lat: exifLat,
-      lng: exifLng,
-      exifLat,
-      exifLng,
-      distanceToUser: distance,
+      lat: photoLat,
+      lng: photoLng,
+      exifLat: gps.GPSLatitude ? photoLat : null, // 只有当照片包含GPS时才保存EXIF坐标
+      exifLng: gps.GPSLongitude ? photoLng : null,
+      distanceToUser: distanceToUser,
       locationInfo
     });
 
@@ -680,7 +722,8 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 app.get('/api/amap/config', (req, res) => {
   res.json({
     apiKey: process.env.AMAP_WEB_API_KEY, // Web端JS API密钥用于前端地图
-    securityCode: process.env.AMAP_SECURITY_CODE
+    securityCode: process.env.AMAP_SECURITY_CODE,
+    restApiKey: process.env.AMAP_REST_API_KEY // REST API密钥用于后端服务
   });
 });
 
@@ -770,10 +813,10 @@ app.get('/api/location/regeo', async (req, res) => {
 
     console.log('逆地理编码请求:', lat, lng);
 
-    // 尝试使用Web端API密钥进行逆地理编码
-    const apiKey = process.env.AMAP_WEB_API_KEY;
+    // 尝试使用REST API密钥进行逆地理编码
+    const apiKey = process.env.AMAP_REST_API_KEY || process.env.AMAP_WEB_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: '高德Web端API密钥未配置' });
+      return res.status(500).json({ error: '高德API密钥未配置' });
     }
 
     const response = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
@@ -904,16 +947,17 @@ app.get('/health', (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 8444;
+const HOST = process.env.HOST || '0.0.0.0';
 
 if (process.env.NODE_ENV === 'development') {
   // Use HTTP for development to avoid SSL issues with OAuth
-  app.listen(PORT, () => {
+  app.listen(PORT, HOST, () => {
     console.log(`HTTP Server running on port ${PORT}`);
     console.log(`GitHub callback URL: http://localhost:${PORT}/api/auth/github/callback`);
     console.log(`Access website at: http://localhost:${PORT}/website.html`);
   });
 } else {
-  app.listen(PORT, () => {
+  app.listen(PORT, HOST, () => {
     console.log(`Server running on port ${PORT}`);
   });
 }

@@ -942,9 +942,32 @@
         let authToken = null;
         let locationSource = null; // 'gps', 'ip', or null
         
-        // API服务器地址
-        // API服务器地址（开发环境）
-        const API_BASE_URL = 'http://localhost:8444';
+        // API服务器地址 - 从环境变量或URL参数获取
+        function getApiBaseUrl() {
+            // 尝试从URL参数获取
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiUrlParam = urlParams.get('api_url');
+
+            // 尝试从环境变量获取（如果在构建时设置）
+            if (window.ENV && window.ENV.API_BASE_URL) {
+                return window.ENV.API_BASE_URL;
+            }
+
+            // 从URL参数获取
+            if (apiUrlParam) {
+                return apiUrlParam;
+            }
+
+            // 开发环境默认值
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return 'http://localhost:8444';
+            }
+
+            // 生产环境从当前域名构造
+            return `${window.location.protocol}//${window.location.host}`;
+        }
+
+        const API_BASE_URL = getApiBaseUrl();
         console.log('API_BASE_URL:', API_BASE_URL); // 调试信息
 
         // IndexedDB 数据库
@@ -1778,6 +1801,9 @@
             // 更新地图中心
             map.setCenter([userLocation.lng, userLocation.lat]);
 
+            // 添加用户位置标记
+            addUserLocationMarker();
+
             // 加载附近照片
             if (currentUser) {
                 await loadNearbyPhotos();
@@ -1789,42 +1815,25 @@
             improvedLocationRequest();
         }
 
-
-
-        // 从API加载附近照片
-        async function loadNearbyPhotos() {
-            if (!userLocation || !authToken) return;
-
-            try {
-                const response = await fetch(`${API_BASE_URL}/api/photos/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=300`, {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    photos = data.photos;
-                    displayPhotosOnMap();
-                } else {
-                    console.error('加载附近照片失败');
-                }
-            } catch (error) {
-                console.error('加载照片错误:', error);
-            }
-        }
-
-        // 在地图上显示照片
-        function displayPhotosOnMap() {
+        // 添加用户位置标记
+        function addUserLocationMarker() {
             if (!userLocation || !map || !window.mapReady) return;
 
-            const photosGrid = document.getElementById('photosGrid');
-            photosGrid.innerHTML = '';
+            // 清除之前的用户位置标记（但保留照片标记）
+            // 注意：这里我们只清除用户位置标记，照片标记在displayPhotosOnMap中处理
+            const allOverlays = map.getAllOverlays();
+            allOverlays.forEach(overlay => {
+                if (overlay instanceof AMap.Marker) {
+                    // 检查是否是用户位置标记（通过位置判断）
+                    const pos = overlay.getPosition();
+                    if (pos && Math.abs(pos.lat - userLocation.lat) < 0.0001 &&
+                        Math.abs(pos.lng - userLocation.lng) < 0.0001) {
+                        map.remove(overlay);
+                    }
+                }
+            });
 
-            // 清除之前的地图标记
-            map.clearMap();
-            
-            // 重新添加用户位置标记，根据定位来源显示不同样式
+            // 添加用户位置标记，根据定位来源显示不同样式
             let markerIcon;
             if (locationSource === 'gps') {
                 markerIcon = 'data:image/svg+xml;base64,' + btoa(`
@@ -1859,8 +1868,8 @@
                     size: new AMap.Size(locationSource ? 20 : 16, locationSource ? 20 : 16)
                 })
             });
-            
-            // 重新添加300米范围圆圈
+
+            // 添加300米范围圆圈
             new AMap.Circle({
                 center: [userLocation.lng, userLocation.lat],
                 radius: 300,
@@ -1870,6 +1879,61 @@
                 fillColor: '#111',
                 fillOpacity: 0.05,
                 map: map
+            });
+        }
+
+        // 从API加载附近照片
+        async function loadNearbyPhotos() {
+            if (!userLocation || !authToken) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/photos/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=300`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    photos = data.photos;
+                    displayPhotosOnMap();
+                } else {
+                    console.error('加载附近照片失败');
+                }
+            } catch (error) {
+                console.error('加载照片错误:', error);
+            }
+        }
+
+        // 在地图上显示照片
+        function displayPhotosOnMap() {
+            if (!userLocation || !map || !window.mapReady) return;
+
+            const photosGrid = document.getElementById('photosGrid');
+            photosGrid.innerHTML = '';
+
+            // 清除之前的照片标记，但保留用户位置标记和圆圈
+            const allOverlays = map.getAllOverlays();
+            allOverlays.forEach(overlay => {
+                if (overlay instanceof AMap.Marker) {
+                    // 检查是否是照片标记（不是用户位置标记）
+                    const pos = overlay.getPosition();
+                    if (pos && (Math.abs(pos.lat - userLocation.lat) >= 0.0001 ||
+                        Math.abs(pos.lng - userLocation.lng) >= 0.0001)) {
+                        map.remove(overlay);
+                    }
+                }
+            });
+
+            // 清除圆圈（保留用户位置圆圈）
+            allOverlays.forEach(overlay => {
+                if (overlay instanceof AMap.Circle) {
+                    const center = overlay.getCenter();
+                    if (center && (Math.abs(center.lat - userLocation.lat) >= 0.0001 ||
+                        Math.abs(center.lng - userLocation.lng) >= 0.0001)) {
+                        map.remove(overlay);
+                    }
+                }
             });
             
             // 按位置分组照片
@@ -2011,6 +2075,7 @@
                 formData.append('caption', caption);
                 formData.append('userLat', userLocation.lat);
                 formData.append('userLng', userLocation.lng);
+                formData.append('locationSource', locationSource || 'unknown');
 
                 const response = await fetch(`${API_BASE_URL}/api/photos/upload`, {
                     method: 'POST',
@@ -2256,49 +2321,53 @@
 
             try {
                 console.log('开始IP定位...');
-                const response = await fetch(`${API_BASE_URL}/api/location/ip`);
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                // 获取高德地图配置
+                const configResponse = await fetch(`${API_BASE_URL}/api/amap/config`);
+                const config = await configResponse.json();
+
+                if (!config.apiKey) {
+                    throw new Error('无法获取高德地图API密钥');
                 }
 
-                const data = await response.json();
+                console.log('获取到高德地图配置，开始调用IP定位API...');
 
-                if (data.success) {
-                    console.log('IP定位成功:', data);
+                // 直接调用高德地图IP定位API
+                const ipResponse = await fetch(`https://restapi.amap.com/v3/ip?key=${config.apiKey}&output=json`);
+                const ipData = await ipResponse.json();
 
-                    // IP定位只返回省份城市信息，需要转换为坐标
-                    // 使用高德地图的城市搜索来获取城市中心坐标
-                    if (data.location.city) {
+                console.log('高德IP定位API响应:', ipData);
+
+                if (ipData.status === '1' && ipData.infocode === '10000') {
+                    console.log('IP定位成功:', ipData);
+
+                    // IP定位返回省份城市信息，需要转换为坐标
+                    // 使用高德地图的地理编码API获取城市中心坐标
+                    if (ipData.city) {
                         try {
-                            const cityResponse = await fetch(`${API_BASE_URL}/api/amap/config`);
-                            const config = await cityResponse.json();
+                            // 使用高德地理编码API获取城市坐标
+                            const geoResponse = await fetch(`https://restapi.amap.com/v3/geocode/geo?key=${config.apiKey}&address=${ipData.city}&city=${ipData.province || ipData.city}`);
+                            const geoData = await geoResponse.json();
 
-                            if (config.apiKey) {
-                                // 使用高德地理编码API获取城市坐标
-                                const geoResponse = await fetch(`https://restapi.amap.com/v3/geocode/geo?key=${config.apiKey}&address=${data.location.city}&city=${data.location.province || data.location.city}`);
-                                const geoData = await geoResponse.json();
+                            if (geoData.status === '1' && geoData.geocodes && geoData.geocodes.length > 0) {
+                                const location = geoData.geocodes[0].location.split(',');
+                                userLocation = {
+                                    lat: parseFloat(location[1]),
+                                    lng: parseFloat(location[0])
+                                };
+                                locationSource = 'ip';
 
-                                if (geoData.status === '1' && geoData.geocodes && geoData.geocodes.length > 0) {
-                                    const location = geoData.geocodes[0].location.split(',');
-                                    userLocation = {
-                                        lat: parseFloat(location[1]),
-                                        lng: parseFloat(location[0])
-                                    };
-                                    locationSource = 'ip';
+                                statusEl.textContent = `IP定位成功: ${ipData.province || ''} ${ipData.city} (高德地图)`;
+                                statusEl.className = 'status success';
 
-                                    statusEl.textContent = `IP定位成功: ${data.location.province || ''} ${data.location.city} (IP: ${data.location.ip})`;
-                                    statusEl.className = 'status success';
+                                await updateMapWithLocation();
+                                await updateLocationInfo();
 
-                                    await updateMapWithLocation();
-                                    await updateLocationInfo();
-
-                                    if (currentUser) {
-                                        await loadNearbyPhotos();
-                                    }
-
-                                    return true;
+                                if (currentUser) {
+                                    await loadNearbyPhotos();
                                 }
+
+                                return true;
                             }
                         } catch (geoError) {
                             console.warn('地理编码失败，使用默认坐标:', geoError);
@@ -2312,7 +2381,7 @@
                     };
                     locationSource = 'ip';
 
-                    statusEl.textContent = `IP定位成功: ${data.location.province || ''} ${data.location.city || '未知城市'} (IP: ${data.location.ip})`;
+                    statusEl.textContent = `IP定位成功: ${ipData.province || ''} ${ipData.city || '未知城市'} (高德地图)`;
                     statusEl.className = 'status success';
 
                     await updateMapWithLocation();
@@ -2324,7 +2393,7 @@
 
                     return true;
                 } else {
-                    throw new Error(data.error || 'IP定位失败');
+                    throw new Error(`高德IP定位失败: ${ipData.info || '未知错误'}`);
                 }
             } catch (error) {
                 console.error('IP定位错误:', error);
