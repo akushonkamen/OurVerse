@@ -217,16 +217,15 @@ const upload = multer({
   }
 });
 
-// Static files for uploaded photos (仅在非Vercel环境需要)
-if (!process.env.VERCEL) {
-  const uploadsDir = process.env.UPLOADS_DIR || 'uploads';
-  app.use(`/${uploadsDir}`, express.static(path.join(__dirname, uploadsDir)));
+// Static files for uploaded photos (仅在非Railway环境需要)
+// Railway使用容器持久化存储，始终提供静态文件服务
+const uploadsDir = process.env.UPLOADS_DIR || 'uploads';
+app.use(`/${uploadsDir}`, express.static(path.join(__dirname, uploadsDir)));
 
-  // Ensure uploads directory exists
-  const uploadsPath = path.join(__dirname, uploadsDir);
-  if (!fs.existsSync(uploadsPath)) {
-    fs.mkdirSync(uploadsPath, { recursive: true });
-  }
+// Ensure uploads directory exists
+const uploadsPath = path.join(__dirname, uploadsDir);
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
 }
 
 // Static files for website (development only)
@@ -493,28 +492,16 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     let processedImageBuffer;
     let imageUrl;
 
-    if (process.env.VERCEL) {
-      // Vercel环境：将图片转换为base64存储在数据库中
-      processedImageBuffer = await sharp(file.buffer)
-        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toBuffer();
+    // Railway环境：保存到文件系统（使用容器持久化存储）
+    const filename = `${crypto.randomBytes(16).toString('hex')}.jpg`;
+    const filepath = path.join(__dirname, 'uploads', filename);
 
-      // 转换为base64数据URL
-      const base64Image = processedImageBuffer.toString('base64');
-      imageUrl = `data:image/jpeg;base64,${base64Image}`;
-    } else {
-      // 本地环境：保存到文件系统
-      const filename = `${crypto.randomBytes(16).toString('hex')}.jpg`;
-      const filepath = path.join(__dirname, 'uploads', filename);
+    await sharp(file.buffer)
+      .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(filepath);
 
-      await sharp(file.buffer)
-        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toFile(filepath);
-
-      imageUrl = `/uploads/${filename}`;
-    }
+    imageUrl = `/uploads/${filename}`;
 
     // 获取详细的位置信息，包括地标信息
     let locationInfo = {
@@ -938,10 +925,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Vercel deployment support
-if (process.env.VERCEL) {
-  // Export for Vercel serverless functions
-  module.exports = app;
+// Railway deployment support (容器化部署)
+if (process.env.RAILWAY) {
+  // Railway会自动处理端口监听，无需手动配置
+  console.log('🚂 Running on Railway platform');
 } else {
   // Local development server
   const PORT = process.env.PORT || 8444;
