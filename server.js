@@ -96,6 +96,15 @@ mongoose.connection.once('open', async () => {
       console.warn('Failed to drop legacy githubId index:', error.message);
     }
   }
+
+  try {
+    await mongoose.connection.db.collection('users').dropIndex('registrationDeviceId_1');
+    console.log('Dropped legacy registrationDeviceId index');
+  } catch (error) {
+    if (error?.codeName !== 'IndexNotFound') {
+      console.warn('Failed to drop legacy registrationDeviceId index:', error.message);
+    }
+  }
 });
 
 // Passport Configuration
@@ -176,7 +185,7 @@ const userSchema = new mongoose.Schema({
   githubUsername: String,
   createdAt: { type: Date, default: Date.now },
   registrationIp: { type: String, trim: true },
-  registrationDeviceId: { type: String, unique: true, sparse: true },
+  registrationDeviceId: { type: String, trim: true },
   registrationUserAgent: { type: String },
   registeredAt: { type: Date, default: Date.now },
   lastLoginAt: { type: Date },
@@ -440,15 +449,6 @@ app.post('/api/auth/register', async (req, res) => {
     const clientIp = getClientIp(req);
     const { deviceId, userAgent } = getDeviceFingerprint(req);
 
-    if (!deviceId) {
-      return res.status(400).json({ error: '无法识别设备信息，请允许设备标识后重试' });
-    }
-
-    const existingDeviceUser = await User.findOne({ registrationDeviceId: deviceId });
-    if (existingDeviceUser) {
-      return res.status(400).json({ error: '该设备已注册账号，请使用已有账号登录' });
-    }
-
     // Hash password
     const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10;
     const hashedPassword = await bcrypt.hash(passwordInput, saltRounds);
@@ -459,8 +459,8 @@ app.post('/api/auth/register', async (req, res) => {
       password: hashedPassword,
       avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(usernameInput)}`,
       registrationIp: clientIp,
-      registrationDeviceId: deviceId,
-      registrationUserAgent: userAgent,
+      ...(deviceId ? { registrationDeviceId: deviceId } : {}),
+      ...(userAgent ? { registrationUserAgent: userAgent } : {}),
       provider: 'local',
       registeredAt: new Date()
     };
@@ -738,16 +738,28 @@ app.post('/api/photos/upload', authenticate, uploadSinglePhoto, async (req, res)
     // Process image
     let imageUrl;
 
-    // Railway环境：保存到文件系统（使用容器持久化存储）
+    const userIdString = String(req.userId);
+    const now = new Date();
+    const yearSegment = String(now.getUTCFullYear());
+    const monthSegment = String(now.getUTCMonth() + 1).padStart(2, '0');
+
+    const relativeDir = path.join(uploadsDir, userIdString, yearSegment, monthSegment);
+    const absoluteDir = path.join(__dirname, relativeDir);
+
+    await fs.promises.mkdir(absoluteDir, { recursive: true });
+
     const filename = `${crypto.randomBytes(16).toString('hex')}.jpg`;
-    const filepath = path.join(__dirname, 'uploads', filename);
+    const filepath = path.join(absoluteDir, filename);
 
     await sharp(file.buffer)
       .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 80 })
       .toFile(filepath);
 
-    imageUrl = `/uploads/${filename}`;
+    const normalizedUploadsDir = uploadsDir.replace(/\\/g, '/');
+    const baseSegments = normalizedUploadsDir.split('/').filter(Boolean);
+    const urlSegments = [...baseSegments, userIdString, yearSegment, monthSegment, filename];
+    imageUrl = '/' + path.posix.join(...urlSegments);
 
     // 获取详细的位置信息，包括地标信息
     let locationInfo = {

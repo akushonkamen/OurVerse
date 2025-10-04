@@ -735,58 +735,141 @@
         }
     </style>
 
-    <!-- Dynamic Amap API loading -->
     <script>
-        // Global flag to track Amap loading status
-        window.amapLoaded = false;
 
-        // Load Amap configuration and API dynamically
-        fetch('/api/amap/config')
-            .then(response => response.json())
-            .then(config => {
+        window.amapLoaded = false;
+        window.mapReady = false;
+        window.initialLocationHint = null;
+        window.mapInitialized = false;
+        window.pendingLocationUpdate = false;
+
+        const scriptLoadRegistry = new Map();
+
+        function loadScript(url, timeout = 10000) {
+            if (scriptLoadRegistry.has(url)) {
+                return scriptLoadRegistry.get(url);
+            }
+
+            const promise = new Promise((resolve, reject) => {
+                const existing = document.querySelector(`script[src="${url}"]`);
+                if (existing && existing.dataset.loaded === 'true') {
+                    resolve(existing);
+                    return;
+                }
+
+                const script = existing || document.createElement('script');
+                script.src = url;
+                script.async = true;
+
+                const cleanup = () => {
+                    script.removeEventListener('load', onLoad);
+                    script.removeEventListener('error', onError);
+                    clearTimeout(timerId);
+                };
+
+                const onLoad = () => {
+                    cleanup();
+                    script.dataset.loaded = 'true';
+                    resolve(script);
+                };
+
+                const onError = (error) => {
+                    cleanup();
+                    reject(error);
+                };
+
+                script.addEventListener('load', onLoad);
+                script.addEventListener('error', onError);
+
+                const timerId = setTimeout(() => {
+                    cleanup();
+                    reject(new Error(`Loading script timeout: ${url}`));
+                }, timeout);
+
+                if (!existing) {
+                    document.head.appendChild(script);
+                }
+            }).catch(error => {
+                scriptLoadRegistry.delete(url);
+                throw error;
+            });
+
+            scriptLoadRegistry.set(url, promise);
+            return promise;
+        }
+
+        function loadStylesheet(url) {
+            const existing = document.querySelector(`link[href="${url}"]`);
+            if (existing) {
+                return Promise.resolve(existing);
+            }
+
+            return new Promise((resolve, reject) => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = url;
+                link.onload = () => resolve(link);
+                link.onerror = reject;
+                document.head.appendChild(link);
+            });
+        }
+
+        let amapSdkPromise = null;
+        async function loadAmapSdk() {
+            if (amapSdkPromise) {
+                return amapSdkPromise;
+            }
+
+            amapSdkPromise = (async () => {
+                if (!window.API_BASE_URL) {
+                    throw new Error('API_BASE_URL 未设置，无法加载高德地图');
+                }
+
+                const response = await fetch(`${window.API_BASE_URL}/api/amap/config`);
+                if (!response.ok) {
+                    throw new Error('无法获取高德地图配置');
+                }
+
+                const config = await response.json();
                 console.log('获取到地图配置:', config);
-                if (config.apiKey && config.securityCode) {
+
+                if (config.securityCode) {
                     window._AMapSecurityConfig = {
                         securityJsCode: config.securityCode
                     };
-                    const script = document.createElement('script');
-                    const scriptUrl = `https://webapi.amap.com/maps?v=2.0&key=${config.apiKey}&jscode=${config.securityCode}`;
-                    console.log('加载地图API:', scriptUrl);
-                    script.src = scriptUrl;
-                    script.onload = () => {
-                        console.log('高德地图API加载成功');
-                        window.amapLoaded = true;
-                        document.dispatchEvent(new Event('amap:loaded'));
-                        // Trigger map initialization if window.onload has already run
-                        if (window.appInitialized) {
-                            console.log('触发地图初始化...');
-                            initMap();
-                        }
-                    };
-                    script.onerror = (e) => {
-                        console.error('高德地图API加载失败:', e);
-                        // 显示错误信息
-                        const mapContainer = document.getElementById('map');
-                        if (mapContainer) {
-                            mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图API加载失败，请检查网络连接</div>';
-                        }
-                    };
-                    document.head.appendChild(script);
-                } else {
-                    console.error('高德地图配置获取失败');
-                    const mapContainer = document.getElementById('map');
-                    if (mapContainer) {
-                        mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图配置错误</div>';
-                    }
                 }
-            })
-            .catch(error => {
-                console.error('获取高德地图配置失败:', error);
-                const mapContainer = document.getElementById('map');
-                if (mapContainer) {
-                    mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">获取地图配置失败</div>';
+
+                if (!config.apiKey) {
+                    throw new Error('高德地图API密钥未配置');
                 }
+
+                const scriptUrl = `https://webapi.amap.com/maps?v=2.0&key=${config.apiKey}${config.securityCode ? `&jscode=${config.securityCode}` : ''}`;
+                console.log('加载地图API:', scriptUrl);
+                await loadScript(scriptUrl, 12000);
+                window.amapLoaded = true;
+                document.dispatchEvent(new Event('amap:loaded'));
+                return config;
+            })().catch(error => {
+                amapSdkPromise = null;
+                throw error;
             });
+
+            return amapSdkPromise;
+        }
+
+        async function ensureMapSdkLoaded() {
+            await loadAmapSdk();
+            return 'amap';
+        }
+
+        window.ensureMapSdkLoaded = ensureMapSdkLoaded;
+
+        document.addEventListener('amap:loaded', () => {
+            if (window.appInitialized && typeof initMap === 'function') {
+                console.log('高德地图JS已加载，初始化地图');
+                initMap();
+            }
+        });
     </script>
 </head>
 <body>
@@ -939,23 +1022,32 @@
     <script>
         let map;
         let userLocation;
-        let nearbyPhotos = [];
-        let photoClusters = [];
-        let clusterMarkers = [];
+        let photos = [];
         let currentPhotoId;
         let isAdmin = false;
         let currentUser = null;
         let authToken = null;
         let locationSource = null; // 'amap', 'gps', 'ip', or null
         let locationAccuracyRadius = null;
-        let userAccuracyCircle = null;
-        let userLocationMarker = null;
         let currentLocationPromise = null;
         let pendingAmapRetry = false;
-        
+        let isViewingMyPhotos = false;
+
+        let amapUserMarker = null;
+        let amapAccuracyCircle = null;
+        let amapPhotoMarkers = [];
+
         document.addEventListener('amap:loaded', () => {
-            if (!userLocation || locationSource === 'ip') {
+            if (window.appInitialized && typeof initMap === 'function') {
+                initMap();
+            }
+
+            if (!userLocation) {
                 pendingAmapRetry = true;
+            }
+
+            if (pendingAmapRetry) {
+                pendingAmapRetry = false;
                 improvedLocationRequest();
             }
         });
@@ -986,6 +1078,7 @@
         }
 
 const API_BASE_URL = getApiBaseUrl();
+window.API_BASE_URL = API_BASE_URL;
 console.log('API_BASE_URL:', API_BASE_URL); // 调试信息
 
 function getDeviceId() {
@@ -1038,19 +1131,21 @@ function getDeviceId() {
             console.log('应用初始化开始...');
             try {
                 await initDB();
-                // Only init map if Amap is already loaded, otherwise it will be called from the Amap onload callback
-                if (window.amapLoaded) {
-                    initMap();
-                }
-                checkAuthStatus();
-                checkOAuthCallback(); // 检查OAuth回调
-                window.appInitialized = true;
+                await ensureMapSdkLoaded();
             } catch (error) {
                 console.error('初始化失败:', error);
                 alert('应用初始化失败，请刷新页面重试');
+            } finally {
+                window.appInitialized = true;
+
+                if (window.amapLoaded && typeof initMap === 'function') {
+                    initMap();
+                }
+
+                checkAuthStatus();
+                checkOAuthCallback();
             }
-            checkAuthStatus();
-            
+
             // 延迟一点再获取位置，确保地图已加载
             setTimeout(async () => {
                 try {
@@ -1096,10 +1191,16 @@ function getDeviceId() {
             localStorage.setItem('authToken', token);
 
             updateNavUser(user);
+            isViewingMyPhotos = false;
 
             const photosGrid = document.getElementById('photosGrid');
             if (photosGrid) {
                 photosGrid.innerHTML = '<div class="empty-state">正在加载附近照片...</div>';
+            }
+
+            const uploadStatus = document.getElementById('uploadStatus');
+            if (uploadStatus) {
+                uploadStatus.textContent = '点一下开始写诗';
             }
 
             if (userLocation) {
@@ -1125,18 +1226,15 @@ function getDeviceId() {
 
         // 显示需要登录的界面
         function showLoginRequired() {
-            const photosGrid = document.getElementById('photosGrid');
-            photosGrid.innerHTML = `
-                <div class="login-required">
-                    <p>需要登录才能查看和上传照片</p>
-                    <button class="login-btn github-btn" onclick="showLoginModal()">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-                        </svg>
-                        登录开始写诗
-                    </button>
-                </div>
-            `;
+            const uploadStatus = document.getElementById('uploadStatus');
+            if (uploadStatus) {
+                uploadStatus.textContent = '登录后可以上传照片和评论';
+            }
+
+            const photosTitle = document.querySelector('.photos-title');
+            if (photosTitle) {
+                photosTitle.textContent = '附近300米';
+            }
         }
 
         // 显示登录模态框
@@ -1343,6 +1441,11 @@ function getDeviceId() {
             }
 
             try {
+                const photosGrid = document.getElementById('photosGrid');
+                if (photosGrid) {
+                    photosGrid.innerHTML = '<div class="empty-state">正在加载我的照片...</div>';
+                }
+
                 const response = await fetch(`${API_BASE_URL}/api/photos/my`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`
@@ -1369,6 +1472,7 @@ function getDeviceId() {
 
             // 更新标题
             photosTitle.textContent = '我的照片';
+            isViewingMyPhotos = true;
 
             // 添加返回按钮
             const backButton = document.createElement('button');
@@ -1378,9 +1482,7 @@ function getDeviceId() {
             backButton.onclick = () => {
                 photosTitle.textContent = '附近300米';
                 backButton.remove();
-                if (currentUser) {
-                    loadNearbyPhotos();
-                }
+                loadNearbyPhotos();
             };
 
             // 移除之前的返回按钮
@@ -1402,13 +1504,14 @@ function getDeviceId() {
                     photoDiv.onclick = () => openPhotoModal(photo.id);
 
                     const locationText = photo.locationInfo?.formattedAddress || '未知位置';
+                    const commentCount = Array.isArray(photo.comments) ? photo.comments.length : (Number(photo.comments) || 0);
 
                     photoDiv.innerHTML = `
                         <img src="${photo.url}" alt="用户照片">
                         <div class="photo-marker">${new Date(photo.createdAt).toLocaleDateString()}</div>
                         <div class="photo-info">
                             <div class="photo-caption">${photo.caption}</div>
-                            <div class="photo-distance">${photo.comments} 条评论 • ${locationText}</div>
+                            <div class="photo-distance">${commentCount} 条评论 • ${locationText}</div>
                         </div>
                     `;
 
@@ -1422,47 +1525,58 @@ function getDeviceId() {
             currentUser = null;
             authToken = null;
             localStorage.removeItem('authToken');
+            isViewingMyPhotos = false;
 
             const navUser = document.getElementById('navUser');
             navUser.innerHTML = '<button class="admin-btn" onclick="showLoginModal()" id="loginBtn">登录</button>';
 
+            const photosTitle = document.querySelector('.photos-title');
+            const backButton = photosTitle?.querySelector('.admin-btn');
+            if (backButton) {
+                backButton.remove();
+            }
+
             showLoginRequired();
+
+            if (userLocation) {
+                loadNearbyPhotos();
+            }
         }
 
 
         // 初始化地图
         function initMap() {
-            console.log('初始化地图...');
-            console.log('AMap对象:', typeof AMap, AMap);
+            if (window.mapInitialized) {
+                return;
+            }
+
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) {
+                console.error('未找到地图容器');
+                return;
+            }
 
             if (typeof AMap === 'undefined') {
                 console.error('AMap未加载，无法初始化地图');
-                // 显示错误信息
-                const mapContainer = document.getElementById('map');
-                if (mapContainer) {
-                    mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:14px;">地图加载失败，请刷新页面重试</div>';
-                }
+                mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:14px;">地图加载失败，请刷新页面重试</div>';
                 return;
             }
 
             try {
-                console.log('创建地图实例...');
                 map = new AMap.Map('map', {
                     zoom: 17,
                     center: [116.397428, 39.90923],
                     mapStyle: 'amap://styles/light',
-                    dragEnable: true,
-                    zoomEnable: true,
+                    dragEnable: false,
+                    zoomEnable: false,
                     doubleClickZoom: false,
                     scrollWheel: false
                 });
 
-                console.log('地图实例创建成功:', map);
+                window.mapInitialized = true;
 
                 map.on('complete', function() {
-                    console.log('地图加载完成');
                     window.mapReady = true;
-                    // 如果已经有位置数据，立即更新地图
                     if (userLocation && window.pendingLocationUpdate) {
                         updateMapWithLocation();
                         window.pendingLocationUpdate = false;
@@ -1471,24 +1585,18 @@ function getDeviceId() {
 
                 map.on('error', function(error) {
                     console.error('地图加载出错:', error);
-                    const mapContainer = document.getElementById('map');
-                    if (mapContainer) {
-                        mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图加载出错</div>';
-                    }
+                    mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图加载出错</div>';
                 });
 
             } catch (error) {
                 console.error('地图初始化异常:', error);
-                const mapContainer = document.getElementById('map');
-                if (mapContainer) {
-                    mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图初始化失败: ' + error.message + '</div>';
-                }
+                mapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图初始化失败: ${error.message || error}</div>`;
             }
         }
 
 
 
-        // GPS定位函数（主要定位方式）
+        // 定位流程（优先高德JS，失败回退IP）
         async function improvedLocationRequest() {
             if (currentLocationPromise) {
                 if (!window.amapLoaded) {
@@ -1515,7 +1623,7 @@ function getDeviceId() {
                         try {
                             success = await amapGeolocationRequest();
                         } catch (error) {
-                            console.warn('高德定位异常，尝试使用浏览器定位:', error);
+                            console.warn('高德定位异常:', error);
                             success = false;
                         }
                     } else {
@@ -1523,24 +1631,14 @@ function getDeviceId() {
                     }
 
                     if (!success) {
-                        if (navigator.geolocation) {
-                            statusEl.textContent = '正在使用浏览器定位...';
-                            statusEl.className = 'status';
-                            success = await gpsLocationRequest();
-                        } else {
-                            console.warn('浏览器不支持HTML5地理定位');
-                        }
-                    }
-
-                    if (!success) {
-                        statusEl.textContent = 'GPS定位失败，尝试IP定位...';
+                        statusEl.textContent = '定位失败，尝试IP定位...';
                         statusEl.className = 'status';
                         success = await ipLocationRequest();
                     }
                 } finally {
                     const finalResult = success;
                     currentLocationPromise = null;
-                    if ((locationSource === 'ip' || !finalResult) && pendingAmapRetry && window.amapLoaded && locationSource !== 'amap') {
+                    if (!finalResult && pendingAmapRetry && window.amapLoaded && locationSource !== 'amap') {
                         pendingAmapRetry = false;
                         setTimeout(() => improvedLocationRequest(), 0);
                     }
@@ -1551,12 +1649,12 @@ function getDeviceId() {
             return currentLocationPromise;
         }
 
-        // 使用高德地图JS API定位
+        // 使用地图JS API定位
         async function amapGeolocationRequest() {
             const statusEl = document.getElementById('status');
 
             if (typeof AMap === 'undefined' || !window.amapLoaded) {
-                console.warn('AMap未准备好，跳过高德定位');
+                console.warn('高德定位插件未就绪，暂不定位');
                 return false;
             }
 
@@ -1629,156 +1727,6 @@ function getDeviceId() {
                     resolve(false);
                 }
             });
-        }
-
-        // GPS定位函数（主要定位方式）
-        async function gpsLocationRequest() {
-            const statusEl = document.getElementById('status');
-
-            // 检查是否支持地理定位
-            if (!navigator.geolocation) {
-                statusEl.textContent = '您的浏览器不支持地理定位功能，请使用现代浏览器';
-                statusEl.className = 'status error';
-                return false;
-            }
-
-            // 检查权限状态
-            if ('permissions' in navigator) {
-                try {
-                    const permission = await navigator.permissions.query({name: 'geolocation'});
-                    console.log('当前权限状态:', permission.state);
-
-                    if (permission.state === 'denied') {
-                        showPermissionDeniedHelp();
-                        return false;
-                    }
-                } catch (error) {
-                    console.log('权限查询失败，继续尝试获取位置');
-                }
-            }
-
-            const options = {
-                enableHighAccuracy: true,  // 启用高精度
-                timeout: 15000,           // 15秒超时
-                maximumAge: 60000         // 60秒缓存
-            };
-
-            return new Promise((resolve, reject) => {
-                statusEl.textContent = '正在精确定位...';
-
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        const accuracy = position.coords.accuracy;
-                        console.log(`GPS定位精度: ${accuracy}米`);
-
-                        if (accuracy <= 50) { // 精度在50米以内认为成功
-                            console.log('GPS定位成功:', position);
-                            handleLocationSuccess(position);
-                            resolve(true);
-                        } else {
-                            console.log(`GPS精度不够(${accuracy}m)，定位失败`);
-                            statusEl.textContent = `GPS精度不够(${Math.round(accuracy)}米)，请在更开阔的地方重试`;
-                            statusEl.className = 'status error';
-                            resolve(false);
-                        }
-                    },
-                    function(error) {
-                        console.error('GPS定位失败:', error);
-                        statusEl.textContent = 'GPS定位失败，请允许位置权限后重试';
-                        statusEl.className = 'status error';
-                        resolve(false);
-                    },
-                    options
-                );
-            });
-        }
-
-
-        // 显示权限被拒绝的帮助信息
-        function showPermissionDeniedHelp() {
-            const statusEl = document.getElementById('status');
-            const userAgent = navigator.userAgent;
-            let helpText = '位置权限被拒绝。';
-
-            if (userAgent.indexOf('Safari') > -1 && userAgent.indexOf('Chrome') === -1) {
-                // Safari
-                helpText += '请在地址栏左侧点击位置图标，选择"允许"';
-            } else if (userAgent.indexOf('Chrome') > -1) {
-                // Chrome
-                helpText += '请在地址栏左侧点击位置图标，选择"始终允许"';
-            } else if (userAgent.indexOf('Firefox') > -1) {
-                // Firefox
-                helpText += '请在地址栏的权限图标中选择"允许"位置访问';
-            } else {
-                helpText += '请在浏览器设置中允许此网站访问位置信息';
-            }
-
-            helpText += '\n\n如果仍然无法访问，请检查系统设置：\n系统偏好设置 → 安全性与隐私 → 隐私 → 定位服务';
-
-            statusEl.textContent = helpText;
-            statusEl.className = 'status error';
-
-            // 添加重试按钮
-            const retryButton = document.createElement('button');
-            retryButton.textContent = '重新尝试';
-            retryButton.style.cssText = 'margin-top: 10px; padding: 8px 16px; background: #111; color: #fff; border: none; border-radius: 4px; cursor: pointer;';
-            retryButton.onclick = () => improvedLocationRequest();
-
-            statusEl.appendChild(document.createElement('br'));
-            statusEl.appendChild(retryButton);
-        }
-
-        // 处理定位成功
-        async function handleLocationSuccess(position) {
-            userLocation = {
-                lat: position.coords.latitude,
-                lng: position.coords.longitude
-            };
-
-            // 设置定位来源为GPS
-            locationSource = 'gps';
-            pendingAmapRetry = false;
-
-            const rawAccuracy = Number(position.coords.accuracy);
-            if (Number.isFinite(rawAccuracy) && rawAccuracy > 0) {
-                locationAccuracyRadius = Math.max(rawAccuracy, 25);
-            } else {
-                locationAccuracyRadius = 100;
-            }
-
-            const statusEl = document.getElementById('status');
-            statusEl.textContent = `GPS定位成功 (精度约${Math.round(locationAccuracyRadius)}米)`;
-            statusEl.className = 'status success';
-
-            // 更新地图等其他操作...
-            await updateMapWithLocation();
-
-            // 获取并显示位置信息
-            if (authToken) {
-                await updateLocationInfo();
-            }
-        }
-
-        // 处理定位错误
-        function handleLocationError(error) {
-            const statusEl = document.getElementById('status');
-            
-            switch(error.code) {
-                case error.PERMISSION_DENIED:
-                    showPermissionDeniedHelp();
-                    break;
-                case error.POSITION_UNAVAILABLE:
-                    statusEl.textContent = '位置服务不可用，请检查网络连接或GPS设置';
-                    statusEl.className = 'status error';
-                    break;
-                case error.TIMEOUT:
-                    statusEl.textContent = '定位请求超时，请重试';
-                    statusEl.className = 'status error';
-                    break;
-                default:
-                    statusEl.textContent = `定位失败: ${error.message}`;
-                    statusEl.className = 'status error';
-            }
         }
 
         // 更新位置信息显示
@@ -1871,15 +1819,15 @@ function getDeviceId() {
             }
 
             // 更新地图中心
-            const suggestedZoom = getSuggestedZoom(getSearchRadius());
-            map.setZoom(suggestedZoom);
-            map.setCenter([userLocation.lng, userLocation.lat]);
+            if (typeof map.setCenter === 'function') {
+                map.setCenter([userLocation.lng, userLocation.lat]);
+            }
 
             // 添加用户位置标记
             addUserLocationMarker();
 
-            // 加载附近照片
-            if (currentUser) {
+            // 加载附近照片（游客也可浏览），但在“我的照片”视图保留当前列表
+            if (!isViewingMyPhotos) {
                 await loadNearbyPhotos();
             }
         }
@@ -1893,20 +1841,17 @@ function getDeviceId() {
         function addUserLocationMarker() {
             if (!userLocation || !map || !window.mapReady) return;
 
-            if (userLocationMarker) {
-                userLocationMarker.setMap(null);
-                userLocationMarker = null;
+            const accuracyRadius = Number.isFinite(locationAccuracyRadius) ? Math.max(locationAccuracyRadius, 50) : 300;
+
+            if (amapUserMarker) {
+                amapUserMarker.setMap(null);
+            }
+            if (amapAccuracyCircle) {
+                amapAccuracyCircle.setMap(null);
             }
 
-            if (userAccuracyCircle) {
-                userAccuracyCircle.setMap(null);
-                userAccuracyCircle = null;
-            }
-
-            // 添加用户位置标记，根据定位来源显示不同样式
             let markerIcon;
             if (locationSource === 'ip') {
-                // IP定位使用橙色标记
                 markerIcon = 'data:image/svg+xml;base64,' + btoa(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
                         <circle cx="10" cy="10" r="8" fill="#F39C12" opacity="0.9"/>
@@ -1914,17 +1859,7 @@ function getDeviceId() {
                         <text x="10" y="14" text-anchor="middle" fill="#F39C12" font-size="10" font-weight="bold">IP</text>
                     </svg>
                 `);
-            } else if (locationSource === 'amap') {
-                // 高德定位使用蓝色标记
-                markerIcon = 'data:image/svg+xml;base64,' + btoa(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
-                        <circle cx="10" cy="10" r="8" fill="#3498DB" opacity="0.9"/>
-                        <circle cx="10" cy="10" r="4" fill="#fff"/>
-                        <text x="10" y="14" text-anchor="middle" fill="#3498DB" font-size="10" font-weight="bold">GD</text>
-                    </svg>
-                `);
-            } else if (locationSource === 'gps') {
-                // GPS定位使用绿色标记
+            } else if (locationSource === 'gps' || locationSource === 'amap') {
                 markerIcon = 'data:image/svg+xml;base64,' + btoa(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
                         <circle cx="10" cy="10" r="8" fill="#27AE60" opacity="0.9"/>
@@ -1933,7 +1868,6 @@ function getDeviceId() {
                     </svg>
                 `);
             } else {
-                // 默认标记
                 markerIcon = 'data:image/svg+xml;base64,' + btoa(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
                         <circle cx="8" cy="8" r="6" fill="#111" opacity="0.8"/>
@@ -1942,7 +1876,7 @@ function getDeviceId() {
                 `);
             }
 
-            userLocationMarker = new AMap.Marker({
+            amapUserMarker = new AMap.Marker({
                 position: [userLocation.lng, userLocation.lat],
                 map: map,
                 icon: new AMap.Icon({
@@ -1951,86 +1885,46 @@ function getDeviceId() {
                 })
             });
 
-            const accuracyForCircle = (() => {
-                if (locationSource === 'ip') {
-                    const base = Number(locationAccuracyRadius);
-                    const radius = Number.isFinite(base) && base > 0 ? base : getSearchRadius();
-                    return Math.max(Math.round(radius), 1000);
-                }
-                const base = Number(locationAccuracyRadius);
-                if (Number.isFinite(base) && base > 0) {
-                    return Math.max(Math.round(base), 100);
-                }
-                return 300;
-            })();
-
-            userAccuracyCircle = new AMap.Circle({
+            amapAccuracyCircle = new AMap.Circle({
                 center: [userLocation.lng, userLocation.lat],
-                radius: accuracyForCircle,
-                strokeColor: locationSource === 'ip' ? '#F39C12' : '#2ecc71',
+                radius: accuracyRadius,
+                strokeColor: '#111',
                 strokeWeight: 1,
-                strokeOpacity: 0.25,
-                fillColor: locationSource === 'ip' ? '#F39C12' : '#2ecc71',
+                strokeOpacity: 0.3,
+                fillColor: '#111',
                 fillOpacity: 0.05,
                 map: map
             });
         }
 
-        function getSearchRadius() {
-            if (locationSource === 'ip') {
-                const base = Number(locationAccuracyRadius);
-                const radius = Number.isFinite(base) && base > 0 ? base * 2 : 2000;
-                return Math.min(Math.max(Math.round(radius), 1000), 5000);
-            }
-
-            if (locationSource === 'amap' || locationSource === 'gps') {
-                const base = Number(locationAccuracyRadius);
-                if (Number.isFinite(base) && base > 0) {
-                    return Math.min(Math.max(Math.round(base * 1.5), 300), 1000);
-                }
-            }
-
-            return 300;
-        }
-
-        function getSuggestedZoom(radius) {
-            if (!Number.isFinite(radius) || radius <= 0) {
-                return 17;
-            }
-            if (radius <= 100) return 18;
-            if (radius <= 300) return 17;
-            if (radius <= 600) return 16;
-            if (radius <= 1500) return 15;
-            if (radius <= 3000) return 14;
-            if (radius <= 6000) return 13;
-            return 12;
-        }
-
         // 从API加载附近照片
         async function loadNearbyPhotos() {
-            if (!authToken) return;
+            if (!userLocation) return;
 
-            if (!userLocation) {
-                const photosGrid = document.getElementById('photosGrid');
-                if (photosGrid) {
-                    photosGrid.innerHTML = '<div class="empty-state">定位完成后将自动显示附近照片</div>';
+            isViewingMyPhotos = false;
+
+            const photosTitle = document.querySelector('.photos-title');
+            if (photosTitle) {
+                photosTitle.textContent = '附近300米';
+                const backButton = photosTitle.querySelector('.admin-btn');
+                if (backButton) {
+                    backButton.remove();
                 }
-                return;
             }
 
             try {
-                const radius = getSearchRadius();
-                console.log('加载附近照片, 半径:', radius);
-                const response = await fetch(`${API_BASE_URL}/api/photos/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=${radius}`, {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
+                const headers = {};
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+
+                const response = await fetch(`${API_BASE_URL}/api/photos/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=300`, {
+                    headers
                 });
 
                 if (response.ok) {
                     const data = await response.json();
-                    nearbyPhotos = data.photos || [];
-                    photoClusters = clusterPhotosByDistance(nearbyPhotos, 10);
+                    photos = data.photos || [];
                     displayPhotosOnMap();
                 } else {
                     console.error('加载附近照片失败');
@@ -2048,78 +1942,32 @@ function getDeviceId() {
             }
         }
 
-        function clusterPhotosByDistance(photos, radiusMeters = 10) {
-            if (!photos || photos.length === 0) return [];
-
-            const clustersMap = new Map();
-            const latMetersPerDegree = 111320;
-            const cosLat = Math.cos((userLocation?.lat || 0) * Math.PI / 180);
-            const lngMetersPerDegree = Math.max(latMetersPerDegree * Math.abs(cosLat), 1);
-            const latFactor = latMetersPerDegree / radiusMeters;
-            const lngFactor = lngMetersPerDegree / radiusMeters;
-
-            photos.forEach(photo => {
-                const latKey = Math.round(photo.lat * latFactor);
-                const lngKey = Math.round(photo.lng * lngFactor);
-                const key = `${latKey},${lngKey}`;
-
-                if (!clustersMap.has(key)) {
-                    clustersMap.set(key, {
-                        id: key,
-                        latSum: 0,
-                        lngSum: 0,
-                        distanceSum: 0,
-                        count: 0,
-                        photos: []
-                    });
-                }
-
-                const cluster = clustersMap.get(key);
-                cluster.latSum += photo.lat;
-                cluster.lngSum += photo.lng;
-                cluster.distanceSum += photo.distance || 0;
-                cluster.count += 1;
-                cluster.photos.push(photo);
-            });
-
-            return Array.from(clustersMap.values()).map(cluster => {
-                const coverPhoto = cluster.photos.reduce((latest, current) => {
-                    if (!latest) return current;
-                    return new Date(current.createdAt) > new Date(latest.createdAt) ? current : latest;
-                }, null);
-
-                return {
-                    id: cluster.id,
-                    lat: cluster.latSum / cluster.count,
-                    lng: cluster.lngSum / cluster.count,
-                    distance: Math.round(cluster.distanceSum / cluster.count),
-                    count: cluster.count,
-                    photos: cluster.photos,
-                    coverPhoto
-                };
-            });
-        }
-
         // 在地图上显示照片
         function displayPhotosOnMap() {
             if (!userLocation || !map || !window.mapReady) return;
 
             const photosGrid = document.getElementById('photosGrid');
+            if (!photosGrid) return;
             photosGrid.innerHTML = '';
 
-            // 清除之前的聚合标记
-            clusterMarkers.forEach(marker => marker.setMap(null));
-            clusterMarkers = [];
+            const locationGroups = {};
+            photos.forEach(photo => {
+                const locationKey = `${Math.round(photo.lat * 1000000)},${Math.round(photo.lng * 1000000)}`;
+                if (!locationGroups[locationKey]) {
+                    locationGroups[locationKey] = [];
+                }
+                locationGroups[locationKey].push(photo);
+            });
 
-            // 为每个簇添加标记
-            photoClusters.forEach(cluster => {
-                const clusterPhotos = cluster.photos || [];
-                if (clusterPhotos.length === 0) return;
-                const coverPhoto = cluster.coverPhoto || clusterPhotos[0];
-                const photoCount = cluster.count || clusterPhotos.length;
-                
-                // 创建统一的标记图标
-                let iconSize, iconSvg;
+            amapPhotoMarkers.forEach(marker => marker.setMap(null));
+            amapPhotoMarkers = [];
+
+            Object.values(locationGroups).forEach(photosAtLocation => {
+                const firstPhoto = photosAtLocation[0];
+                const photoCount = photosAtLocation.length;
+
+                let iconSize;
+                let iconSvg;
 
                 if (photoCount === 1) {
                     iconSize = 32;
@@ -2144,46 +1992,48 @@ function getDeviceId() {
                         </svg>
                     `;
                 }
-                
+
                 const marker = new AMap.Marker({
-                    position: [cluster.lng, cluster.lat],
+                    position: [firstPhoto.lng, firstPhoto.lat],
                     map: map,
                     icon: new AMap.Icon({
                         image: 'data:image/svg+xml;base64,' + btoa(iconSvg),
                         size: new AMap.Size(iconSize, iconSize)
                     })
                 });
-                
-                // 点击标记时显示该位置的所有照片
+
                 marker.on('click', () => {
                     if (photoCount === 1) {
-                        openPhotoModal(coverPhoto.id);
+                        openPhotoModal(firstPhoto.id);
                     } else {
-                        openLocationPhotosModal(clusterPhotos);
+                        openLocationPhotosModal(photosAtLocation);
                     }
                 });
 
-                clusterMarkers.push(marker);
+                amapPhotoMarkers.push(marker);
             });
-            
-            // 显示照片网格
-            if (nearbyPhotos.length === 0) {
+
+            if (photos.length === 0) {
                 photosGrid.innerHTML = '<div class="empty-state">附近暂时还有没人写诗，成为第一个留下诗的人吧</div>';
             } else {
-                nearbyPhotos.forEach(photo => {
+                photos.forEach(photo => {
                     const photoDiv = document.createElement('div');
                     photoDiv.className = 'photo-item';
                     photoDiv.onclick = () => openPhotoModal(photo.id);
-                    
+
+                    const commentCount = Array.isArray(photo.comments) ? photo.comments.length : (Number(photo.comments) || 0);
+                    const distanceMeters = Number(photo.distance) || 0;
+                    const username = photo.username || '匿名';
+
                     photoDiv.innerHTML = `
                         <img src="${photo.url}" alt="用户照片">
-                        <div class="photo-marker">${photo.distance}m</div>
+                        <div class="photo-marker">${distanceMeters}m</div>
                         <div class="photo-info">
                             <div class="photo-caption">${photo.caption}</div>
-                            <div class="photo-distance">${photo.comments} 条评论 - ${photo.username}</div>
+                            <div class="photo-distance">${commentCount} 条评论 - ${username}</div>
                         </div>
                     `;
-                    
+
                     photosGrid.appendChild(photoDiv);
                 });
             }
@@ -2298,13 +2148,14 @@ function getDeviceId() {
 
         // 从API加载照片详情
         async function loadPhotoDetails(photoId) {
-            if (!authToken) return;
-
             try {
+                const headers = {};
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+
                 const response = await fetch(`${API_BASE_URL}/api/photos/${photoId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    }
+                    headers
                 });
 
                 if (response.ok) {
@@ -2377,13 +2228,32 @@ function getDeviceId() {
 
         // 打开照片模态框
         function openPhotoModal(photoId) {
-            if (!currentUser) {
-                showLoginModal();
-                return;
-            }
-            
             currentPhotoId = photoId;
             loadPhotoDetails(photoId);
+
+            const commentInput = document.getElementById('commentInput');
+            const commentButton = document.querySelector('.comment-submit');
+
+            if (!currentUser) {
+                if (commentInput) {
+                    commentInput.value = '';
+                    commentInput.placeholder = '登录后才能评论';
+                    commentInput.setAttribute('disabled', 'disabled');
+                }
+                if (commentButton) {
+                    commentButton.disabled = true;
+                    commentButton.textContent = '登录后评论';
+                }
+            } else {
+                if (commentInput) {
+                    commentInput.placeholder = '说点什么...';
+                    commentInput.removeAttribute('disabled');
+                }
+                if (commentButton) {
+                    commentButton.disabled = false;
+                    commentButton.textContent = '说完了';
+                }
+            }
             
             document.getElementById('photoModal').style.display = 'block';
             document.body.style.overflow = 'hidden';
@@ -2410,15 +2280,17 @@ function getDeviceId() {
                     closeLocationModal();
                     openPhotoModal(photo.id);
                 };
-                
+
+                const commentCount = Array.isArray(photo.comments) ? photo.comments.length : (Number(photo.comments) || 0);
+
                 photoDiv.innerHTML = `
                     <img src="${photo.url}" alt="用户照片">
                     <div class="location-photo-info">
                         <div class="location-photo-caption">${photo.caption}</div>
-                        <div class="location-photo-comments">${photo.comments.length} 条评论</div>
+                        <div class="location-photo-comments">${commentCount} 条评论</div>
                     </div>
                 `;
-                
+
                 grid.appendChild(photoDiv);
             });
             
@@ -2461,6 +2333,7 @@ function getDeviceId() {
         async function addComment() {
             if (!currentUser || !authToken) {
                 alert('请先登录');
+                showLoginModal();
                 return;
             }
 
@@ -2496,8 +2369,7 @@ function getDeviceId() {
         // 删除照片
         function deletePhoto() {
             if (confirm('确定要删除这张照片吗？')) {
-                nearbyPhotos = nearbyPhotos.filter(p => p.id !== currentPhotoId);
-                photoClusters = clusterPhotosByDistance(nearbyPhotos, 10);
+                photos = photos.filter(p => p.id !== currentPhotoId);
                 closeModal();
                 displayPhotosOnMap();
             }
