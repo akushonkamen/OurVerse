@@ -2,10 +2,55 @@
 
 一个基于位置的照片分享应用，支持地理位置标记和附近照片发现功能。
 
+## 📋 文档导航
+
+- ⚡ **[快速开始](QUICK_START.md)** - 5分钟部署指南
+- 📖 **[详细部署](VERCEL_DEPLOYMENT.md)** - 完整Vercel部署教程
+- 🐳 **Docker部署** - 传统自托管方式
+- 📚 **API文档** - 开发者接口说明
+
 ## 🚀 快速开始
+
+### 部署选项
+
+选择适合你的部署方式：
+
+#### ⚡ Vercel 部署（推荐，5分钟完成）
+```bash
+# 1. 复制环境变量模板
+cp .vercel.env.example .vercel.env
+
+# 2. 编辑环境变量（填入你的配置）
+nano .vercel.env
+
+# 3. 一键部署
+./deploy-vercel.sh
+```
+
+**优势**: 自动HTTPS、全球CDN、零运维成本
+
+**适合**: 新手用户、快速原型、小型应用
+
+#### 🐳 Docker 部署（传统方式）
+```bash
+# 自动部署
+./deploy.sh
+
+# 手动启动
+docker-compose up -d
+```
+
+**适合**: 完全控制、自托管服务器
 
 ### 前置要求
 
+#### Vercel 部署
+- NameSilo 域名
+- Vercel 账户
+- MongoDB Atlas 账户（免费）
+- GitHub OAuth 应用
+
+#### Docker 部署
 - Node.js 16+
 - MongoDB 6.0+
 - Docker & Docker Compose
@@ -13,8 +58,37 @@
 
 ### 环境配置
 
-复制环境变量模板并填写必要信息：
+#### Vercel 环境配置
+```bash
+# 复制 Vercel 环境变量模板
+cp .vercel.env.example .vercel.env
 
+# 编辑环境变量
+nano .vercel.env
+```
+
+**必需的环境变量**:
+```bash
+# 数据库 (MongoDB Atlas - 免费)
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/ourverse
+
+# 认证 (GitHub OAuth)
+GITHUB_CLIENT_ID=your_github_client_id
+GITHUB_CLIENT_SECRET=your_github_client_secret
+
+# 域名 (你的 NameSilo 域名)
+DOMAIN=your-domain.com
+
+# 安全密钥
+JWT_SECRET=your-super-secret-jwt-key
+SESSION_SECRET=your-session-secret-key
+
+# 可选: 高德地图 API
+AMAP_WEB_API_KEY=your_amap_web_key
+AMAP_REST_API_KEY=your_amap_rest_key
+```
+
+#### Docker 环境配置
 ```bash
 cp env.example .env
 ```
@@ -152,7 +226,48 @@ open http://localhost
 
 ## 🔧 部署指南
 
-### 生产环境部署
+### Vercel 部署（推荐）
+
+#### 自动部署
+```bash
+# 一键部署脚本
+./deploy-vercel.sh
+```
+
+#### 手动部署
+```bash
+# 1. 安装 Vercel CLI
+npm install -g vercel
+
+# 2. 登录 Vercel
+vercel login
+
+# 3. 部署到生产环境
+vercel --prod
+
+# 4. 添加自定义域名
+vercel domains add your-domain.com
+```
+
+#### DNS 配置
+在 NameSilo 中添加 CNAME 记录：
+```
+Type: CNAME
+Host: @
+Value: cname.vercel-dns.com
+TTL: 3600
+```
+
+#### 优势特点
+- ✅ **自动 HTTPS**: 免费 SSL 证书
+- ✅ **全球 CDN**: 快速访问体验
+- ✅ **自动扩展**: 根据流量自动调整
+- ✅ **零运维**: Vercel 处理所有基础设施
+- ✅ **免费额度**: 每月 100GB 流量
+
+### Docker 部署（传统方式）
+
+#### 生产环境部署
 
 1. **域名和 SSL 证书**
    ```bash

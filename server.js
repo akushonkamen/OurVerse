@@ -217,19 +217,21 @@ const upload = multer({
   }
 });
 
-// Static files for uploaded photos
-const uploadsDir = process.env.UPLOADS_DIR || 'uploads';
-app.use(`/${uploadsDir}`, express.static(path.join(__dirname, uploadsDir)));
+// Static files for uploaded photos (仅在非Vercel环境需要)
+if (!process.env.VERCEL) {
+  const uploadsDir = process.env.UPLOADS_DIR || 'uploads';
+  app.use(`/${uploadsDir}`, express.static(path.join(__dirname, uploadsDir)));
+
+  // Ensure uploads directory exists
+  const uploadsPath = path.join(__dirname, uploadsDir);
+  if (!fs.existsSync(uploadsPath)) {
+    fs.mkdirSync(uploadsPath, { recursive: true });
+  }
+}
 
 // Static files for website (development only)
 if (process.env.NODE_ENV === 'development') {
   app.use(express.static(path.join(__dirname)));
-}
-
-// Ensure uploads directory exists
-const uploadsPath = path.join(__dirname, uploadsDir);
-if (!fs.existsSync(uploadsPath)) {
-  fs.mkdirSync(uploadsPath, { recursive: true });
 }
 
 // JWT Middleware
@@ -488,13 +490,31 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     }
 
     // Process image
-    const filename = `${crypto.randomBytes(16).toString('hex')}.jpg`;
-    const filepath = path.join(__dirname, 'uploads', filename);
+    let processedImageBuffer;
+    let imageUrl;
 
-    await sharp(file.buffer)
-      .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 80 })
-      .toFile(filepath);
+    if (process.env.VERCEL) {
+      // Vercel环境：将图片转换为base64存储在数据库中
+      processedImageBuffer = await sharp(file.buffer)
+        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+
+      // 转换为base64数据URL
+      const base64Image = processedImageBuffer.toString('base64');
+      imageUrl = `data:image/jpeg;base64,${base64Image}`;
+    } else {
+      // 本地环境：保存到文件系统
+      const filename = `${crypto.randomBytes(16).toString('hex')}.jpg`;
+      const filepath = path.join(__dirname, 'uploads', filename);
+
+      await sharp(file.buffer)
+        .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toFile(filepath);
+
+      imageUrl = `/uploads/${filename}`;
+    }
 
     // 获取详细的位置信息，包括地标信息
     let locationInfo = {
@@ -558,7 +578,7 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     // Save to DB
     const photo = new Photo({
       userId: req.userId,
-      url: `/uploads/${filename}`,
+      url: imageUrl,
       caption,
       lat: photoLat,
       lng: photoLng,
@@ -918,19 +938,25 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Start server
-const PORT = process.env.PORT || 8444;
-const HOST = process.env.HOST || '0.0.0.0';
-
-if (process.env.NODE_ENV === 'development') {
-  // Use HTTP for development to avoid SSL issues with OAuth
-  app.listen(PORT, HOST, () => {
-    console.log(`HTTP Server running on port ${PORT}`);
-    console.log(`GitHub callback URL: http://localhost:${PORT}/api/auth/github/callback`);
-    console.log(`Access website at: http://localhost:${PORT}/website.html`);
-  });
+// Vercel deployment support
+if (process.env.VERCEL) {
+  // Export for Vercel serverless functions
+  module.exports = app;
 } else {
-  app.listen(PORT, HOST, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  // Local development server
+  const PORT = process.env.PORT || 8444;
+  const HOST = process.env.HOST || '0.0.0.0';
+
+  if (process.env.NODE_ENV === 'development') {
+    // Use HTTP for development to avoid SSL issues with OAuth
+    app.listen(PORT, HOST, () => {
+      console.log(`HTTP Server running on port ${PORT}`);
+      console.log(`GitHub callback URL: http://localhost:${PORT}/api/auth/github/callback`);
+      console.log(`Access website at: http://localhost:${PORT}/website.html`);
+    });
+  } else {
+    app.listen(PORT, HOST, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  }
 }
