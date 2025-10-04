@@ -59,12 +59,44 @@ const toCleanString = value => {
   return typeof value === 'string' ? value : String(value);
 };
 
+const getClientIp = req => req.headers['x-forwarded-for']?.split(',')[0]?.trim()
+  || req.headers['x-real-ip']
+  || req.connection?.remoteAddress
+  || req.socket?.remoteAddress
+  || req.ip
+  || '';
+
+const getDeviceFingerprint = req => {
+  const rawDeviceId = (req.body?.deviceId || req.headers['x-device-id'] || '').toString().trim();
+  const userAgent = req.headers['user-agent'] || '';
+  if (rawDeviceId) {
+    return { deviceId: rawDeviceId, source: 'client', userAgent };
+  }
+
+  const fallback = crypto.createHash('sha256')
+    .update(`${getClientIp(req)}|${userAgent}`)
+    .digest('hex');
+
+  return { deviceId: fallback, source: 'fingerprint', userAgent };
+};
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 }).then(() => console.log('Connected to MongoDB'))
   .catch(err => console.error('MongoDB connection error:', err));
+
+mongoose.connection.once('open', async () => {
+  try {
+    await mongoose.connection.db.collection('users').dropIndex('githubId_1');
+    console.log('Dropped legacy githubId index');
+  } catch (error) {
+    if (error?.codeName !== 'IndexNotFound') {
+      console.warn('Failed to drop legacy githubId index:', error.message);
+    }
+  }
+});
 
 // Passport Configuration
 const getGitHubCallbackURL = () => {
@@ -140,9 +172,15 @@ const userSchema = new mongoose.Schema({
   avatar: String,
   // OAuth相关字段
   provider: { type: String, enum: ['local', 'github'], default: 'local' },
-  githubId: { type: String, unique: true, sparse: true },
+  githubId: { type: String },
   githubUsername: String,
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  registrationIp: { type: String, trim: true },
+  registrationDeviceId: { type: String, unique: true, sparse: true },
+  registrationUserAgent: { type: String },
+  registeredAt: { type: Date, default: Date.now },
+  lastLoginAt: { type: Date },
+  lastLoginIp: { type: String, trim: true }
 });
 
 const photoSchema = new mongoose.Schema({
@@ -182,6 +220,21 @@ const photoSchema = new mongoose.Schema({
 
 photoSchema.index({ location: '2dsphere' });
 photoSchema.index({ userId: 1, createdAt: -1 });
+
+userSchema.index({ githubId: 1 }, {
+  unique: true,
+  partialFilterExpression: {
+    provider: 'github',
+    githubId: { $type: 'string' }
+  }
+});
+
+userSchema.pre('save', function(next) {
+  if (this.provider !== 'github' && this.githubId != null) {
+    this.set('githubId', undefined);
+  }
+  next();
+});
 
 photoSchema.pre('save', function(next) {
   if (Number.isFinite(this.lat) && Number.isFinite(this.lng)) {
@@ -351,22 +404,49 @@ const authenticate = (req, res, next) => {
 app.post('/api/auth/register', async (req, res) => {
   try {
     const usernameInput = (req.body.username || '').trim();
-    const emailInput = (req.body.email || '').trim().toLowerCase();
+    const emailRaw = req.body.email;
+    const emailInput = typeof emailRaw === 'string' && emailRaw.trim().length
+      ? emailRaw.trim().toLowerCase()
+      : undefined;
     const passwordInput = req.body.password || '';
 
     // Validate input
-    if (!usernameInput || !emailInput || !passwordInput) {
-      return res.status(400).json({ error: '用户名、邮箱和密码都是必需的' });
+    if (!usernameInput || !passwordInput) {
+      return res.status(400).json({ error: '用户名和密码都是必需的' });
     }
 
     if (passwordInput.length < 6) {
       return res.status(400).json({ error: '密码至少需要6个字符' });
     }
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email: emailInput }, { username: usernameInput }] });
+    if (emailInput) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailInput)) {
+        return res.status(400).json({ error: '邮箱格式不正确' });
+      }
+    }
+
+    // Check if user already exists by username/email
+    const searchConditions = [{ username: usernameInput }];
+    if (emailInput) {
+      searchConditions.push({ email: emailInput });
+    }
+
+    const existingUser = await User.findOne({ $or: searchConditions });
     if (existingUser) {
-      return res.status(400).json({ error: '用户名或邮箱已被注册' });
+      return res.status(400).json({ error: emailInput ? '用户名或邮箱已被注册' : '用户名已被注册' });
+    }
+
+    const clientIp = getClientIp(req);
+    const { deviceId, userAgent } = getDeviceFingerprint(req);
+
+    if (!deviceId) {
+      return res.status(400).json({ error: '无法识别设备信息，请允许设备标识后重试' });
+    }
+
+    const existingDeviceUser = await User.findOne({ registrationDeviceId: deviceId });
+    if (existingDeviceUser) {
+      return res.status(400).json({ error: '该设备已注册账号，请使用已有账号登录' });
     }
 
     // Hash password
@@ -374,12 +454,22 @@ app.post('/api/auth/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(passwordInput, saltRounds);
 
     // Create user
-    const user = new User({
+    const userData = {
       username: usernameInput,
-      email: emailInput,
       password: hashedPassword,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(usernameInput)}`
-    });
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(usernameInput)}`,
+      registrationIp: clientIp,
+      registrationDeviceId: deviceId,
+      registrationUserAgent: userAgent,
+      provider: 'local',
+      registeredAt: new Date()
+    };
+
+    if (emailInput) {
+      userData.email = emailInput;
+    }
+
+    const user = new User(userData);
 
     await user.save();
 
@@ -397,7 +487,28 @@ app.post('/api/auth/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: '注册失败，请重试' });
+
+    const duplicateKey = error?.code === 11000 || (typeof error?.message === 'string' && error.message.includes('E11000 duplicate key error'));
+
+    if (duplicateKey) {
+      const keyPattern = error.keyPattern || {};
+      const message = error.message || '';
+
+      if (keyPattern.registrationDeviceId || message.includes('registrationDeviceId')) {
+        return res.status(400).json({ error: '该设备已注册账号，请使用已有账号登录' });
+      }
+      if (keyPattern.username || message.includes('username_1')) {
+        return res.status(400).json({ error: '用户名已被注册' });
+      }
+      if (keyPattern.email || message.includes('email_1')) {
+        return res.status(400).json({ error: '邮箱已被注册' });
+      }
+      if (keyPattern.githubId || message.includes('githubId')) {
+        return res.status(400).json({ error: 'GitHub账号已绑定其他用户' });
+      }
+    }
+
+    res.status(500).json({ error: '注册失败，请稍后重试' });
   }
 });
 
@@ -422,6 +533,11 @@ app.post('/api/auth/login', async (req, res) => {
     if (!isValidPassword) {
       return res.status(401).json({ error: '用户名或密码错误' });
     }
+
+    user.lastLoginAt = new Date();
+    user.lastLoginIp = getClientIp(req);
+    user.registrationUserAgent = user.registrationUserAgent || req.headers['user-agent'] || '';
+    await user.save();
 
     // Generate JWT
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -545,7 +661,7 @@ app.post('/api/photos/upload', authenticate, uploadSinglePhoto, async (req, res)
     if (!file) return res.status(400).json({ error: 'No photo provided' });
     if (!caption) return res.status(400).json({ error: 'Caption required' });
 
-    // Check daily upload limit (3 photos per day per user)
+    // Check daily upload limit (default 5 photos per day per user)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -559,7 +675,7 @@ app.post('/api/photos/upload', authenticate, uploadSinglePhoto, async (req, res)
       }
     });
 
-    const dailyLimit = parseInt(process.env.DAILY_UPLOAD_LIMIT) || 3;
+    const dailyLimit = parseInt(process.env.DAILY_UPLOAD_LIMIT, 10) || 5;
     if (todayUploads >= dailyLimit) {
       return res.status(400).json({ error: `每日最多只能上传${dailyLimit}张照片，请明天再来` });
     }
@@ -601,7 +717,7 @@ app.post('/api/photos/upload', authenticate, uploadSinglePhoto, async (req, res)
       }
     } else {
       // 照片不包含GPS信息
-      if (locationSource === 'gps') {
+      if (locationSource === 'gps' || locationSource === 'amap') {
         // 用户使用GPS定位，直接使用用户位置
         if (!hasUserCoords) {
           return res.status(400).json({ error: '缺少当前位置坐标，无法记录照片位置' });
@@ -918,77 +1034,159 @@ app.get('/api/amap/config', (req, res) => {
   });
 });
 
+const parseAmapRectangle = rectangle => {
+  if (!rectangle) {
+    return null;
+  }
+
+  const [southwestRaw, northeastRaw] = rectangle.split(';');
+  if (!southwestRaw || !northeastRaw) {
+    return null;
+  }
+
+  const [lng1, lat1] = southwestRaw.split(',').map(Number);
+  const [lng2, lat2] = northeastRaw.split(',').map(Number);
+
+  if (![lng1, lat1, lng2, lat2].every(Number.isFinite)) {
+    return null;
+  }
+
+  const centerLng = (lng1 + lng2) / 2;
+  const centerLat = (lat1 + lat2) / 2;
+
+  return {
+    centerLat,
+    centerLng,
+    southwest: { lat: Math.min(lat1, lat2), lng: Math.min(lng1, lng2) },
+    northeast: { lat: Math.max(lat1, lat2), lng: Math.max(lng1, lng2) }
+  };
+};
+
 // IP定位接口
 app.get('/api/location/ip', async (req, res) => {
   try {
-    const clientIP = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-                     req.headers['x-real-ip'] ||
-                     req.connection.remoteAddress ||
-                     req.socket.remoteAddress ||
-                     req.ip ||
-                     '127.0.0.1';
-
-    console.log('IP定位请求，客户端IP:', clientIP);
-
-    // 暂时返回默认位置信息，避免API调用失败
-    res.json({
-      success: true,
-      location: {
-        province: '上海市',
-        city: '上海市',
-        adcode: '310000',
-        rectangle: '',
-        ip: clientIP
-      },
-      source: 'ip'
-    });
-
-    // TODO: 后续获取有效API密钥后恢复高德API调用
-    /*
-    const ipToQuery = clientIP === '127.0.0.1' || clientIP === '::1' ? '' : clientIP;
-    console.log('查询IP:', ipToQuery);
-
     const apiKey = process.env.AMAP_REST_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: '高德Web服务API密钥未配置' });
+      return res.status(500).json({
+        error: '高德Web服务API密钥未配置',
+        source: 'ip'
+      });
+    }
+
+    const fallbackDisplayIp = getClientIp(req) || '';
+    const ipOverride = toCleanString(req.query.ip || req.query.testIp);
+    const candidateIp = fallbackDisplayIp.replace('::ffff:', '');
+    const isPrivateIp = candidateIp.startsWith('10.')
+      || candidateIp.startsWith('192.168.')
+      || candidateIp.startsWith('172.') && (() => {
+        const secondOctet = Number(candidateIp.split('.')[1]);
+        return Number.isFinite(secondOctet) && secondOctet >= 16 && secondOctet <= 31;
+      })()
+      || ['127.0.0.1', '::1', ''].includes(candidateIp);
+
+    const ipToQuery = ipOverride || (isPrivateIp ? undefined : candidateIp);
+
+    if (!ipToQuery && !ipOverride) {
+      console.warn('IP定位请求来自私有网络，建议在开发环境通过 ?ip=xxx 指定测试IP');
+    }
+
+    const amapParams = {
+      key: apiKey
+    };
+
+    if (ipToQuery) {
+      amapParams.ip = ipToQuery;
     }
 
     const response = await axios.get('https://restapi.amap.com/v3/ip', {
-      params: {
-        key: apiKey,
-        ip: ipToQuery
-      },
+      params: amapParams,
       timeout: 5000
     });
 
-    if (response.data.status === '1') {
-      const data = response.data;
-      console.log('IP定位成功:', data);
-
-      res.json({
-        success: true,
-        location: {
-          province: data.province || '',
-          city: data.city || '',
-          adcode: data.adcode || '',
-          rectangle: data.rectangle || '',
-          ip: data.ip || ipToQuery
-        },
-        source: 'ip'
-      });
-    } else {
-      console.error('IP定位失败:', response.data);
-      res.status(400).json({
-        error: response.data.info || 'IP定位失败',
-        source: 'ip'
+    const data = response.data;
+    if (data.status !== '1' || data.infocode !== '10000') {
+      console.error('高德IP定位失败:', data);
+      return res.status(400).json({
+        error: data.info || 'IP定位失败',
+        source: 'ip',
+        details: data
       });
     }
-    */
+
+    const rectangleInfo = parseAmapRectangle(data.rectangle);
+
+    let derivedLat = rectangleInfo?.centerLat;
+    let derivedLng = rectangleInfo?.centerLng;
+    let radiusMeters;
+
+    if (rectangleInfo) {
+      radiusMeters = Math.round(
+        calculateDistance(
+          rectangleInfo.centerLat,
+          rectangleInfo.centerLng,
+          rectangleInfo.southwest.lat,
+          rectangleInfo.southwest.lng
+        ) || 0
+      );
+    }
+
+    if ((!Number.isFinite(derivedLat) || !Number.isFinite(derivedLng)) && data.city) {
+      try {
+        const geoResponse = await axios.get('https://restapi.amap.com/v3/geocode/geo', {
+          params: {
+            key: apiKey,
+            address: data.city,
+            city: data.province || data.city
+          },
+          timeout: 5000
+        });
+
+        const geoResult = geoResponse.data;
+        if (geoResult.status === '1' && Array.isArray(geoResult.geocodes) && geoResult.geocodes[0]?.location) {
+          const [geoLng, geoLat] = geoResult.geocodes[0].location.split(',').map(Number);
+          if (Number.isFinite(geoLat) && Number.isFinite(geoLng)) {
+            derivedLat = geoLat;
+            derivedLng = geoLng;
+          }
+        }
+      } catch (geoError) {
+        console.warn('地理编码补偿失败:', geoError.message);
+      }
+    }
+
+    const responsePayload = {
+      success: true,
+      source: 'ip',
+      ip: ipToQuery || candidateIp || '',
+      location: {
+        lat: Number.isFinite(derivedLat) ? derivedLat : null,
+        lng: Number.isFinite(derivedLng) ? derivedLng : null,
+        province: toCleanString(data.province),
+        city: toCleanString(data.city),
+        adcode: toCleanString(data.adcode),
+        rectangle: toCleanString(data.rectangle),
+        accuracyRadiusMeters: radiusMeters || null
+      },
+      metadata: {
+        isp: toCleanString(data.isp),
+        infoCode: data.infocode,
+        requestIp: candidateIp,
+        usedOverride: Boolean(ipOverride)
+      }
+    };
+
+    if (!Number.isFinite(responsePayload.location.lat) || !Number.isFinite(responsePayload.location.lng)) {
+      responsePayload.location.lat = null;
+      responsePayload.location.lng = null;
+    }
+
+    res.json(responsePayload);
   } catch (error) {
     console.error('IP定位错误:', error.message);
     res.status(500).json({
       error: 'IP定位服务暂时不可用',
-      source: 'ip'
+      source: 'ip',
+      details: error.message
     });
   }
 });

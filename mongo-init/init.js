@@ -4,7 +4,27 @@ db = db.getSiblingDB('ourverse');
 // 创建用户集合索引
 db.users.createIndex({ "username": 1 }, { unique: true });
 db.users.createIndex({ "email": 1 }, { unique: true, sparse: true });
-db.users.createIndex({ "githubId": 1 }, { unique: true, sparse: true });
+
+try {
+  db.users.dropIndex("githubId_1");
+} catch (error) {
+  if (error.codeName !== 'IndexNotFound') {
+    print('移除旧 githubId 索引失败:', error);
+  }
+}
+
+db.users.createIndex(
+  { "githubId": 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      provider: 'github',
+      githubId: { $type: 'string' }
+    }
+  }
+);
+
+db.users.createIndex({ "registrationDeviceId": 1 }, { unique: true, sparse: true });
 
 // 创建照片集合索引
 db.photos.createIndex({ "userId": 1, "createdAt": -1 });
