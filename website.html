@@ -1131,10 +1131,7 @@
                 const data = await response.json();
 
                 if (response.ok) {
-                    // 保存state用于验证
-                    sessionStorage.setItem('oauth_state', data.state);
-
-                    // 跳转到GitHub OAuth页面
+                    // 跳转到GitHub OAuth页面（state验证由服务器处理）
                     window.location.href = data.url;
                 } else {
                     throw new Error(data.error || '获取GitHub登录链接失败');
@@ -1438,30 +1435,55 @@
 
 
 
-        // 精确定位函数
+        // GPS定位函数（主要定位方式）
         async function improvedLocationRequest() {
             const statusEl = document.getElementById('status');
-            
-            // 1. 首先检查是否支持地理定位
-            if (!navigator.geolocation) {
-                statusEl.textContent = '您的浏览器不支持地理定位功能';
-                statusEl.className = 'status error';
-                return false;
-            }
-            
-            // 2. 检查当前协议
+
+            // 检查当前协议
             if (location.protocol === 'file:') {
                 statusEl.textContent = '请使用HTTP/HTTPS协议访问此页面，file://协议不支持位置访问';
                 statusEl.className = 'status error';
                 return false;
             }
-            
-            // 3. 检查权限状态
+
+            // 检查是否支持地理定位
+            if (!navigator.geolocation) {
+                statusEl.textContent = '您的浏览器不支持地理定位功能，请使用现代浏览器';
+                statusEl.className = 'status error';
+                return false;
+            }
+
+            statusEl.textContent = '正在获取GPS位置信息...';
+            statusEl.className = 'status';
+
+            try {
+                // 只使用GPS定位，无回退机制
+                return await gpsLocationRequest();
+            } catch (error) {
+                console.error('定位失败:', error);
+                statusEl.textContent = 'GPS定位失败，请允许位置权限后重试';
+                statusEl.className = 'status error';
+                return false;
+            }
+        }
+
+        // GPS定位函数（主要定位方式）
+        async function gpsLocationRequest() {
+            const statusEl = document.getElementById('status');
+
+            // 检查是否支持地理定位
+            if (!navigator.geolocation) {
+                statusEl.textContent = '您的浏览器不支持地理定位功能，请使用现代浏览器';
+                statusEl.className = 'status error';
+                return false;
+            }
+
+            // 检查权限状态
             if ('permissions' in navigator) {
                 try {
                     const permission = await navigator.permissions.query({name: 'geolocation'});
                     console.log('当前权限状态:', permission.state);
-                    
+
                     if (permission.state === 'denied') {
                         showPermissionDeniedHelp();
                         return false;
@@ -1470,170 +1492,52 @@
                     console.log('权限查询失败，继续尝试获取位置');
                 }
             }
-            
-            // 4. 超高精度定位设置
-            statusEl.textContent = '正在进行超高精度定位...';
-            statusEl.className = 'status';
+
+            statusEl.textContent = '正在获取GPS位置信息...';
 
             const options = {
                 enableHighAccuracy: true,  // 启用高精度
-                timeout: 60000,           // 增加超时时间到60秒
-                maximumAge: 30000         // 减少缓存时间到30秒，确保获取最新位置
+                timeout: 15000,           // 15秒超时
+                maximumAge: 60000         // 60秒缓存
             };
-            
+
             return new Promise((resolve, reject) => {
-                let attempts = 0;
-                const maxAttempts = 3;
-                
-                function tryGetLocation() {
-                    attempts++;
-                    statusEl.textContent = `正在精确定位... (尝试 ${attempts}/${maxAttempts})`;
-                    
-                    navigator.geolocation.getCurrentPosition(
-                        function(position) {
-                            // 检查精度，如果精度不够好则重试
-                            const accuracy = position.coords.accuracy;
-                            console.log(`定位精度: ${accuracy}米`);
-                            
-                            if (accuracy > 50 && attempts < maxAttempts) {
-                                console.log(`精度不够(${accuracy}m)，重新定位...`);
-                                setTimeout(tryGetLocation, 2000);
-                                return;
-                            }
-                            
-                            console.log('精确定位成功:', position);
+                statusEl.textContent = '正在精确定位...';
+
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const accuracy = position.coords.accuracy;
+                        console.log(`GPS定位精度: ${accuracy}米`);
+
+                        if (accuracy <= 50) { // 精度在50米以内认为成功
+                            console.log('GPS定位成功:', position);
                             handleLocationSuccess(position);
                             resolve(true);
-                        },
-                        function(error) {
-                            console.error(`定位失败 (尝试 ${attempts}):`, error);
-                            
-                            if (attempts < maxAttempts) {
-                                setTimeout(tryGetLocation, 2000);
-                            } else {
-                                handleLocationError(error);
-                                reject(error);
-                            }
-                        },
-                        options
-                    );
-                }
-                
-                tryGetLocation();
-            });
-        }
-
-        // 改进的定位请求函数，支持GPS+IP双重定位
-        async function improvedLocationRequest() {
-            console.log('开始改进的定位请求...');
-
-            // 首先尝试GPS定位
-            const gpsSuccess = await new Promise((resolve) => {
-                const originalImprovedLocationRequest = window.originalImprovedLocationRequest || improvedLocationRequest;
-                window.originalImprovedLocationRequest = originalImprovedLocationRequest;
-
-                // 创建一个临时版本的GPS定位，只用于判断是否成功
-                const tempGpsRequest = async () => {
-                    const statusEl = document.getElementById('status');
-
-                    if (!navigator.geolocation) {
-                        statusEl.textContent = '您的浏览器不支持地理定位功能';
-                        statusEl.className = 'status error';
-                        resolve(false);
-                        return false;
-                    }
-
-                    if (location.protocol === 'file:') {
-                        statusEl.textContent = '请使用HTTP/HTTPS协议访问此页面，file://协议不支持位置访问';
-                        statusEl.className = 'status error';
-                        resolve(false);
-                        return false;
-                    }
-
-                    if ('permissions' in navigator) {
-                        try {
-                            const permission = await navigator.permissions.query({name: 'geolocation'});
-                            console.log('当前权限状态:', permission.state);
-
-                            if (permission.state === 'denied') {
-                                showPermissionDeniedHelp();
-                                resolve(false);
-                                return false;
-                            }
-                        } catch (error) {
-                            console.log('权限查询失败，继续尝试获取位置');
+                        } else {
+                            console.log(`GPS精度不够(${accuracy}m)，定位失败`);
+                            statusEl.textContent = `GPS精度不够(${Math.round(accuracy)}米)，请在更开阔的地方重试`;
+                            statusEl.className = 'status error';
+                            resolve(false);
                         }
-                    }
-
-                    statusEl.textContent = '正在进行GPS定位...';
-                    statusEl.className = 'status';
-
-                    const options = {
-                        enableHighAccuracy: true,
-                        timeout: 10000, // 缩短超时时间，快速失败
-                        maximumAge: 30000
-                    };
-
-                    return new Promise((resolveGps) => {
-                        navigator.geolocation.getCurrentPosition(
-                            async function(position) {
-                                const accuracy = position.coords.accuracy;
-                                console.log(`GPS定位精度: ${accuracy}米`);
-
-                                if (accuracy <= 100) { // 精度在100米以内认为成功
-                                    userLocation = {
-                                        lat: position.coords.latitude,
-                                        lng: position.coords.longitude
-                                    };
-                                    locationSource = 'gps';
-
-                                    statusEl.textContent = `GPS定位成功 (精度: ${Math.round(accuracy)}米)`;
-                                    statusEl.className = 'status success';
-
-                                    await updateMapWithLocation();
-                                    await updateLocationInfo();
-
-                                    if (currentUser) {
-                                        await loadNearbyPhotos();
-                                    }
-
-                                    resolve(true);
-                                    resolveGps(true);
-                                } else {
-                                    console.log(`GPS精度不够(${accuracy}m)，尝试IP定位作为备用`);
-                                    resolveGps(false);
-                                }
-                            },
-                            function(error) {
-                                console.error('GPS定位失败:', error);
-                                resolveGps(false);
-                            },
-                            options
-                        );
-                    });
-                };
-
-                tempGpsRequest().then(resolve);
+                    },
+                    function(error) {
+                        console.error('GPS定位失败:', error);
+                        statusEl.textContent = 'GPS定位失败，请允许位置权限后重试';
+                        statusEl.className = 'status error';
+                        resolve(false);
+                    },
+                    options
+                );
             });
-
-            // 如果GPS定位失败，尝试IP定位
-            if (!gpsSuccess) {
-                console.log('GPS定位失败或精度不够，尝试IP定位...');
-                const ipSuccess = await ipLocationRequest();
-                if (!ipSuccess) {
-                    const statusEl = document.getElementById('status');
-                    statusEl.textContent = '定位失败，请检查网络连接或手动定位';
-                    statusEl.className = 'status error';
-                }
-            }
         }
+
 
         // 显示权限被拒绝的帮助信息
         function showPermissionDeniedHelp() {
             const statusEl = document.getElementById('status');
             const userAgent = navigator.userAgent;
             let helpText = '位置权限被拒绝。';
-            
+
             if (userAgent.indexOf('Safari') > -1 && userAgent.indexOf('Chrome') === -1) {
                 // Safari
                 helpText += '请在地址栏左侧点击位置图标，选择"允许"';
@@ -1646,18 +1550,18 @@
             } else {
                 helpText += '请在浏览器设置中允许此网站访问位置信息';
             }
-            
+
             helpText += '\n\n如果仍然无法访问，请检查系统设置：\n系统偏好设置 → 安全性与隐私 → 隐私 → 定位服务';
-            
+
             statusEl.textContent = helpText;
             statusEl.className = 'status error';
-            
+
             // 添加重试按钮
             const retryButton = document.createElement('button');
             retryButton.textContent = '重新尝试';
             retryButton.style.cssText = 'margin-top: 10px; padding: 8px 16px; background: #111; color: #fff; border: none; border-radius: 4px; cursor: pointer;';
             retryButton.onclick = () => improvedLocationRequest();
-            
+
             statusEl.appendChild(document.createElement('br'));
             statusEl.appendChild(retryButton);
         }
@@ -1669,8 +1573,11 @@
                 lng: position.coords.longitude
             };
 
+            // 设置定位来源为GPS
+            locationSource = 'gps';
+
             const statusEl = document.getElementById('status');
-            statusEl.textContent = `好的，你在这儿 (精度: ${Math.round(position.coords.accuracy)}米)`;
+            statusEl.textContent = `GPS定位成功 (精度: ${Math.round(position.coords.accuracy)}米)`;
             statusEl.className = 'status success';
 
             // 更新地图等其他操作...
@@ -1718,18 +1625,30 @@
                     const data = await response.json();
                     if (data.success && data.address) {
                         const addr = data.address;
+                        const pois = data.pois || [];
                         let displayText = '';
 
-                        // 构建详细地址显示
-                        let province = addr.province || '';
-                        let city = addr.city || '';
-                        let district = addr.district || '';
-                        let township = addr.township || '';
-                        let street = addr.street || '';
-                        let number = addr.number || '';
+                        // 优先显示最近的地标信息（适用于所有定位源）
+                        if (pois.length > 0) {
+                            // 按距离排序，显示最近的地标
+                            pois.sort((a, b) => parseFloat(a.distance || 1000) - parseFloat(b.distance || 1000));
+                            const nearestPoi = pois[0];
 
-                        // 优先级：街道+门牌号 > 乡镇 > 区县 > 省市
-                        if (locationSource === 'gps') {
+                            // 显示地标名称和地址
+                            displayText = nearestPoi.name;
+                            if (nearestPoi.address && nearestPoi.address !== nearestPoi.name) {
+                                displayText += ` (${nearestPoi.address})`;
+                            }
+                        } else {
+                            // 回退到地址显示
+                            let province = addr.province || '';
+                            let city = addr.city || '';
+                            let district = addr.district || '';
+                            let township = addr.township || '';
+                            let street = addr.street || '';
+                            let number = addr.number || '';
+
+                            // 优先级：街道+门牌号 > 乡镇 > 区县 > 省市
                             if (street && number) {
                                 displayText = `${province} ${city} ${district} ${street}${number}`.trim();
                             } else if (street) {
@@ -1745,17 +1664,6 @@
                             } else {
                                 displayText = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
                             }
-                        } else if (locationSource === 'ip') {
-                            // IP定位显示近似位置
-                            if (city) {
-                                displayText = `约 ${province} ${city}`.trim();
-                            } else if (province) {
-                                displayText = `约 ${province}`.trim();
-                            } else {
-                                displayText = `约 ${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
-                            }
-                        } else {
-                            displayText = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
                         }
 
                         locationInfoEl.textContent = displayText;
@@ -1763,12 +1671,9 @@
                         console.log('地址信息显示成功:', displayText);
                     } else {
                         // 回退到坐标显示
-                        const coordText = locationSource === 'ip' ?
-                            `约 ${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}` :
-                            `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
-                        locationInfoEl.textContent = coordText;
+                        locationInfoEl.textContent = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
                         locationInfoEl.classList.add('show');
-                        console.log('地址获取失败，使用坐标显示:', coordText);
+                        console.log('地址获取失败，使用坐标显示');
                     }
                 } else {
                     throw new Error('地址获取失败');
@@ -1776,10 +1681,7 @@
             } catch (error) {
                 console.error('获取地址信息失败:', error);
                 // 回退到坐标显示
-                const coordText = locationSource === 'ip' ?
-                    `约 ${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}` :
-                    `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
-                locationInfoEl.textContent = coordText;
+                locationInfoEl.textContent = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
                 locationInfoEl.classList.add('show');
             }
         }
@@ -1835,7 +1737,17 @@
 
             // 添加用户位置标记，根据定位来源显示不同样式
             let markerIcon;
-            if (locationSource === 'gps') {
+            if (locationSource === 'ip') {
+                // IP定位使用橙色标记
+                markerIcon = 'data:image/svg+xml;base64,' + btoa(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+                        <circle cx="10" cy="10" r="8" fill="#F39C12" opacity="0.9"/>
+                        <circle cx="10" cy="10" r="4" fill="#fff"/>
+                        <text x="10" y="14" text-anchor="middle" fill="#F39C12" font-size="10" font-weight="bold">IP</text>
+                    </svg>
+                `);
+            } else if (locationSource === 'gps') {
+                // GPS定位使用绿色标记
                 markerIcon = 'data:image/svg+xml;base64,' + btoa(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
                         <circle cx="10" cy="10" r="8" fill="#27AE60" opacity="0.9"/>
@@ -1843,15 +1755,8 @@
                         <circle cx="10" cy="10" r="2" fill="#27AE60"/>
                     </svg>
                 `);
-            } else if (locationSource === 'ip') {
-                markerIcon = 'data:image/svg+xml;base64,' + btoa(`
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
-                        <circle cx="10" cy="10" r="8" fill="#F39C12" opacity="0.9"/>
-                        <circle cx="10" cy="10" r="4" fill="#fff"/>
-                        <text x="10" y="14" text-anchor="middle" fill="#F39C12" font-size="12" font-weight="bold">IP</text>
-                    </svg>
-                `);
             } else {
+                // 默认标记
                 markerIcon = 'data:image/svg+xml;base64,' + btoa(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
                         <circle cx="8" cy="8" r="6" fill="#111" opacity="0.8"/>
@@ -1954,24 +1859,29 @@
                 const firstPhoto = photosAtLocation[0];
                 const photoCount = photosAtLocation.length;
                 
-                // 创建标记图标
-                let iconSvg;
+                // 创建统一的标记图标
+                let iconSize, iconSvg;
+
                 if (photoCount === 1) {
+                    iconSize = 32;
                     iconSvg = `
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                            <circle cx="12" cy="12" r="10" fill="white" stroke="#111" stroke-width="1.5" opacity="0.95"/>
-                            <rect x="8" y="9" width="8" height="6" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
-                            <circle cx="10" cy="11.5" r="1" fill="#111"/>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                            <circle cx="16" cy="16" r="14" fill="white" stroke="#111" stroke-width="2" opacity="0.95"/>
+                            <rect x="11" y="12" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/>
+                            <circle cx="13" cy="14.5" r="1.5" fill="#111"/>
+                            <circle cx="16" cy="14.5" r="1.5" fill="#111"/>
                         </svg>
                     `;
                 } else {
+                    iconSize = 36;
                     iconSvg = `
-                        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">
-                            <circle cx="14" cy="14" r="12" fill="white" stroke="#111" stroke-width="1.5" opacity="0.95"/>
-                            <rect x="10" y="11" width="8" height="6" rx="1" fill="none" stroke="#111" stroke-width="1.5"/>
-                            <circle cx="12" cy="13.5" r="1" fill="#111"/>
-                            <circle cx="18" cy="10" r="4" fill="#111" opacity="0.8"/>
-                            <text x="18" y="12" text-anchor="middle" fill="white" font-size="8" font-weight="bold">${photoCount}</text>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="16" fill="white" stroke="#111" stroke-width="2" opacity="0.95"/>
+                            <rect x="13" y="14" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/>
+                            <circle cx="15" cy="16.5" r="1.5" fill="#111"/>
+                            <circle cx="18" cy="16.5" r="1.5" fill="#111"/>
+                            <circle cx="24" cy="12" r="5" fill="#E74C3C" stroke="white" stroke-width="1"/>
+                            <text x="24" y="15" text-anchor="middle" fill="white" font-size="10" font-weight="bold">${photoCount}</text>
                         </svg>
                     `;
                 }
@@ -1981,7 +1891,7 @@
                     map: map,
                     icon: new AMap.Icon({
                         image: 'data:image/svg+xml;base64,' + btoa(iconSvg),
-                        size: new AMap.Size(photoCount === 1 ? 24 : 28, photoCount === 1 ? 24 : 28)
+                        size: new AMap.Size(iconSize, iconSize)
                     })
                 });
                 
@@ -2097,7 +2007,12 @@
 
                     alert('照片上传成功！');
                 } else {
-                    alert(data.error || '上传失败');
+                    // 处理不同的错误情况
+                    if (data.error && data.error.includes('每日最多只能上传')) {
+                        alert(data.error + '\n\n请明天再来记录更多美好时刻！');
+                    } else {
+                        alert(data.error || '上传失败');
+                    }
                 }
             } catch (error) {
                 console.error('上传照片错误:', error);
@@ -2146,12 +2061,30 @@
                     const photoTime = new Date(photo.createdAt);
                     document.getElementById('modalPhotoTime').textContent = formatPhotoTime(photoTime);
 
-                    // 显示拍摄地址
+                    // 显示拍摄地址和地标信息
                     let locationText = '未知位置';
-                    if (photo.locationInfo && photo.locationInfo.formattedAddress) {
-                        locationText = photo.locationInfo.formattedAddress;
+                    let landmarkInfo = '';
+
+                    if (photo.locationInfo) {
+                        if (photo.locationInfo.formattedAddress) {
+                            locationText = photo.locationInfo.formattedAddress;
+                        }
+
+                        // 尝试获取地标信息（如果有存储的POI信息）
+                        if (photo.locationInfo.landmark) {
+                            landmarkInfo = photo.locationInfo.landmark;
+                        } else if (photo.locationInfo.nearestPoi) {
+                            landmarkInfo = photo.locationInfo.nearestPoi;
+                        }
                     }
-                    document.getElementById('modalPhotoLocation').textContent = locationText;
+
+                    // 组合显示地址和地标信息
+                    let displayLocation = locationText;
+                    if (landmarkInfo && landmarkInfo !== locationText) {
+                        displayLocation = `${landmarkInfo} (${locationText})`;
+                    }
+
+                    document.getElementById('modalPhotoLocation').textContent = displayLocation;
 
                     loadComments(photo.comments);
                 } else {
@@ -2313,7 +2246,7 @@
             alert('位置修改功能开发中...');
         }
 
-        // IP定位作为GPS的备用方案
+        // IP定位作为主要定位方式
         async function ipLocationRequest() {
             const statusEl = document.getElementById('status');
             statusEl.textContent = '正在尝试IP定位...';
@@ -2322,18 +2255,21 @@
             try {
                 console.log('开始IP定位...');
 
-                // 获取高德地图配置
+                // 直接使用REST API密钥进行IP定位
+                const restApiKey = '${API_BASE_URL}/api/amap/config'.replace('/api/amap/config', '') + '/api/amap/config';
+
+                // 获取高德地图配置（包含正确的REST API密钥）
                 const configResponse = await fetch(`${API_BASE_URL}/api/amap/config`);
                 const config = await configResponse.json();
 
-                if (!config.apiKey) {
-                    throw new Error('无法获取高德地图API密钥');
+                if (!config.restApiKey) {
+                    throw new Error('高德地图REST API密钥未配置');
                 }
 
                 console.log('获取到高德地图配置，开始调用IP定位API...');
 
-                // 直接调用高德地图IP定位API
-                const ipResponse = await fetch(`https://restapi.amap.com/v3/ip?key=${config.apiKey}&output=json`);
+                // 直接调用高德地图IP定位API，使用REST API密钥
+                const ipResponse = await fetch(`https://restapi.amap.com/v3/ip?key=${config.restApiKey}&output=json`);
                 const ipData = await ipResponse.json();
 
                 console.log('高德IP定位API响应:', ipData);
@@ -2346,7 +2282,7 @@
                     if (ipData.city) {
                         try {
                             // 使用高德地理编码API获取城市坐标
-                            const geoResponse = await fetch(`https://restapi.amap.com/v3/geocode/geo?key=${config.apiKey}&address=${ipData.city}&city=${ipData.province || ipData.city}`);
+                            const geoResponse = await fetch(`https://restapi.amap.com/v3/geocode/geo?key=${config.restApiKey}&address=${ipData.city}&city=${ipData.province || ipData.city}`);
                             const geoData = await geoResponse.json();
 
                             if (geoData.status === '1' && geoData.geocodes && geoData.geocodes.length > 0) {

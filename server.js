@@ -136,9 +136,13 @@ const photoSchema = new mongoose.Schema({
     province: String,
     city: String,
     district: String,
+    township: String,
     street: String,
+    number: String,
     address: String,
-    formattedAddress: String
+    formattedAddress: String,
+    landmark: String,
+    nearestPoi: String
   },
   comments: [{
     userId: mongoose.Schema.Types.ObjectId,
@@ -344,11 +348,11 @@ app.get('/api/auth/verify', authenticate, async (req, res) => {
 
 // GitHub OAuth Routes
 app.get('/api/auth/github', (req, res) => {
-  // 生成state参数用于CSRF保护，并存储在内存中（临时解决方案）
+  // 生成state参数用于CSRF保护
   const state = crypto.randomBytes(16).toString('hex');
 
-  // 临时存储state（在生产环境中应该使用数据库）
-  global.tempOAuthState = state;
+  // 存储state到session中（更安全的方式）
+  req.session.oauthState = state;
 
   // 构建GitHub OAuth URL
   const githubAuthUrl = `https://github.com/login/oauth/authorize?` +
@@ -368,19 +372,19 @@ app.get('/api/auth/github/callback',
     try {
       const { code, state } = req.query;
 
-      console.log('GitHub callback received:', { code: !!code, state, tempState: global.tempOAuthState });
+      console.log('GitHub callback received:', { code: !!code, state, sessionState: req.session.oauthState });
 
-      // 验证state参数（使用临时存储）
-      if (!state || state !== global.tempOAuthState) {
-        console.error('State validation failed:', { received: state, expected: global.tempOAuthState });
+      // 验证state参数（使用session存储）
+      if (!state || state !== req.session.oauthState) {
+        console.error('State validation failed:', { received: state, expected: req.session.oauthState });
         const baseUrl = process.env.FRONTEND_URL || (process.env.NODE_ENV === 'development'
           ? `http://localhost:${process.env.PORT || 8444}`
           : `${process.env.PROTOCOL || 'https'}://${process.env.DOMAIN || 'localhost'}`);
         return res.redirect(`${baseUrl}/website.html?error=invalid_state`);
       }
 
-      // 清除临时state
-      delete global.tempOAuthState;
+      // 清除session中的state
+      delete req.session.oauthState;
 
       // 使用Passport处理GitHub回调
       passport.authenticate('github', { session: false }, async (err, user, info) => {
@@ -492,7 +496,7 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       .jpeg({ quality: 80 })
       .toFile(filepath);
 
-    // 简化位置信息，不使用逆地理编码（暂时禁用）
+    // 获取详细的位置信息，包括地标信息
     let locationInfo = {
       country: '',
       province: '',
@@ -500,37 +504,56 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       district: '',
       street: '',
       address: `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
-      formattedAddress: `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`
+      formattedAddress: `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
+      landmark: '',
+      nearestPoi: ''
     };
 
-    // TODO: 暂时禁用逆地理编码，后续获取有效API密钥后恢复
-    /*
+    // 获取逆地理编码信息和POI数据
     try {
-      const regeoResponse = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
-        params: {
-          key: process.env.AMAP_REST_API_KEY,
-          location: `${photoLng},${photoLat}`,
-          extensions: 'base'
-        },
-        timeout: 3000
-      });
+      const apiKey = process.env.AMAP_REST_API_KEY || process.env.AMAP_WEB_API_KEY;
+      if (apiKey) {
+        const regeoResponse = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
+          params: {
+            key: apiKey,
+            location: `${photoLng},${photoLat}`,
+            extensions: 'all',
+            radius: 1000,
+            roadlevel: 1
+          },
+          timeout: 5000
+        });
 
-      if (regeoResponse.data.status === '1' && regeoResponse.data.regeocode) {
-        const addr = regeoResponse.data.regeocode.addressComponent;
-        locationInfo = {
-          country: addr.country || '',
-          province: addr.province || '',
-          city: addr.city || '',
-          district: addr.district || '',
-          street: addr.streetNumber?.street || '',
-          address: regeoResponse.data.regeocode.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
-          formattedAddress: regeoResponse.data.regeocode.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`
-        };
+        if (regeoResponse.data.status === '1' && regeoResponse.data.regeocode) {
+          const regeo = regeoResponse.data.regeocode;
+          const addr = regeo.addressComponent;
+
+          locationInfo = {
+            country: addr.country || '',
+            province: addr.province || '',
+            city: addr.city || '',
+            district: addr.district || '',
+            township: addr.township || '',
+            street: addr.streetNumber?.street || '',
+            number: addr.streetNumber?.number || '',
+            address: regeo.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
+            formattedAddress: regeo.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`
+          };
+
+          // 添加POI信息
+          if (regeo.pois && regeo.pois.length > 0) {
+            // 按距离排序，选择最近的POI
+            regeo.pois.sort((a, b) => parseFloat(a.distance || 1000) - parseFloat(b.distance || 1000));
+            const nearestPoi = regeo.pois[0];
+
+            locationInfo.nearestPoi = nearestPoi.name || '';
+            locationInfo.landmark = nearestPoi.name || '';
+          }
+        }
       }
     } catch (error) {
       console.log('逆地理编码失败，使用坐标作为地址:', error.message);
     }
-    */
 
     // Save to DB
     const photo = new Photo({
@@ -813,125 +836,75 @@ app.get('/api/location/regeo', async (req, res) => {
 
     console.log('逆地理编码请求:', lat, lng);
 
-    // 尝试使用REST API密钥进行逆地理编码
-    const apiKey = process.env.AMAP_REST_API_KEY || process.env.AMAP_WEB_API_KEY;
+    // 使用高德地图REST API进行逆地理编码
+    const apiKey = process.env.AMAP_REST_API_KEY;
+
     if (!apiKey) {
-      return res.status(500).json({ error: '高德API密钥未配置' });
+      return res.status(500).json({ error: '高德地图API密钥未配置' });
     }
 
-    const response = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
-      params: {
+    try {
+      const securityCode = process.env.AMAP_SECURITY_CODE;
+
+      const requestParams = {
         key: apiKey,
         location: `${lng},${lat}`,
         extensions: 'all',
         radius: 1000,
-        roadlevel: 1
-      },
-      timeout: 5000
-    });
+        roadlevel: 1,
+        ...(securityCode && { sec_code: securityCode })
+      };
 
-    if (response.data.status === '1' && response.data.regeocode) {
-      const regeocode = response.data.regeocode;
-      console.log('逆地理编码成功');
+      console.log('高德地图API请求参数:', requestParams);
 
-      res.json({
-        success: true,
-        address: {
-          formattedAddress: regeocode.formatted_address || '',
-          country: regeocode.addressComponent?.country || '',
-          province: regeocode.addressComponent?.province || '',
-          city: regeocode.addressComponent?.city || '',
-          district: regeocode.addressComponent?.district || '',
-          township: regeocode.addressComponent?.township || '',
-          street: regeocode.addressComponent?.streetNumber?.street || '',
-          number: regeocode.addressComponent?.streetNumber?.number || '',
-          adcode: regeocode.addressComponent?.adcode || '',
-          citycode: regeocode.addressComponent?.citycode || ''
-        },
-        pois: regeocode.pois?.slice(0, 5) || [],
-        roads: regeocode.roads?.slice(0, 3) || []
+      const response = await axios.get('https://restapi.amap.com/v3/geocode/regeo', {
+        params: requestParams,
+        timeout: 5000
       });
-    } else {
-      console.error('逆地理编码失败:', response.data);
 
-      // 如果API失败，返回简单的地址信息作为备用
-      const latitude = parseFloat(lat);
-      const longitude = parseFloat(lng);
+      if (response.data.status === '1' && response.data.regeocode) {
+        const regeocode = response.data.regeocode;
+        console.log('逆地理编码成功');
 
-      let province = '未知省份';
-      let city = '未知城市';
-      let district = '未知区域';
-      let street = '未知街道';
-
-      // 上海地区的简单判断
-      if (latitude >= 30.7 && latitude <= 31.9 && longitude >= 120.8 && longitude <= 122.1) {
-        province = '上海市';
-        city = '上海市';
-
-        // 根据坐标范围判断区域
-        if (latitude >= 31.1 && latitude <= 31.3 && longitude >= 121.0 && longitude <= 121.1) {
-          district = '青浦区';
-          street = '黄家埭路';
-        } else if (latitude >= 31.2 && latitude <= 31.3 && longitude >= 121.3 && longitude <= 121.5) {
-          district = '浦东新区';
-          street = '世纪大道';
-        } else {
-          district = '黄浦区';
-          street = '南京东路';
-        }
+        res.json({
+          success: true,
+          address: {
+            formattedAddress: regeocode.formatted_address || '',
+            country: regeocode.addressComponent?.country || '',
+            province: regeocode.addressComponent?.province || '',
+            city: regeocode.addressComponent?.city || '',
+            district: regeocode.addressComponent?.district || '',
+            township: regeocode.addressComponent?.township || '',
+            street: regeocode.addressComponent?.streetNumber?.street || '',
+            number: regeocode.addressComponent?.streetNumber?.number || '',
+            adcode: regeocode.addressComponent?.adcode || '',
+            citycode: regeocode.addressComponent?.citycode || ''
+          },
+          pois: regeocode.pois?.slice(0, 5) || [],
+          roads: regeocode.roads?.slice(0, 3) || []
+        });
+      } else {
+        console.error('逆地理编码失败:', response.data);
+        res.status(400).json({
+          success: false,
+          error: response.data.info || '逆地理编码失败',
+          details: response.data
+        });
       }
-
-      res.json({
-        success: true,
-        address: {
-          formattedAddress: `${province} ${city} ${district} ${street}`,
-          country: '中国',
-          province: province,
-          city: city,
-          district: district,
-          township: '',
-          street: street,
-          number: '',
-          adcode: '',
-          citycode: ''
-        },
-        pois: [],
-        roads: []
+    } catch (error) {
+      console.error('逆地理编码错误:', error.message);
+      res.status(500).json({
+        success: false,
+        error: '逆地理编码服务暂时不可用',
+        details: error.message
       });
     }
   } catch (error) {
-    console.error('逆地理编码错误:', error.message);
-
-    // 如果发生异常，返回简单的地址信息
-    const latitude = parseFloat(lat);
-    const longitude = parseFloat(lng);
-
-    let province = '未知省份';
-    let city = '未知城市';
-    let district = '未知区域';
-
-    if (latitude >= 30.7 && latitude <= 31.9 && longitude >= 120.8 && longitude <= 122.1) {
-      province = '上海市';
-      city = '上海市';
-      district = '青浦区';
-    }
-
-    res.json({
-      success: true,
-      address: {
-        formattedAddress: `${province} ${city} ${district}`,
-        country: '中国',
-        province: province,
-        city: city,
-        district: district,
-        township: '',
-        street: '',
-        number: '',
-        adcode: '',
-        citycode: ''
-      },
-      pois: [],
-      roads: []
+    console.error('逆地理编码请求处理错误:', error.message);
+    res.status(500).json({
+      success: false,
+      error: '服务器内部错误',
+      details: error.message
     });
   }
 });
