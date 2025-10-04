@@ -23,6 +23,42 @@ const session = require('express-session');
 // Load environment variables
 dotenv.config();
 
+// Validate required environment details early to avoid partial startup
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter(name => !process.env[name]);
+if (missingEnvVars.length) {
+  console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  process.exit(1);
+}
+
+const sessionSecret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+if (!sessionSecret) {
+  console.error('SESSION_SECRET or JWT_SECRET must be defined for session management');
+  process.exit(1);
+}
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+const normaliseOrigin = origin => {
+  try {
+    const url = new URL(origin);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return origin.trim();
+  }
+};
+
+const toCleanString = value => {
+  if (Array.isArray(value)) {
+    const candidate = value.find(item => item != null && item !== '') ?? value[0];
+    return candidate != null ? toCleanString(candidate) : '';
+  }
+  if (value == null) {
+    return '';
+  }
+  return typeof value === 'string' ? value : String(value);
+};
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
@@ -96,38 +132,29 @@ passport.use(new GitHubStrategy({
   }
 ));
 
-passport.serializeUser((user, done) => {
-  done(null, user._id);
-});
-
-passport.deserializeUser(async (id, done) => {
-  try {
-    const user = await User.findById(id);
-    done(null, user);
-  } catch (error) {
-    done(error, null);
-  }
-});
-
 // Schemas
 const userSchema = new mongoose.Schema({
-  username: String,
-  email: String,
+  username: { type: String, required: true, unique: true, trim: true },
+  email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
   password: String, // 密码哈希（传统注册用户）
   avatar: String,
   // OAuth相关字段
   provider: { type: String, enum: ['local', 'github'], default: 'local' },
-  githubId: String,
+  githubId: { type: String, unique: true, sparse: true },
   githubUsername: String,
   createdAt: { type: Date, default: Date.now }
 });
 
 const photoSchema = new mongoose.Schema({
-  userId: mongoose.Schema.Types.ObjectId,
-  url: String,
-  caption: String,
-  lat: Number,
-  lng: Number,
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  url: { type: String, required: true },
+  caption: { type: String, required: true },
+  lat: { type: Number, required: true },
+  lng: { type: Number, required: true },
+  location: {
+    type: { type: String, enum: ['Point'], default: 'Point' },
+    coordinates: { type: [Number], required: true }
+  },
   exifLat: Number,
   exifLng: Number,
   distanceToUser: Number,
@@ -145,7 +172,7 @@ const photoSchema = new mongoose.Schema({
     nearestPoi: String
   },
   comments: [{
-    userId: mongoose.Schema.Types.ObjectId,
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     username: String,
     text: String,
     createdAt: { type: Date, default: Date.now }
@@ -153,11 +180,56 @@ const photoSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
+photoSchema.index({ location: '2dsphere' });
+photoSchema.index({ userId: 1, createdAt: -1 });
+
+photoSchema.pre('save', function(next) {
+  if (Number.isFinite(this.lat) && Number.isFinite(this.lng)) {
+    this.location = {
+      type: 'Point',
+      coordinates: [this.lng, this.lat]
+    };
+  }
+  next();
+});
+
 const User = mongoose.model('User', userSchema);
 const Photo = mongoose.model('Photo', photoSchema);
 
 // Initialize app
 const app = express();
+
+// Trust reverse proxies (Railway, Heroku, etc.) so secure cookies work correctly
+app.set('trust proxy', 1);
+
+const allowedOrigins = new Set(
+  (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(normaliseOrigin)
+    .filter(Boolean)
+);
+
+if (!isProduction) {
+  const devPort = process.env.PORT || 8444;
+  allowedOrigins.add(`http://localhost:${devPort}`);
+  allowedOrigins.add(`http://127.0.0.1:${devPort}`);
+}
+
+if (!allowedOrigins.size) {
+  console.warn('No CORS origins configured; defaulting to allow all origins.');
+}
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (!allowedOrigins.size || allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    console.warn('Blocked CORS origin:', origin);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+};
 
 // Middleware
 app.use(helmet({
@@ -177,7 +249,7 @@ app.use(helmet({
     }
   }
 }));
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json());
 app.use(rateLimit({
@@ -186,36 +258,60 @@ app.use(rateLimit({
 }));
 
 // Session configuration for Passport
+// Session configuration用于存储OAuth流程的临时state
 app.use(session({
-  secret: process.env.SESSION_SECRET || process.env.JWT_SECRET,
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: parseInt(process.env.SESSION_COOKIE_MAX_AGE) || 24 * 60 * 60 * 1000
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    maxAge: parseInt(process.env.SESSION_COOKIE_MAX_AGE, 10) || 24 * 60 * 60 * 1000
   }
 }));
 
 // Passport middleware
 app.use(passport.initialize());
-app.use(passport.session());
 
 // File upload setup
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10 * 1024 * 1024
+    fileSize: parseInt(process.env.MAX_FILE_SIZE, 10) || 10 * 1024 * 1024
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = (process.env.ALLOWED_FILE_TYPES || 'image/jpeg,image/png,image/gif,image/webp').split(',');
-    if (allowedTypes.includes(file.mimetype)) {
+    const defaultTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'];
+    const allowedTypes = (process.env.ALLOWED_FILE_TYPES || '')
+      .split(',')
+      .map(type => type.trim())
+      .filter(Boolean);
+    const mimeWhitelist = allowedTypes.length ? allowedTypes : defaultTypes;
+
+    if (mimeWhitelist.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支持的文件类型: ${file.mimetype}`), false);
+      req.fileValidationError = `不支持的文件类型: ${file.mimetype || '未知'}`;
+      cb(null, false);
     }
   }
 });
+
+const uploadSinglePhoto = (req, res, next) => {
+  upload.single('photo')(req, res, err => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        const message = err.code === 'LIMIT_FILE_SIZE'
+          ? '文件过大，超过允许的上传大小'
+          : '文件上传失败，请重试';
+        return res.status(400).json({ error: message });
+      }
+      return res.status(400).json({ error: err.message || '文件上传出错' });
+    }
+    return next();
+  });
+};
 
 // Static files for uploaded photos (仅在非Railway环境需要)
 // Railway使用容器持久化存储，始终提供静态文件服务
@@ -228,9 +324,15 @@ if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
 }
 
-// Static files for website (development only)
+// Expose bundled静态页面，同时避免暴露整个项目目录
+app.get('/website.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'website.html'));
+});
+
 if (process.env.NODE_ENV === 'development') {
-  app.use(express.static(path.join(__dirname)));
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'website.html'));
+  });
 }
 
 // JWT Middleware
@@ -248,33 +350,35 @@ const authenticate = (req, res, next) => {
 // Auth Routes - Simple Registration and Login
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { username, email, password } = req.body;
+    const usernameInput = (req.body.username || '').trim();
+    const emailInput = (req.body.email || '').trim().toLowerCase();
+    const passwordInput = req.body.password || '';
 
     // Validate input
-    if (!username || !email || !password) {
+    if (!usernameInput || !emailInput || !passwordInput) {
       return res.status(400).json({ error: '用户名、邮箱和密码都是必需的' });
     }
 
-    if (password.length < 6) {
+    if (passwordInput.length < 6) {
       return res.status(400).json({ error: '密码至少需要6个字符' });
     }
 
     // Check if user already exists
-    const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+    const existingUser = await User.findOne({ $or: [{ email: emailInput }, { username: usernameInput }] });
     if (existingUser) {
       return res.status(400).json({ error: '用户名或邮箱已被注册' });
     }
 
     // Hash password
     const saltRounds = parseInt(process.env.BCRYPT_SALT_ROUNDS) || 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(passwordInput, saltRounds);
 
     // Create user
     const user = new User({
-      username,
-      email,
+      username: usernameInput,
+      email: emailInput,
       password: hashedPassword,
-      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${username}`
+      avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(usernameInput)}`
     });
 
     await user.save();
@@ -299,21 +403,22 @@ app.post('/api/auth/register', async (req, res) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const usernameInput = (req.body.username || '').trim();
+    const passwordInput = req.body.password || '';
 
     // Validate input
-    if (!username || !password) {
+    if (!usernameInput || !passwordInput) {
       return res.status(400).json({ error: '用户名和密码都是必需的' });
     }
 
     // Find user
-    const user = await User.findOne({ username });
-    if (!user) {
+    const user = await User.findOne({ username: usernameInput });
+    if (!user || !user.password) {
       return res.status(401).json({ error: '用户名或密码错误' });
     }
 
     // Check password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(passwordInput, user.password);
     if (!isValidPassword) {
       return res.status(401).json({ error: '用户名或密码错误' });
     }
@@ -428,10 +533,14 @@ app.get('/api/auth/github/callback',
 );
 
 // Photo upload
-app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req, res) => {
+app.post('/api/photos/upload', authenticate, uploadSinglePhoto, async (req, res) => {
   try {
     const { caption, userLat, userLng, locationSource } = req.body;
     const file = req.file;
+
+    if (req.fileValidationError) {
+      return res.status(400).json({ error: req.fileValidationError });
+    }
 
     if (!file) return res.status(400).json({ error: 'No photo provided' });
     if (!caption) return res.status(400).json({ error: 'Caption required' });
@@ -456,21 +565,36 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     }
 
     // Parse EXIF
-    const parser = exifParser.create(file.buffer);
-    const exif = parser.parse();
-    const gps = exif.tags;
+    let exif = { tags: {} };
+    try {
+      exif = exifParser.create(file.buffer).parse();
+    } catch (parseError) {
+      console.warn('EXIF解析失败，将视为无GPS信息:', parseError.message);
+    }
+    const gps = exif.tags || {};
+    const hasExifCoords = Number.isFinite(gps.GPSLatitude) && Number.isFinite(gps.GPSLongitude);
 
-    let photoLat, photoLng, distanceToUser = 0;
+    let photoLat;
+    let photoLng;
+    let distanceToUser = 0;
 
-    if (gps.GPSLatitude && gps.GPSLongitude) {
+    const parsedUserLat = Number(userLat);
+    const parsedUserLng = Number(userLng);
+    const hasUserCoords = Number.isFinite(parsedUserLat) && Number.isFinite(parsedUserLng);
+
+    if (hasExifCoords) {
       // 照片包含GPS信息
-      photoLat = gps.GPSLatitude;
-      photoLng = gps.GPSLongitude;
+      photoLat = Number(gps.GPSLatitude);
+      photoLng = Number(gps.GPSLongitude);
       if (gps.GPSLatitudeRef === 'S') photoLat = -photoLat;
       if (gps.GPSLongitudeRef === 'W') photoLng = -photoLng;
 
       // 验证照片GPS与用户位置的距离
-      distanceToUser = calculateDistance(parseFloat(userLat), parseFloat(userLng), photoLat, photoLng);
+      if (!hasUserCoords) {
+        return res.status(400).json({ error: '缺少当前位置坐标，无法验证照片位置' });
+      }
+
+      distanceToUser = calculateDistance(parsedUserLat, parsedUserLng, photoLat, photoLng);
       const maxDistance = parseInt(process.env.MAX_DISTANCE_VERIFICATION) || 50;
       if (distanceToUser > maxDistance) {
         return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
@@ -479,8 +603,11 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       // 照片不包含GPS信息
       if (locationSource === 'gps') {
         // 用户使用GPS定位，直接使用用户位置
-        photoLat = parseFloat(userLat);
-        photoLng = parseFloat(userLng);
+        if (!hasUserCoords) {
+          return res.status(400).json({ error: '缺少当前位置坐标，无法记录照片位置' });
+        }
+        photoLat = parsedUserLat;
+        photoLng = parsedUserLng;
         distanceToUser = 0; // 距离为0，因为直接使用用户位置
       } else {
         // 用户使用IP定位，要求照片必须有GPS信息
@@ -488,8 +615,11 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       }
     }
 
+    if (!Number.isFinite(photoLat) || !Number.isFinite(photoLng)) {
+      return res.status(400).json({ error: '无法识别照片的地理位置信息' });
+    }
+
     // Process image
-    let processedImageBuffer;
     let imageUrl;
 
     // Railway环境：保存到文件系统（使用容器持久化存储）
@@ -536,15 +666,15 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
           const addr = regeo.addressComponent;
 
           locationInfo = {
-            country: addr.country || '',
-            province: addr.province || '',
-            city: addr.city || '',
-            district: addr.district || '',
-            township: addr.township || '',
-            street: addr.streetNumber?.street || '',
-            number: addr.streetNumber?.number || '',
-            address: regeo.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
-            formattedAddress: regeo.formatted_address || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`
+            country: toCleanString(addr.country),
+            province: toCleanString(addr.province),
+            city: toCleanString(addr.city),
+            district: toCleanString(addr.district),
+            township: toCleanString(addr.township),
+            street: toCleanString(addr.streetNumber?.street),
+            number: toCleanString(addr.streetNumber?.number),
+            address: toCleanString(regeo.formatted_address) || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`,
+            formattedAddress: toCleanString(regeo.formatted_address) || `${photoLat.toFixed(6)}, ${photoLng.toFixed(6)}`
           };
 
           // 添加POI信息
@@ -553,8 +683,9 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
             regeo.pois.sort((a, b) => parseFloat(a.distance || 1000) - parseFloat(b.distance || 1000));
             const nearestPoi = regeo.pois[0];
 
-            locationInfo.nearestPoi = nearestPoi.name || '';
-            locationInfo.landmark = nearestPoi.name || '';
+            const poiName = toCleanString(nearestPoi?.name);
+            locationInfo.nearestPoi = poiName;
+            locationInfo.landmark = poiName;
           }
         }
       }
@@ -569,9 +700,13 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
       caption,
       lat: photoLat,
       lng: photoLng,
-      exifLat: gps.GPSLatitude ? photoLat : null, // 只有当照片包含GPS时才保存EXIF坐标
-      exifLng: gps.GPSLongitude ? photoLng : null,
-      distanceToUser: distanceToUser,
+      location: {
+        type: 'Point',
+        coordinates: [photoLng, photoLat]
+      },
+      exifLat: hasExifCoords ? photoLat : null, // 只有当照片包含GPS时才保存EXIF坐标
+      exifLng: hasExifCoords ? photoLng : null,
+      distanceToUser,
       locationInfo
     });
 
@@ -580,6 +715,9 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
     res.json({ success: true, photo });
   } catch (error) {
     console.error('Upload error:', error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: '照片数据校验失败，请重试' });
+    }
     res.status(500).json({ error: 'Upload failed' });
   }
 });
@@ -588,15 +726,21 @@ app.post('/api/photos/upload', authenticate, upload.single('photo'), async (req,
 app.get('/api/photos/nearby', authenticate, async (req, res) => {
   try {
     const { lat, lng, radius = 300 } = req.query;
-    const userLat = parseFloat(lat);
-    const userLng = parseFloat(lng);
+    const userLat = Number(lat);
+    const userLng = Number(lng);
+    const searchRadius = Math.max(0, Number(radius) || 0) || 300;
+
+    if (!Number.isFinite(userLat) || !Number.isFinite(userLng)) {
+      return res.status(400).json({ error: '缺少或无效的当前位置坐标' });
+    }
 
     const nearbyPhotos = await Photo.aggregate([
       {
         $geoNear: {
           near: { type: 'Point', coordinates: [userLng, userLat] },
+          key: 'location',
           distanceField: 'distance',
-          maxDistance: parseInt(radius),
+          maxDistance: searchRadius,
           spherical: true
         }
       },
@@ -648,6 +792,9 @@ app.get('/api/photos/my', authenticate, async (req, res) => {
 
     // 获取用户信息
     const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     res.json({
       photos: photos.map(photo => ({
@@ -696,12 +843,15 @@ app.get('/api/photos/:id', authenticate, async (req, res) => {
           avatar: photo.userId.avatar
         },
         createdAt: photo.createdAt,
-        comments: photo.comments.map(c => ({
-          username: c.username,
-          avatar: c.userId.avatar,
-          text: c.text,
-          createdAt: c.createdAt
-        }))
+        comments: photo.comments.map(c => {
+          const commentUser = c.userId && typeof c.userId === 'object' && 'username' in c.userId ? c.userId : null;
+          return {
+            username: commentUser?.username || c.username,
+            avatar: commentUser?.avatar || '',
+            text: c.text,
+            createdAt: c.createdAt
+          };
+        })
       }
     });
   } catch (error) {
@@ -728,8 +878,19 @@ app.post('/api/photos/:id/comments', authenticate, async (req, res) => {
     });
 
     await photo.save();
+    await photo.populate('comments.userId', 'username avatar');
 
-    res.json({ success: true });
+    const latestComment = photo.comments[photo.comments.length - 1];
+
+    res.json({
+      success: true,
+      comment: {
+        username: latestComment.userId?.username || latestComment.username,
+        avatar: latestComment.userId?.avatar || '',
+        text: latestComment.text,
+        createdAt: latestComment.createdAt
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -876,16 +1037,16 @@ app.get('/api/location/regeo', async (req, res) => {
         res.json({
           success: true,
           address: {
-            formattedAddress: regeocode.formatted_address || '',
-            country: regeocode.addressComponent?.country || '',
-            province: regeocode.addressComponent?.province || '',
-            city: regeocode.addressComponent?.city || '',
-            district: regeocode.addressComponent?.district || '',
-            township: regeocode.addressComponent?.township || '',
-            street: regeocode.addressComponent?.streetNumber?.street || '',
-            number: regeocode.addressComponent?.streetNumber?.number || '',
-            adcode: regeocode.addressComponent?.adcode || '',
-            citycode: regeocode.addressComponent?.citycode || ''
+            formattedAddress: toCleanString(regeocode.formatted_address),
+            country: toCleanString(regeocode.addressComponent?.country),
+            province: toCleanString(regeocode.addressComponent?.province),
+            city: toCleanString(regeocode.addressComponent?.city),
+            district: toCleanString(regeocode.addressComponent?.district),
+            township: toCleanString(regeocode.addressComponent?.township),
+            street: toCleanString(regeocode.addressComponent?.streetNumber?.street),
+            number: toCleanString(regeocode.addressComponent?.streetNumber?.number),
+            adcode: toCleanString(regeocode.addressComponent?.adcode),
+            citycode: toCleanString(regeocode.addressComponent?.citycode)
           },
           pois: regeocode.pois?.slice(0, 5) || [],
           roads: regeocode.roads?.slice(0, 3) || []
