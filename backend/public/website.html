@@ -1,0 +1,2691 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OurVerse</title>
+    <!-- Amap API will be loaded dynamically -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #fafafa;
+            color: #111;
+            line-height: 1.4;
+            font-weight: 300;
+        }
+
+        /* 极简导航 */
+        .nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            padding: 0 20px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav h1 {
+            font-size: 20px;
+            font-weight: 200;
+            letter-spacing: 1px;
+            color: #111;
+        }
+
+        .admin-btn {
+            background: none;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            color: #111;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 300;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .admin-btn:hover {
+            background: #111;
+            color: #fff;
+        }
+
+        .admin-btn.active {
+            background: #111;
+            color: #fff;
+        }
+
+        .container {
+            margin-top: 60px;
+            padding: 0;
+            min-height: calc(100vh - 60px);
+        }
+
+        /* 状态指示器 */
+        .status {
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 300;
+            color: #666;
+            background: #fff;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .status.success {
+            color: #27AE60;
+        }
+
+        .status.error {
+            color: #E74C3C;
+        }
+
+        /* 地图容器 */
+        .map-container {
+            height: 45vh;
+            position: relative;
+            background: #f5f5f5;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 位置信息显示 */
+        .location-info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 300;
+            color: #111;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            max-width: 200px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .location-info.show {
+            display: block;
+        }
+
+        /* 上传区域 */
+        .upload-section {
+            background: #fff;
+            padding: 30px 20px;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .upload-title {
+            font-size: 16px;
+            font-weight: 300;
+            margin-bottom: 20px;
+            color: #111;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            margin-bottom: 15px;
+        }
+
+        .file-input {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .file-input-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100px;
+            border: 1px dashed rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            background: #fafafa;
+            transition: all 0.3s ease;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .file-input-display:hover {
+            border-color: #111;
+            background: #f5f5f5;
+        }
+
+        .caption-input {
+            width: 100%;
+            border: none;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 15px 0;
+            font-size: 16px;
+            font-weight: 300;
+            background: transparent;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .caption-input:focus {
+            border-bottom-color: #111;
+        }
+
+        .caption-input::placeholder {
+            color: #999;
+        }
+
+        .upload-btn {
+            width: 100%;
+            background: #111;
+            color: #fff;
+            border: none;
+            padding: 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 300;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+
+        .upload-btn:hover {
+            background: #333;
+            transform: translateY(-1px);
+        }
+
+        .upload-btn:active {
+            transform: translateY(0);
+        }
+
+        .upload-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .upload-btn:disabled:hover {
+            background: #ccc;
+            transform: none;
+        }
+
+        /* 照片网格 */
+        .photos-section {
+            padding: 30px 20px;
+            background: #fff;
+        }
+
+        .photos-title {
+            font-size: 16px;
+            font-weight: 300;
+            margin-bottom: 20px;
+            color: #111;
+        }
+
+        .photos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 20px;
+        }
+
+        .photo-item {
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+
+        .photo-delete-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(231, 76, 60, 0.9);
+            color: #fff;
+            font-size: 18px;
+            line-height: 28px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+        }
+
+        .photo-delete-btn:hover {
+            background: #E74C3C;
+            transform: scale(1.05);
+        }
+
+        .photo-item:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .photo-item img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .photo-info {
+            padding: 15px;
+        }
+
+        .photo-caption {
+            font-size: 14px;
+            font-weight: 300;
+            color: #111;
+            margin-bottom: 8px;
+        }
+
+        .photo-distance {
+            font-size: 12px;
+            color: #999;
+            font-weight: 300;
+        }
+
+        .photo-marker {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 400;
+            color: #111;
+        }
+
+        .missing-photo-banner {
+            grid-column: 1 / -1;
+            background: #fff9e6;
+            border: 1px dashed rgba(243, 156, 18, 0.6);
+            color: #A86411;
+            padding: 12px;
+            border-radius: 12px;
+            font-size: 13px;
+        }
+
+        /* 模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(20px);
+            z-index: 2000;
+            overflow-y: auto;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background: #fff;
+            margin: 40px 20px;
+            border-radius: 16px;
+            overflow: hidden;
+            max-width: 500px;
+            margin: 40px auto;
+            animation: slideUp 0.4s ease;
+        }
+
+        @keyframes slideUp {
+            from { 
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to { 
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-header {
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .modal-header h3 {
+            font-size: 16px;
+            font-weight: 300;
+            color: #111;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            color: #999;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .close-btn:hover {
+            background: #f5f5f5;
+            color: #111;
+        }
+
+        .modal-body {
+            padding: 0;
+        }
+
+        .modal-image {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .modal-caption {
+            padding: 20px;
+            font-size: 16px;
+            font-weight: 300;
+            color: #111;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .photo-meta {
+            padding: 15px 20px;
+            background: #fafafa;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .photo-author {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .author-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .author-info {
+            flex: 1;
+        }
+
+        .author-name {
+            font-size: 14px;
+            font-weight: 400;
+            color: #111;
+        }
+
+        .photo-time {
+            font-size: 12px;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .photo-location {
+            font-size: 13px;
+            color: #666;
+            font-weight: 300;
+        }
+
+        /* 评论区域 */
+        .comments-section {
+            padding: 20px;
+        }
+
+        .comments-title {
+            font-size: 14px;
+            font-weight: 400;
+            margin-bottom: 15px;
+            color: #111;
+        }
+
+        .comment-form {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .comment-input {
+            flex: 1;
+            border: none;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+            padding: 12px 0;
+            font-size: 14px;
+            font-weight: 300;
+            background: transparent;
+            outline: none;
+            transition: border-color 0.3s ease;
+        }
+
+        .comment-input:focus {
+            border-bottom-color: #111;
+        }
+
+        .comment-submit {
+            background: none;
+            border: none;
+            color: #111;
+            font-size: 14px;
+            font-weight: 400;
+            cursor: pointer;
+            padding: 8px;
+            transition: opacity 0.3s ease;
+        }
+
+        .comment-submit:hover {
+            opacity: 0.7;
+        }
+
+        .comments-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .comment {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .comment:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .comment-author {
+            font-size: 12px;
+            font-weight: 400;
+            color: #111;
+            margin-bottom: 4px;
+        }
+
+        .comment-text {
+            font-size: 14px;
+            font-weight: 300;
+            color: #333;
+        }
+
+        /* 管理员控制 */
+        .admin-controls {
+            display: none;
+            padding: 20px;
+            border-top: 0.5px solid rgba(0, 0, 0, 0.05);
+            background: #fafafa;
+        }
+
+        .admin-controls.show {
+            display: block;
+        }
+
+        .admin-controls button {
+            background: none;
+            border: 1px solid rgba(231, 76, 60, 0.5);
+            color: #E74C3C;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 300;
+            cursor: pointer;
+            margin-right: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .admin-controls button:hover {
+            background: #E74C3C;
+            color: #fff;
+        }
+
+        /* 位置照片网格 */
+        .location-photos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 15px;
+            padding: 20px;
+        }
+
+        .location-photo-item {
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .location-photo-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .location-photo-item img {
+            width: 100%;
+            height: 80px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .location-photo-info {
+            padding: 10px;
+        }
+
+        .location-photo-caption {
+            font-size: 12px;
+            font-weight: 300;
+            color: #111;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .location-photo-comments {
+            font-size: 10px;
+            color: #999;
+            font-weight: 300;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .nav {
+                padding: 0 15px;
+            }
+            
+            .nav h1 {
+                font-size: 18px;
+            }
+            
+            .upload-section,
+            .photos-section {
+                padding: 20px 15px;
+            }
+            
+            .photos-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 15px;
+            }
+            
+            .modal-content {
+                margin: 20px 15px;
+            }
+            
+            .photo-item img {
+                height: 120px;
+            }
+
+            .location-photos-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 10px;
+                padding: 15px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .modal-content {
+                margin: 10px;
+            }
+        }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+            font-size: 14px;
+            font-weight: 300;
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #111;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 登录相关样式 */
+        .nav-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #111;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .login-options {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .login-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 400;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .github-btn {
+            background: #24292e;
+            color: white;
+        }
+
+        .github-btn:hover {
+            background: #1a1e22;
+        }
+
+        .wechat-btn {
+            background: #07c160;
+            color: white;
+        }
+
+        .wechat-btn:hover {
+            background: #06ad56;
+        }
+
+        .login-required {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .login-required .login-btn {
+            margin: 10px auto;
+            max-width: 200px;
+        }
+    </style>
+
+    <script>
+
+        window.amapLoaded = false;
+        window.mapReady = false;
+        window.initialLocationHint = null;
+        window.mapInitialized = false;
+        window.pendingLocationUpdate = false;
+
+        const scriptLoadRegistry = new Map();
+
+        function loadScript(url, timeout = 10000) {
+            if (scriptLoadRegistry.has(url)) {
+                return scriptLoadRegistry.get(url);
+            }
+
+            const promise = new Promise((resolve, reject) => {
+                const existing = document.querySelector(`script[src="${url}"]`);
+                if (existing && existing.dataset.loaded === 'true') {
+                    resolve(existing);
+                    return;
+                }
+
+                const script = existing || document.createElement('script');
+                script.src = url;
+                script.async = true;
+
+                const cleanup = () => {
+                    script.removeEventListener('load', onLoad);
+                    script.removeEventListener('error', onError);
+                    clearTimeout(timerId);
+                };
+
+                const onLoad = () => {
+                    cleanup();
+                    script.dataset.loaded = 'true';
+                    resolve(script);
+                };
+
+                const onError = (error) => {
+                    cleanup();
+                    reject(error);
+                };
+
+                script.addEventListener('load', onLoad);
+                script.addEventListener('error', onError);
+
+                const timerId = setTimeout(() => {
+                    cleanup();
+                    reject(new Error(`Loading script timeout: ${url}`));
+                }, timeout);
+
+                if (!existing) {
+                    document.head.appendChild(script);
+                }
+            }).catch(error => {
+                scriptLoadRegistry.delete(url);
+                throw error;
+            });
+
+            scriptLoadRegistry.set(url, promise);
+            return promise;
+        }
+
+        function loadStylesheet(url) {
+            const existing = document.querySelector(`link[href="${url}"]`);
+            if (existing) {
+                return Promise.resolve(existing);
+            }
+
+            return new Promise((resolve, reject) => {
+                const link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = url;
+                link.onload = () => resolve(link);
+                link.onerror = reject;
+                document.head.appendChild(link);
+            });
+        }
+
+        let amapSdkPromise = null;
+        async function loadAmapSdk() {
+            if (amapSdkPromise) {
+                return amapSdkPromise;
+            }
+
+            amapSdkPromise = (async () => {
+                if (!window.API_BASE_URL) {
+                    throw new Error('API_BASE_URL 未设置，无法加载高德地图');
+                }
+
+                const response = await fetch(`${window.API_BASE_URL}/api/amap/config`);
+                if (!response.ok) {
+                    throw new Error('无法获取高德地图配置');
+                }
+
+                const config = await response.json();
+                console.log('获取到地图配置:', config);
+
+                if (config.securityCode) {
+                    window._AMapSecurityConfig = {
+                        securityJsCode: config.securityCode
+                    };
+                }
+
+                if (!config.apiKey) {
+                    throw new Error('高德地图API密钥未配置');
+                }
+
+                const scriptUrl = `https://webapi.amap.com/maps?v=2.0&key=${config.apiKey}${config.securityCode ? `&jscode=${config.securityCode}` : ''}`;
+                console.log('加载地图API:', scriptUrl);
+                await loadScript(scriptUrl, 12000);
+                window.amapLoaded = true;
+                document.dispatchEvent(new Event('amap:loaded'));
+                return config;
+            })().catch(error => {
+                amapSdkPromise = null;
+                throw error;
+            });
+
+            return amapSdkPromise;
+        }
+
+        async function ensureMapSdkLoaded() {
+            await loadAmapSdk();
+            return 'amap';
+        }
+
+        window.ensureMapSdkLoaded = ensureMapSdkLoaded;
+
+        document.addEventListener('amap:loaded', () => {
+            if (window.appInitialized && typeof initMap === 'function') {
+                console.log('高德地图JS已加载，初始化地图');
+                initMap();
+            }
+        });
+    </script>
+</head>
+<body>
+    <nav class="nav">
+        <h1>OurVerse</h1>
+        <div class="nav-user" id="navUser">
+            <button class="admin-btn" onclick="showLoginModal()" id="loginBtn">登录</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="status" id="status">
+            正在获取位置信息...
+            <br>
+            <button onclick="improvedLocationRequest()" style="margin-top: 10px; padding: 8px 16px; background: #111; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 10px;">手动定位</button>
+            <button onclick="testLocation()" style="margin-top: 10px; padding: 8px 16px; background: #666; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">测试定位</button>
+        </div>
+
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="location-info" id="locationInfo">正在获取位置信息...</div>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-title">What will your verse be?</div>
+            <div class="form-group">
+                <div class="file-input-wrapper">
+                    <input type="file" id="photoInput" class="file-input" accept="image/*" capture="camera">
+                    <div class="file-input-display">
+                        <span id="uploadStatus">点一下开始写诗</span>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <input type="text" 
+                       id="captionInput" 
+                       class="caption-input" 
+                       maxlength="20" 
+                       placeholder="The powerful play goes on and you may contribute a verse...">
+            </div>
+            <button class="upload-btn" onclick="uploadPhoto()" id="uploadBtn">记录</button>
+        </div>
+
+        <div class="photos-section">
+            <div class="photos-title">附近300米</div>
+            <div class="photos-grid" id="photosGrid">
+                <!-- 照片将在这里动态加载 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 照片详情模态框 -->
+    <div class="modal" id="photoModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>详情</h3>
+                <button class="close-btn" onclick="closeModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <img id="modalImage" class="modal-image" src="" alt="">
+                <div class="modal-caption" id="modalCaption"></div>
+
+                <div class="photo-meta">
+                    <div class="photo-author">
+                        <img id="modalAuthorAvatar" class="author-avatar" src="" alt="作者头像">
+                        <div class="author-info">
+                            <div class="author-name" id="modalAuthorName"></div>
+                            <div class="photo-time" id="modalPhotoTime"></div>
+                        </div>
+                    </div>
+                    <div class="photo-location" id="modalPhotoLocation"></div>
+                </div>
+
+                <div class="comments-section">
+                    <div class="comments-title">别人的想法</div>
+                    <div class="comment-form">
+                        <input type="text" id="commentInput" class="comment-input" placeholder="说点什么...">
+                        <button class="comment-submit" onclick="addComment()">说完了</button>
+                    </div>
+                    <div class="comments-list" id="commentsList"></div>
+                </div>
+                
+                <div class="admin-controls" id="adminControls">
+                    <button class="delete-action" onclick="deletePhoto()">从这个次元抹除</button>
+                    <button onclick="editLocation()">修正坐标</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 位置照片集合模态框 -->
+    <div class="modal" id="locationPhotosModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>这里的诗</h3>
+                <button class="close-btn" onclick="closeLocationModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="location-photos-grid" id="locationPhotosGrid"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 登录模态框 -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>登录</h3>
+                <button class="close-btn" onclick="closeLoginModal()">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="login-options">
+                    <!-- GitHub登录按钮 -->
+                    <button class="login-btn github-btn" onclick="loginWithGitHub()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                        </svg>
+                        使用 GitHub 登录
+                    </button>
+
+                    <!-- 分隔线 -->
+                    <div style="text-align: center; margin: 20px 0; position: relative;">
+                        <span style="background: white; padding: 0 10px; color: #666; font-size: 12px;">或</span>
+                        <hr style="border: none; border-top: 1px solid #ddd; position: absolute; top: 50%; left: 0; right: 0; z-index: -1;">
+                    </div>
+
+                    <!-- 登录表单 -->
+                    <div class="auth-form" id="loginForm">
+                        <h4 style="text-align: center; margin-bottom: 20px; color: #111;">登录</h4>
+                        <input type="text" id="loginUsername" placeholder="用户名" style="width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <input type="password" id="loginPassword" placeholder="密码" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <button class="login-btn" style="width: 100%; background: #111; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 10px;" onclick="login()">登录</button>
+                        <button class="login-btn" style="width: 100%; background: #666; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer;" onclick="showRegisterForm()">还没有账号？注册</button>
+                    </div>
+
+                    <!-- 注册表单 -->
+                    <div class="auth-form" id="registerForm" style="display: none;">
+                        <h4 style="text-align: center; margin-bottom: 20px; color: #111;">注册</h4>
+                        <input type="text" id="registerUsername" placeholder="用户名" style="width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <input type="email" id="registerEmail" placeholder="邮箱（可选）" style="width: 100%; padding: 12px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; display: none;">
+                        <input type="password" id="registerPassword" placeholder="密码（至少6位）" style="width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <button class="login-btn" style="width: 100%; background: #27AE60; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; margin-bottom: 10px;" onclick="register()">注册</button>
+                        <button class="login-btn" style="width: 100%; background: #666; color: white; padding: 12px; border: none; border-radius: 6px; font-size: 14px; cursor: pointer;" onclick="showLoginForm()">已有账号？登录</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let map;
+        let userLocation;
+        let photos = [];
+        let currentPhotoId;
+        let isAdmin = false;
+        let currentUser = null;
+        let authToken = null;
+        let locationSource = null; // 'amap', 'gps', 'ip', or null
+        let locationAccuracyRadius = null;
+        let currentLocationPromise = null;
+        let pendingAmapRetry = false;
+        let isViewingMyPhotos = false;
+        let nearbyPhotosRequestId = 0;
+
+        let amapUserMarker = null;
+        let amapAccuracyCircle = null;
+        let amapPhotoMarkers = [];
+
+        document.addEventListener('amap:loaded', () => {
+            if (window.appInitialized && typeof initMap === 'function') {
+                initMap();
+            }
+
+            if (!userLocation) {
+                pendingAmapRetry = true;
+            }
+
+            if (pendingAmapRetry) {
+                pendingAmapRetry = false;
+                improvedLocationRequest();
+            }
+        });
+
+        // API服务器地址 - 从环境变量或URL参数获取
+        function getApiBaseUrl() {
+            // 尝试从URL参数获取
+            const urlParams = new URLSearchParams(window.location.search);
+            const apiUrlParam = urlParams.get('api_url');
+
+            // 尝试从环境变量获取（如果在构建时设置）
+            if (window.ENV && window.ENV.API_BASE_URL) {
+                return window.ENV.API_BASE_URL;
+            }
+
+            // 从URL参数获取
+            if (apiUrlParam) {
+                return apiUrlParam;
+            }
+
+            // 开发环境默认值
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                return 'http://localhost:8444';
+            }
+
+            // 生产环境从当前域名构造
+            return `${window.location.protocol}//${window.location.host}`;
+        }
+
+const API_BASE_URL = getApiBaseUrl();
+window.API_BASE_URL = API_BASE_URL;
+console.log('API_BASE_URL:', API_BASE_URL); // 调试信息
+
+function getDeviceId() {
+    let deviceId = localStorage.getItem('ourverse_device_id');
+    if (!deviceId) {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            deviceId = window.crypto.randomUUID();
+        } else {
+            deviceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        }
+        localStorage.setItem('ourverse_device_id', deviceId);
+    }
+    return deviceId;
+}
+
+        // IndexedDB 数据库
+        let db;
+
+        // 初始化IndexedDB
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('OurVerseDB', 1);
+
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+
+                    // 创建照片存储
+                    if (!db.objectStoreNames.contains('photos')) {
+                        const photoStore = db.createObjectStore('photos', { keyPath: 'id', autoIncrement: true });
+                        photoStore.createIndex('location', ['lat', 'lng'], { unique: false });
+                        photoStore.createIndex('userId', 'userId', { unique: false });
+                    }
+
+                    // 创建用户存储
+                    if (!db.objectStoreNames.contains('users')) {
+                        db.createObjectStore('users', { keyPath: 'id' });
+                    }
+                };
+            });
+        }
+
+        // 初始化应用
+        window.onload = async function() {
+            console.log('应用初始化开始...');
+            try {
+                await initDB();
+                await ensureMapSdkLoaded();
+            } catch (error) {
+                console.error('初始化失败:', error);
+                alert('应用初始化失败，请刷新页面重试');
+            } finally {
+                window.appInitialized = true;
+
+                if (window.amapLoaded && typeof initMap === 'function') {
+                    initMap();
+                }
+
+                checkAuthStatus();
+                checkOAuthCallback();
+            }
+
+            // 延迟一点再获取位置，确保地图已加载
+            setTimeout(async () => {
+                try {
+                    await improvedLocationRequest();
+                } catch (error) {
+                    console.log('定位失败，但应用继续运行');
+                }
+            }, 1000);
+        };
+
+        // 检查认证状态
+        async function checkAuthStatus() {
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/auth/verify`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        setCurrentUser(data.user, token);
+                    } else {
+                        localStorage.removeItem('authToken');
+                        showLoginRequired();
+                    }
+                } catch (error) {
+                    console.error('验证token失败:', error);
+                    localStorage.removeItem('authToken');
+                    showLoginRequired();
+                }
+            } else {
+                showLoginRequired();
+            }
+        }
+
+        // 设置当前用户
+        function setCurrentUser(user, token) {
+            currentUser = user;
+            authToken = token;
+            localStorage.setItem('authToken', token);
+
+            updateNavUser(user);
+            isViewingMyPhotos = false;
+
+            const photosGrid = document.getElementById('photosGrid');
+            if (photosGrid) {
+                photosGrid.innerHTML = '<div class="empty-state">正在加载附近照片...</div>';
+            }
+
+            const uploadStatus = document.getElementById('uploadStatus');
+            if (uploadStatus) {
+                uploadStatus.textContent = '点一下开始写诗';
+            }
+
+            if (userLocation) {
+                loadNearbyPhotos();
+            } else {
+                improvedLocationRequest();
+            }
+        }
+
+        // 更新导航栏用户信息
+        function updateNavUser(user) {
+            const navUser = document.getElementById('navUser');
+            navUser.innerHTML = `
+                <div class="user-info">
+                    <img src="${user.avatar || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNlZWUiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjEyIiByPSI1IiBmaWxsPSIjOTk5Ii8+PHBhdGggZD0iTTYgMjZjMC01IDQtOSAxMC05czEwIDQgMTAgOSIgZmlsbD0iIzk5OSIvPjwvc3ZnPg=='}"
+                          alt="${user.username}" class="user-avatar">
+                    <span>${user.username}</span>
+                </div>
+                <button class="admin-btn" onclick="showMyPhotos()" style="margin-right: 8px;">我的照片</button>
+                <button class="admin-btn" onclick="logout()">退出</button>
+            `;
+        }
+
+        // 显示需要登录的界面
+        function showLoginRequired() {
+            const uploadStatus = document.getElementById('uploadStatus');
+            if (uploadStatus) {
+                uploadStatus.textContent = '登录后可以上传照片和评论';
+            }
+
+            const photosTitle = document.querySelector('.photos-title');
+            if (photosTitle) {
+                photosTitle.textContent = '附近300米';
+            }
+        }
+
+        // 显示登录模态框
+        function showLoginModal() {
+            document.getElementById('loginModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            showLoginForm(); // 默认显示登录表单
+        }
+
+        // 关闭登录模态框
+        function closeLoginModal() {
+            document.getElementById('loginModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // 显示登录表单
+        function showLoginForm() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('registerForm').style.display = 'none';
+        }
+
+        // 显示注册表单
+        function showRegisterForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+        }
+
+        // GitHub登录
+        async function loginWithGitHub() {
+            try {
+                console.log('GitHub login URL:', `${API_BASE_URL}/api/auth/github`);
+                const response = await fetch(`${API_BASE_URL}/api/auth/github`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 跳转到GitHub OAuth页面（state验证由服务器处理）
+                    window.location.href = data.url;
+                } else {
+                    throw new Error(data.error || '获取GitHub登录链接失败');
+                }
+            } catch (error) {
+                console.error('GitHub登录错误:', error);
+                alert('登录失败，请重试');
+            }
+        }
+
+        // 处理页面加载时的OAuth回调
+        function checkOAuthCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            const error = urlParams.get('error');
+
+            if (error) {
+                console.error('OAuth错误:', error);
+                let errorMsg = '登录失败';
+                switch(error) {
+                    case 'invalid_state':
+                        errorMsg += ': state参数验证失败';
+                        break;
+                    case 'github_auth_failed':
+                        errorMsg += ': GitHub认证失败';
+                        break;
+                    case 'token_generation_failed':
+                        errorMsg += ': 令牌生成失败';
+                        break;
+                    case 'auth_callback_error':
+                        errorMsg += ': 认证回调错误';
+                        break;
+                    default:
+                        errorMsg += ': ' + error;
+                }
+                alert(errorMsg);
+
+                // 清除URL参数
+                window.history.replaceState({}, document.title, window.location.pathname);
+                return;
+            }
+
+            if (token) {
+                console.log('收到OAuth token，自动登录...');
+                // 设置当前用户并清除URL参数
+                setCurrentUserFromToken(token);
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        }
+
+        // 从token设置当前用户
+        async function setCurrentUserFromToken(token) {
+            try {
+                authToken = token;
+                localStorage.setItem('authToken', token);
+
+                // 获取用户信息
+                const response = await fetch(`${API_BASE_URL}/api/auth/verify`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setCurrentUser(data.user, token);
+                    console.log('自动登录成功:', data.user.username);
+                    alert('GitHub登录成功！欢迎 ' + data.user.username);
+                } else {
+                    throw new Error('验证失败');
+                }
+            } catch (error) {
+                console.error('自动登录失败:', error);
+                authToken = null;
+                localStorage.removeItem('authToken');
+                alert('自动登录失败，请重新登录');
+            }
+        }
+
+
+        // 注册
+        async function register() {
+            const username = document.getElementById('registerUsername').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value.trim();
+
+            if (!username || !password) {
+                alert('请输入用户名和密码');
+                return;
+            }
+
+            try {
+                const payload = {
+                    username,
+                    password,
+                    deviceId: getDeviceId()
+                };
+
+                if (email) {
+                    payload.email = email;
+                }
+
+                const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Id': getDeviceId()
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    setCurrentUser(data.user, data.token);
+                    closeLoginModal();
+                    alert('注册成功！');
+                } else {
+                    alert(data.error || '注册失败');
+                }
+            } catch (error) {
+                console.error('注册错误:', error);
+                alert('注册失败，请重试');
+            }
+        }
+
+        // 登录
+        async function login() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+
+            if (!username || !password) {
+                alert('请输入用户名和密码');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Device-Id': getDeviceId()
+                    },
+                    body: JSON.stringify({ username, password, deviceId: getDeviceId() })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    setCurrentUser(data.user, data.token);
+                    closeLoginModal();
+                } else {
+                    alert(data.error || '登录失败');
+                }
+            } catch (error) {
+                console.error('登录错误:', error);
+                alert('登录失败，请重试');
+            }
+        }
+
+
+
+        // 显示我的照片
+        async function showMyPhotos() {
+            if (!currentUser || !authToken) {
+                showLoginModal();
+                return;
+            }
+
+            try {
+                const photosGrid = document.getElementById('photosGrid');
+                if (photosGrid) {
+                    photosGrid.innerHTML = '<div class="empty-state">正在加载我的照片...</div>';
+                }
+
+                const response = await fetch(`${API_BASE_URL}/api/photos/my`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    displayMyPhotos(data);
+                } else {
+                    console.error('获取我的照片失败');
+                    alert('获取照片失败，请重试');
+                }
+            } catch (error) {
+                console.error('获取我的照片错误:', error);
+                alert('获取照片失败，请重试');
+            }
+        }
+
+        // 显示我的照片
+        function displayMyPhotos(data) {
+            const photos = Array.isArray(data?.photos) ? data.photos : [];
+            const missingCount = Number(data?.stats?.missingAssetsInPage) || 0;
+            const photosGrid = document.getElementById('photosGrid');
+            const photosTitle = document.querySelector('.photos-title');
+
+            // 更新标题
+            photosTitle.textContent = '我的照片';
+            isViewingMyPhotos = true;
+
+            // 添加返回按钮
+            const backButton = document.createElement('button');
+            backButton.textContent = '返回地图';
+            backButton.className = 'admin-btn';
+            backButton.style.marginLeft = '10px';
+            backButton.onclick = () => {
+                photosTitle.textContent = '附近300米';
+                backButton.remove();
+                loadNearbyPhotos();
+            };
+
+            // 移除之前的返回按钮
+            const existingBackButton = photosTitle.querySelector('.admin-btn');
+            if (existingBackButton) {
+                existingBackButton.remove();
+            }
+
+            photosTitle.appendChild(backButton);
+
+            if (photos.length === 0) {
+                const message = missingCount > 0
+                    ? '你上传的部分照片原始文件已经丢失，请重新上传这些记忆'
+                    : '你还没有上传任何照片，快去记录你的诗意时刻吧';
+                photosGrid.innerHTML = `<div class="empty-state">${message}</div>`;
+            } else {
+                photosGrid.innerHTML = '';
+
+                if (missingCount > 0) {
+                    const banner = document.createElement('div');
+                    banner.className = 'missing-photo-banner';
+                    banner.textContent = `有 ${missingCount} 张照片的原始文件已经丢失，为避免 404 已为你暂时隐藏，请重新上传这些照片。`;
+                    photosGrid.appendChild(banner);
+                }
+
+                photos.forEach(photo => {
+                    const photoDiv = document.createElement('div');
+                    photoDiv.className = 'photo-item';
+                    photoDiv.onclick = () => openPhotoModal(photo.id);
+
+                    const locationText = photo.locationInfo?.formattedAddress || '未知位置';
+                    const commentCount = Array.isArray(photo.comments) ? photo.comments.length : (Number(photo.comments) || 0);
+
+                    photoDiv.innerHTML = `
+                        <img src="${photo.url}" alt="用户照片">
+                        <div class="photo-marker">${new Date(photo.createdAt).toLocaleDateString()}</div>
+                        <div class="photo-info">
+                            <div class="photo-caption">${photo.caption}</div>
+                            <div class="photo-distance">${commentCount} 条评论 • ${locationText}</div>
+                        </div>
+                    `;
+
+                    if (photo.canDelete) {
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'photo-delete-btn';
+                        deleteBtn.innerHTML = '&times;';
+                        deleteBtn.title = '删除这张照片';
+                        deleteBtn.onclick = event => {
+                            event.stopPropagation();
+                            deletePhoto(photo.id, deleteBtn);
+                        };
+                        photoDiv.appendChild(deleteBtn);
+                    }
+
+                    photosGrid.appendChild(photoDiv);
+                });
+            }
+        }
+
+        // 退出登录
+        function logout() {
+            currentUser = null;
+            authToken = null;
+            localStorage.removeItem('authToken');
+            isViewingMyPhotos = false;
+
+            const navUser = document.getElementById('navUser');
+            navUser.innerHTML = '<button class="admin-btn" onclick="showLoginModal()" id="loginBtn">登录</button>';
+
+            const photosTitle = document.querySelector('.photos-title');
+            const backButton = photosTitle?.querySelector('.admin-btn');
+            if (backButton) {
+                backButton.remove();
+            }
+
+            showLoginRequired();
+
+            if (userLocation) {
+                loadNearbyPhotos();
+            }
+        }
+
+
+        // 初始化地图
+        function initMap() {
+            if (window.mapInitialized) {
+                return;
+            }
+
+            const mapContainer = document.getElementById('map');
+            if (!mapContainer) {
+                console.error('未找到地图容器');
+                return;
+            }
+
+            if (typeof AMap === 'undefined') {
+                console.error('AMap未加载，无法初始化地图');
+                mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:14px;">地图加载失败，请刷新页面重试</div>';
+                return;
+            }
+
+            try {
+                map = new AMap.Map('map', {
+                    zoom: 17,
+                    center: [116.397428, 39.90923],
+                    mapStyle: 'amap://styles/light',
+                    dragEnable: false,
+                    zoomEnable: false,
+                    doubleClickZoom: false,
+                    scrollWheel: false
+                });
+
+                window.mapInitialized = true;
+
+                map.on('complete', function() {
+                    window.mapReady = true;
+                    if (userLocation && window.pendingLocationUpdate) {
+                        updateMapWithLocation();
+                        window.pendingLocationUpdate = false;
+                    }
+                });
+
+                map.on('error', function(error) {
+                    console.error('地图加载出错:', error);
+                    mapContainer.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图加载出错</div>';
+                });
+
+            } catch (error) {
+                console.error('地图初始化异常:', error);
+                mapContainer.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#e74c3c;font-size:14px;">地图初始化失败: ${error.message || error}</div>`;
+            }
+        }
+
+
+
+        // 定位流程（优先高德JS，失败回退IP）
+        async function improvedLocationRequest() {
+            if (currentLocationPromise) {
+                if (!window.amapLoaded) {
+                    pendingAmapRetry = true;
+                }
+                return currentLocationPromise;
+            }
+
+            const statusEl = document.getElementById('status');
+
+            if (location.protocol === 'file:') {
+                statusEl.textContent = '请使用HTTP/HTTPS协议访问此页面，file://协议不支持位置访问';
+                statusEl.className = 'status error';
+                return false;
+            }
+
+            currentLocationPromise = (async () => {
+                let success = false;
+                try {
+                    if (typeof AMap !== 'undefined' && window.amapLoaded) {
+                        pendingAmapRetry = false;
+                        statusEl.textContent = '正在使用高德定位服务...';
+                        statusEl.className = 'status';
+                        try {
+                            success = await amapGeolocationRequest();
+                        } catch (error) {
+                            console.warn('高德定位异常:', error);
+                            success = false;
+                        }
+                    } else {
+                        pendingAmapRetry = true;
+                    }
+
+                    if (!success) {
+                        statusEl.textContent = '定位失败，尝试IP定位...';
+                        statusEl.className = 'status';
+                        success = await ipLocationRequest();
+                    }
+                } finally {
+                    const finalResult = success;
+                    currentLocationPromise = null;
+                    if (!finalResult && pendingAmapRetry && window.amapLoaded && locationSource !== 'amap') {
+                        pendingAmapRetry = false;
+                        setTimeout(() => improvedLocationRequest(), 0);
+                    }
+                }
+                return success;
+            })();
+
+            return currentLocationPromise;
+        }
+
+        // 使用地图JS API定位
+        async function amapGeolocationRequest() {
+            const statusEl = document.getElementById('status');
+
+            if (typeof AMap === 'undefined' || !window.amapLoaded) {
+                console.warn('高德定位插件未就绪，暂不定位');
+                return false;
+            }
+
+            return new Promise(resolve => {
+                let timeoutId;
+                try {
+                    AMap.plugin('AMap.Geolocation', () => {
+                        timeoutId = setTimeout(() => {
+                            console.warn('高德定位超时');
+                            resolve(false);
+                        }, 12000);
+
+                        const geolocation = new AMap.Geolocation({
+                            enableHighAccuracy: true,
+                            timeout: 10000,
+                            convert: true,
+                            showCircle: false,
+                            showButton: false,
+                            positionAccuracy: 'high'
+                        });
+
+                        geolocation.getCurrentPosition(async (status, result) => {
+                            if (status === 'complete' && result && result.position) {
+                                const position = result.position;
+                                const lng = typeof position.getLng === 'function' ? position.getLng() : position.lng;
+                                const lat = typeof position.getLat === 'function' ? position.getLat() : position.lat;
+
+                                if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+                                    console.warn('高德定位返回无效坐标:', result);
+                                    resolve(false);
+                                    return;
+                                }
+
+                                userLocation = {
+                                    lat,
+                                    lng
+                                };
+                                locationSource = 'amap';
+
+                                const rawAccuracy = Number(result.accuracy);
+                                if (Number.isFinite(rawAccuracy) && rawAccuracy > 0) {
+                                    locationAccuracyRadius = Math.max(rawAccuracy, 50);
+                                } else {
+                                    locationAccuracyRadius = 150;
+                                }
+                                const accuracyText = locationAccuracyRadius ? ` (精度约${Math.round(locationAccuracyRadius)}米)` : '';
+
+                                statusEl.textContent = `高德定位成功${accuracyText}`;
+                                statusEl.className = 'status success';
+
+                                try {
+                                    clearTimeout(timeoutId);
+                                    await updateMapWithLocation();
+                                    await updateLocationInfo();
+                                } finally {
+                                    resolve(true);
+                                }
+                            } else {
+                                clearTimeout(timeoutId);
+                                console.warn('高德定位失败:', result);
+                                resolve(false);
+                            }
+                        });
+                    });
+                } catch (error) {
+                    console.error('高德定位调用失败:', error);
+                    if (timeoutId) {
+                        clearTimeout(timeoutId);
+                    }
+                    resolve(false);
+                }
+            });
+        }
+
+        // 更新位置信息显示
+        async function updateLocationInfo() {
+            if (!userLocation) return;
+
+            const locationInfoEl = document.getElementById('locationInfo');
+
+            try {
+                console.log('正在获取详细地址信息...');
+                const response = await fetch(`${API_BASE_URL}/api/location/regeo?lat=${userLocation.lat}&lng=${userLocation.lng}`);
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.address) {
+                        const addr = data.address;
+                        const pois = data.pois || [];
+                        let displayText = '';
+
+                        // 优先显示最近的地标信息（适用于所有定位源）
+                        if (pois.length > 0) {
+                            // 按距离排序，显示最近的地标
+                            pois.sort((a, b) => parseFloat(a.distance || 1000) - parseFloat(b.distance || 1000));
+                            const nearestPoi = pois[0];
+
+                            // 显示地标名称和地址
+                            displayText = nearestPoi.name;
+                            if (nearestPoi.address && nearestPoi.address !== nearestPoi.name) {
+                                displayText += ` (${nearestPoi.address})`;
+                            }
+                        } else {
+                            // 回退到地址显示
+                            let province = addr.province || '';
+                            let city = addr.city || '';
+                            let district = addr.district || '';
+                            let township = addr.township || '';
+                            let street = addr.street || '';
+                            let number = addr.number || '';
+
+                            // 优先级：街道+门牌号 > 乡镇 > 区县 > 省市
+                            if (street && number) {
+                                displayText = `${province} ${city} ${district} ${street}${number}`.trim();
+                            } else if (street) {
+                                displayText = `${province} ${city} ${district} ${street}`.trim();
+                            } else if (township) {
+                                displayText = `${province} ${city} ${district} ${township}`.trim();
+                            } else if (district) {
+                                displayText = `${province} ${city} ${district}`.trim();
+                            } else if (city) {
+                                displayText = `${province} ${city}`.trim();
+                            } else if (province) {
+                                displayText = province;
+                            } else {
+                                displayText = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
+                            }
+                        }
+
+                        locationInfoEl.textContent = displayText;
+                        locationInfoEl.classList.add('show');
+                        console.log('地址信息显示成功:', displayText);
+                    } else {
+                        // 回退到坐标显示
+                        locationInfoEl.textContent = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
+                        locationInfoEl.classList.add('show');
+                        console.log('地址获取失败，使用坐标显示');
+                    }
+                } else {
+                    throw new Error('地址获取失败');
+                }
+            } catch (error) {
+                console.error('获取地址信息失败:', error);
+                // 回退到坐标显示
+                locationInfoEl.textContent = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
+                locationInfoEl.classList.add('show');
+            }
+        }
+
+
+        // 更新地图显示位置
+        async function updateMapWithLocation() {
+            if (!userLocation) return;
+
+            console.log('更新地图位置:', userLocation);
+
+            // 检查地图是否已准备好
+            if (!window.mapReady || !map) {
+                console.log('地图未准备好，等待加载完成...');
+                window.pendingLocationUpdate = true;
+                return;
+            }
+
+            // 更新地图中心
+            if (typeof map.setCenter === 'function') {
+                map.setCenter([userLocation.lng, userLocation.lat]);
+            }
+
+            // 添加用户位置标记
+            addUserLocationMarker();
+
+            // 加载附近照片（游客也可浏览），但在“我的照片”视图保留当前列表
+            if (!isViewingMyPhotos) {
+                await loadNearbyPhotos();
+            }
+        }
+
+        // 获取用户位置（保持向后兼容）
+        function getLocation() {
+            improvedLocationRequest();
+        }
+
+        // 添加用户位置标记
+        function addUserLocationMarker() {
+            if (!userLocation || !map || !window.mapReady) return;
+
+            const accuracyRadius = Number.isFinite(locationAccuracyRadius) ? Math.max(locationAccuracyRadius, 50) : 300;
+
+            if (amapUserMarker) {
+                amapUserMarker.setMap(null);
+            }
+            if (amapAccuracyCircle) {
+                amapAccuracyCircle.setMap(null);
+            }
+
+            let markerIcon;
+            if (locationSource === 'ip') {
+                markerIcon = 'data:image/svg+xml;base64,' + btoa(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+                        <circle cx="10" cy="10" r="8" fill="#F39C12" opacity="0.9"/>
+                        <circle cx="10" cy="10" r="4" fill="#fff"/>
+                        <text x="10" y="14" text-anchor="middle" fill="#F39C12" font-size="10" font-weight="bold">IP</text>
+                    </svg>
+                `);
+            } else if (locationSource === 'gps' || locationSource === 'amap') {
+                markerIcon = 'data:image/svg+xml;base64,' + btoa(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+                        <circle cx="10" cy="10" r="8" fill="#27AE60" opacity="0.9"/>
+                        <circle cx="10" cy="10" r="4" fill="#fff"/>
+                        <circle cx="10" cy="10" r="2" fill="#27AE60"/>
+                    </svg>
+                `);
+            } else {
+                markerIcon = 'data:image/svg+xml;base64,' + btoa(`
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+                        <circle cx="8" cy="8" r="6" fill="#111" opacity="0.8"/>
+                        <circle cx="8" cy="8" r="3" fill="#fff"/>
+                    </svg>
+                `);
+            }
+
+            amapUserMarker = new AMap.Marker({
+                position: [userLocation.lng, userLocation.lat],
+                map: map,
+                icon: new AMap.Icon({
+                    image: markerIcon,
+                    size: new AMap.Size(locationSource ? 20 : 16, locationSource ? 20 : 16)
+                })
+            });
+
+            amapAccuracyCircle = new AMap.Circle({
+                center: [userLocation.lng, userLocation.lat],
+                radius: accuracyRadius,
+                strokeColor: '#111',
+                strokeWeight: 1,
+                strokeOpacity: 0.3,
+                fillColor: '#111',
+                fillOpacity: 0.05,
+                map: map
+            });
+        }
+
+        // 从API加载附近照片
+        async function loadNearbyPhotos() {
+            if (!userLocation) return;
+
+            isViewingMyPhotos = false;
+            const requestId = ++nearbyPhotosRequestId;
+
+            const photosTitle = document.querySelector('.photos-title');
+            if (photosTitle) {
+                photosTitle.textContent = '附近300米';
+                const backButton = photosTitle.querySelector('.admin-btn');
+                if (backButton) {
+                    backButton.remove();
+                }
+            }
+
+            const photosGrid = document.getElementById('photosGrid');
+            if (photosGrid) {
+                photosGrid.innerHTML = '<div class="empty-state">正在加载附近照片...</div>';
+            }
+
+            try {
+                const headers = {};
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+
+                const response = await fetch(`${API_BASE_URL}/api/photos/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=300`, {
+                    headers
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (requestId !== nearbyPhotosRequestId || isViewingMyPhotos) {
+                        return;
+                    }
+
+                    photos = data.photos || [];
+                    displayPhotosOnMap();
+                } else {
+                    console.error('加载附近照片失败');
+                    if (requestId === nearbyPhotosRequestId && !isViewingMyPhotos) {
+                        const grid = document.getElementById('photosGrid');
+                        if (grid) {
+                            grid.innerHTML = '<div class="empty-state">附近照片加载失败，请稍后重试</div>';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('加载照片错误:', error);
+                if (requestId === nearbyPhotosRequestId && !isViewingMyPhotos) {
+                    const grid = document.getElementById('photosGrid');
+                    if (grid) {
+                        grid.innerHTML = '<div class="empty-state">附近照片加载失败，请检查网络</div>';
+                    }
+                }
+            }
+        }
+
+        // 在地图上显示照片
+        function displayPhotosOnMap() {
+            if (!userLocation || !map || !window.mapReady) return;
+
+            const photosGrid = document.getElementById('photosGrid');
+            if (!photosGrid) return;
+            photosGrid.innerHTML = '';
+
+            const locationGroups = {};
+            photos.forEach(photo => {
+                const locationKey = `${Math.round(photo.lat * 1000000)},${Math.round(photo.lng * 1000000)}`;
+                if (!locationGroups[locationKey]) {
+                    locationGroups[locationKey] = [];
+                }
+                locationGroups[locationKey].push(photo);
+            });
+
+            amapPhotoMarkers.forEach(marker => marker.setMap(null));
+            amapPhotoMarkers = [];
+
+            Object.values(locationGroups).forEach(photosAtLocation => {
+                const firstPhoto = photosAtLocation[0];
+                const photoCount = photosAtLocation.length;
+
+                let iconSize;
+                let iconSvg;
+
+                if (photoCount === 1) {
+                    iconSize = 32;
+                    iconSvg = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                            <circle cx="16" cy="16" r="14" fill="white" stroke="#111" stroke-width="2" opacity="0.95"/>
+                            <rect x="11" y="12" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/>
+                            <circle cx="13" cy="14.5" r="1.5" fill="#111"/>
+                            <circle cx="16" cy="14.5" r="1.5" fill="#111"/>
+                        </svg>
+                    `;
+                } else {
+                    iconSize = 36;
+                    iconSvg = `
+                        <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+                            <circle cx="18" cy="18" r="16" fill="white" stroke="#111" stroke-width="2" opacity="0.95"/>
+                            <rect x="13" y="14" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/>
+                            <circle cx="15" cy="16.5" r="1.5" fill="#111"/>
+                            <circle cx="18" cy="16.5" r="1.5" fill="#111"/>
+                            <circle cx="24" cy="12" r="5" fill="#E74C3C" stroke="white" stroke-width="1"/>
+                            <text x="24" y="15" text-anchor="middle" fill="white" font-size="10" font-weight="bold">${photoCount}</text>
+                        </svg>
+                    `;
+                }
+
+                const marker = new AMap.Marker({
+                    position: [firstPhoto.lng, firstPhoto.lat],
+                    map: map,
+                    icon: new AMap.Icon({
+                        image: 'data:image/svg+xml;base64,' + btoa(iconSvg),
+                        size: new AMap.Size(iconSize, iconSize)
+                    })
+                });
+
+                marker.on('click', () => {
+                    if (photoCount === 1) {
+                        openPhotoModal(firstPhoto.id);
+                    } else {
+                        openLocationPhotosModal(photosAtLocation);
+                    }
+                });
+
+                amapPhotoMarkers.push(marker);
+            });
+
+            if (photos.length === 0) {
+                photosGrid.innerHTML = '<div class="empty-state">附近暂时还有没人写诗，成为第一个留下诗的人吧</div>';
+            } else {
+                photos.forEach(photo => {
+                    const photoDiv = document.createElement('div');
+                    photoDiv.className = 'photo-item';
+                    photoDiv.onclick = () => openPhotoModal(photo.id);
+
+                    const commentCount = Array.isArray(photo.comments) ? photo.comments.length : (Number(photo.comments) || 0);
+                    const distanceMeters = Number(photo.distance) || 0;
+                    const username = photo.username || '匿名';
+
+                    photoDiv.innerHTML = `
+                        <img src="${photo.url}" alt="用户照片">
+                        <div class="photo-marker">${distanceMeters}m</div>
+                        <div class="photo-info">
+                            <div class="photo-caption">${photo.caption}</div>
+                            <div class="photo-distance">${commentCount} 条评论 - ${username}</div>
+                        </div>
+                    `;
+
+                    if (photo.canDelete) {
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'photo-delete-btn';
+                        deleteBtn.innerHTML = '&times;';
+                        deleteBtn.title = '删除这张照片';
+                        deleteBtn.onclick = event => {
+                            event.stopPropagation();
+                            deletePhoto(photo.id, deleteBtn);
+                        };
+                        photoDiv.appendChild(deleteBtn);
+                    }
+
+                    photosGrid.appendChild(photoDiv);
+                });
+            }
+        }
+
+
+
+
+        // 计算两点间距离
+        function calculateDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371000;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // 上传照片到API
+        async function uploadPhoto() {
+            if (!currentUser || !authToken) {
+                showLoginModal();
+                return;
+            }
+
+            if (!userLocation) {
+                alert('请先获取位置信息');
+                return;
+            }
+
+            const photoInput = document.getElementById('photoInput');
+            const captionInput = document.getElementById('captionInput');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const uploadStatus = document.getElementById('uploadStatus');
+
+            if (!photoInput.files[0]) {
+                alert('请选择照片');
+                return;
+            }
+
+            if (!captionInput.value.trim()) {
+                alert('请输入留言');
+                return;
+            }
+
+            // 显示上传中状态
+            uploadBtn.textContent = '上传中...';
+            uploadBtn.disabled = true;
+            uploadStatus.textContent = '正在处理照片...';
+
+            try {
+                const file = photoInput.files[0];
+                const caption = captionInput.value.trim();
+
+                // 创建FormData
+                const formData = new FormData();
+                formData.append('photo', file);
+                formData.append('caption', caption);
+                formData.append('userLat', userLocation.lat);
+                formData.append('userLng', userLocation.lng);
+                formData.append('locationSource', locationSource || 'unknown');
+
+                const response = await fetch(`${API_BASE_URL}/api/photos/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // 上传成功
+                    photoInput.value = '';
+                    captionInput.value = '';
+
+                    // 重新加载附近照片
+                    await loadNearbyPhotos();
+
+                    alert('照片上传成功！');
+                } else {
+                    // 处理不同的错误情况
+                    if (data.error && data.error.includes('每日最多只能上传')) {
+                        alert(data.error + '\n\n请明天再来记录更多美好时刻！');
+                    } else {
+                        alert(data.error || '上传失败');
+                    }
+                }
+            } catch (error) {
+                console.error('上传照片错误:', error);
+                alert('上传失败，请重试');
+            } finally {
+                // 恢复按钮状态
+                uploadBtn.textContent = '记录';
+                uploadBtn.disabled = false;
+                uploadStatus.textContent = '点一下开始写诗';
+            }
+        }
+
+        // 文件输入变化处理
+        document.getElementById('photoInput').addEventListener('change', function(e) {
+            const display = document.getElementById('uploadStatus');
+            if (e.target.files[0]) {
+                display.textContent = '已选择: ' + e.target.files[0].name;
+            } else {
+                display.textContent = '点一下开始写诗';
+            }
+        });
+
+        // 从API加载照片详情
+        async function loadPhotoDetails(photoId) {
+            const adminControls = document.getElementById('adminControls');
+            if (adminControls) {
+                adminControls.classList.remove('show');
+            }
+
+            try {
+                const headers = {};
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+
+                const response = await fetch(`${API_BASE_URL}/api/photos/${photoId}`, {
+                    headers
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const photo = data.photo;
+
+                    document.getElementById('modalImage').src = photo.url;
+                    document.getElementById('modalCaption').textContent = photo.caption;
+
+                    // 显示作者信息
+                    document.getElementById('modalAuthorAvatar').src = photo.user.avatar || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiNlZWUiLz48Y2lyY2xlIGN4PSIxNiIgY3k9IjEyIiByPSI1IiBmaWxsPSIjOTk5Ii8+PHBhdGggZD0iTTYgMjZjMC01IDQtOSAxMC05czEwIDQgMTAgOSIgZmlsbD0iIzk5OSIvPjwvc3ZnPg==';
+                    document.getElementById('modalAuthorName').textContent = photo.user.username;
+
+                    // 显示拍摄时间
+                    const photoTime = new Date(photo.createdAt);
+                    document.getElementById('modalPhotoTime').textContent = formatPhotoTime(photoTime);
+
+                    // 显示拍摄地址和地标信息
+                    let locationText = '未知位置';
+                    let landmarkInfo = '';
+
+                    if (photo.locationInfo) {
+                        if (photo.locationInfo.formattedAddress) {
+                            locationText = photo.locationInfo.formattedAddress;
+                        }
+
+                        // 尝试获取地标信息（如果有存储的POI信息）
+                        if (photo.locationInfo.landmark) {
+                            landmarkInfo = photo.locationInfo.landmark;
+                        } else if (photo.locationInfo.nearestPoi) {
+                            landmarkInfo = photo.locationInfo.nearestPoi;
+                        }
+                    }
+
+                    // 组合显示地址和地标信息
+                    let displayLocation = locationText;
+                    if (landmarkInfo && landmarkInfo !== locationText) {
+                        displayLocation = `${landmarkInfo} (${locationText})`;
+                    }
+
+                    document.getElementById('modalPhotoLocation').textContent = displayLocation;
+
+                    loadComments(photo.comments);
+
+                    if (adminControls) {
+                        if (photo.canDelete) {
+                            adminControls.classList.add('show');
+                        } else {
+                            adminControls.classList.remove('show');
+                        }
+                    }
+                } else {
+                    let errorMessage = '加载照片详情失败';
+                    try {
+                        const errorData = await response.json();
+                        if (errorData?.error) {
+                            errorMessage = errorData.error;
+                        }
+                    } catch (parseError) {
+                        // ignore
+                    }
+                    alert(errorMessage);
+                    closeModal();
+                }
+            } catch (error) {
+                console.error('加载照片详情错误:', error);
+                alert('加载照片失败，请稍后重试');
+                closeModal();
+            }
+        }
+
+        // 格式化照片时间显示
+        function formatPhotoTime(date) {
+            const now = new Date();
+            const diff = now - date;
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor(diff / (1000 * 60));
+
+            if (days > 0) {
+                return `${days}天前`;
+            } else if (hours > 0) {
+                return `${hours}小时前`;
+            } else if (minutes > 0) {
+                return `${minutes}分钟前`;
+            } else {
+                return '刚刚';
+            }
+        }
+
+        // 打开照片模态框
+        function openPhotoModal(photoId) {
+            currentPhotoId = photoId;
+            loadPhotoDetails(photoId);
+
+            const commentInput = document.getElementById('commentInput');
+            const commentButton = document.querySelector('.comment-submit');
+
+            if (!currentUser) {
+                if (commentInput) {
+                    commentInput.value = '';
+                    commentInput.placeholder = '登录后才能评论';
+                    commentInput.setAttribute('disabled', 'disabled');
+                }
+                if (commentButton) {
+                    commentButton.disabled = true;
+                    commentButton.textContent = '登录后评论';
+                }
+            } else {
+                if (commentInput) {
+                    commentInput.placeholder = '说点什么...';
+                    commentInput.removeAttribute('disabled');
+                }
+                if (commentButton) {
+                    commentButton.disabled = false;
+                    commentButton.textContent = '说完了';
+                }
+            }
+            
+            document.getElementById('photoModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('photoModal').style.display = 'none';
+            document.getElementById('adminControls').classList.remove('show');
+            document.body.style.overflow = 'auto';
+        }
+
+        // 打开位置照片集合模态框
+        function openLocationPhotosModal(photosAtLocation) {
+            const modal = document.getElementById('locationPhotosModal');
+            const grid = document.getElementById('locationPhotosGrid');
+            
+            grid.innerHTML = '';
+            
+            photosAtLocation.forEach(photo => {
+                const photoDiv = document.createElement('div');
+                photoDiv.className = 'location-photo-item';
+                photoDiv.onclick = () => {
+                    closeLocationModal();
+                    openPhotoModal(photo.id);
+                };
+
+                const commentCount = Array.isArray(photo.comments) ? photo.comments.length : (Number(photo.comments) || 0);
+
+                photoDiv.innerHTML = `
+                    <img src="${photo.url}" alt="用户照片">
+                    <div class="location-photo-info">
+                        <div class="location-photo-caption">${photo.caption}</div>
+                        <div class="location-photo-comments">${commentCount} 条评论</div>
+                    </div>
+                `;
+
+                grid.appendChild(photoDiv);
+            });
+            
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        // 关闭位置照片集合模态框
+        function closeLocationModal() {
+            document.getElementById('locationPhotosModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // 加载评论
+        function loadComments(comments) {
+            const commentsList = document.getElementById('commentsList');
+            commentsList.innerHTML = '';
+
+            if (!comments || comments.length === 0) {
+                commentsList.innerHTML = '<div class="empty-state" style="padding: 20px 0;">暂无评论</div>';
+                return;
+            }
+
+            comments.forEach(comment => {
+                const commentDiv = document.createElement('div');
+                commentDiv.className = 'comment';
+                commentDiv.innerHTML = `
+                    <div class="comment-author">
+                        <img src="${comment.avatar || 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSI+PGNpcmNsZSBjeD0iMTAiIGN5PSIxMCIgcj0iMTAiIGZpbGw9IiNlZWUiLz48Y2lyY2xlIGN4PSIxMCIgY3k9IjgiIHI9IjMiIGZpbGw9IiM5OTkiLz48cGF0aCBkPSJNMCAxOGMwLTQgNC04IDgtOHM4IDQgOCA4IiBmaWxsPSIjOTk5Ii8+PC9zdmc+'}"
+                             alt="${comment.username}" style="width: 20px; height: 20px; border-radius: 50%; margin-right: 8px; vertical-align: middle;">
+                        ${comment.username}
+                    </div>
+                    <div class="comment-text">${comment.text}</div>
+                `;
+                commentsList.appendChild(commentDiv);
+            });
+        }
+
+        // 添加评论到API
+        async function addComment() {
+            if (!currentUser || !authToken) {
+                alert('请先登录');
+                showLoginModal();
+                return;
+            }
+
+            const commentInput = document.getElementById('commentInput');
+            const comment = commentInput.value.trim();
+
+            if (!comment) return;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/photos/${currentPhotoId}/comments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({ comment })
+                });
+
+                if (response.ok) {
+                    commentInput.value = '';
+                    // 重新加载照片详情
+                    loadPhotoDetails(currentPhotoId);
+                } else {
+                    const error = await response.json();
+                    alert(error.error || '评论失败，请重试');
+                }
+            } catch (error) {
+                console.error('添加评论错误:', error);
+                alert('评论失败，请重试');
+            }
+        }
+
+        // 删除照片
+        async function deletePhoto(targetPhotoId, triggerButton) {
+            const actualPhotoId = targetPhotoId || currentPhotoId;
+
+            if (!actualPhotoId) {
+                return;
+            }
+
+            if (!currentUser || !authToken) {
+                alert('请先登录');
+                showLoginModal();
+                return;
+            }
+
+            if (!confirm('确定要删除这张照片吗？')) {
+                return;
+            }
+
+            const deleteButton = triggerButton || document.querySelector('#adminControls .delete-action');
+            const originalButtonText = deleteButton ? deleteButton.textContent : '';
+            if (deleteButton) {
+                deleteButton.disabled = true;
+                if (deleteButton.classList.contains('photo-delete-btn')) {
+                    deleteButton.textContent = '…';
+                } else {
+                    deleteButton.textContent = '正在删除...';
+                }
+            }
+
+            currentPhotoId = actualPhotoId;
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/photos/${actualPhotoId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch (parseError) {
+                    data = {};
+                }
+
+                if (response.ok && data.success) {
+                    closeModal();
+                    currentPhotoId = null;
+                    const deletedId = data.id || actualPhotoId;
+
+                    if (isViewingMyPhotos) {
+                        await showMyPhotos();
+                    } else {
+                        photos = photos.filter(p => p.id !== deletedId);
+                        displayPhotosOnMap();
+                    }
+                } else {
+                    const errorMessage = data.error || '删除失败，请稍后重试';
+                    alert(errorMessage);
+                }
+            } catch (error) {
+                console.error('删除照片错误:', error);
+                alert('删除失败，请稍后重试');
+            } finally {
+                if (deleteButton) {
+                    deleteButton.disabled = false;
+                    if (deleteButton.classList.contains('photo-delete-btn')) {
+                        deleteButton.innerHTML = '&times;';
+                    } else {
+                        deleteButton.textContent = originalButtonText || '从这个次元抹除';
+                    }
+                }
+            }
+        }
+
+        // 修改位置
+        function editLocation() {
+            alert('位置修改功能开发中...');
+        }
+
+        // IP定位作为主要定位方式
+        async function ipLocationRequest() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = '正在尝试IP定位...';
+            statusEl.className = 'status';
+
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const overrideIp = urlParams.get('ip') || urlParams.get('testIp');
+                const query = overrideIp ? `?ip=${encodeURIComponent(overrideIp)}` : '';
+
+                const response = await fetch(`${API_BASE_URL}/api/location/ip${query}`);
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    const errorMessage = data.error || 'IP定位失败';
+                    throw new Error(errorMessage);
+                }
+
+                const { location } = data;
+                locationSource = 'ip';
+
+                if (location && Number.isFinite(location.lat) && Number.isFinite(location.lng)) {
+                    userLocation = {
+                        lat: location.lat,
+                        lng: location.lng
+                    };
+                } else {
+                    // 退化到北京天安门坐标，避免出现空位置
+                    userLocation = {
+                        lat: 39.908823,
+                        lng: 116.397470
+                    };
+                }
+
+                const ipAccuracy = Number(location?.accuracyRadiusMeters);
+                if (Number.isFinite(ipAccuracy) && ipAccuracy > 0) {
+                    locationAccuracyRadius = ipAccuracy;
+                } else {
+                    locationAccuracyRadius = 2000;
+                }
+
+                const locationParts = [location?.province, location?.city].filter(Boolean).join(' ');
+
+                let accuracyText = '';
+                if (Number.isFinite(locationAccuracyRadius)) {
+                    const distance = locationAccuracyRadius;
+                    if (distance >= 1000) {
+                        accuracyText = ` • 约${(distance / 1000).toFixed(1)}公里范围`;
+                    } else if (distance > 0) {
+                        accuracyText = ` • 约${distance}米范围`;
+                    }
+                }
+
+                const displayText = locationParts || '未知区域';
+                statusEl.textContent = `IP定位成功: ${displayText}${accuracyText}`;
+                statusEl.className = 'status success';
+
+                await updateMapWithLocation();
+                await updateLocationInfo();
+
+                return true;
+            } catch (error) {
+                console.error('IP定位错误:', error);
+                statusEl.textContent = `IP定位失败: ${error.message}`;
+                statusEl.className = 'status error';
+                return false;
+            }
+        }
+
+        // 测试定位功能（使用模拟位置）
+        function testLocation() {
+            if (!map || !window.mapReady) {
+                console.error('地图未准备好，无法测试定位');
+                return;
+            }
+
+            const statusEl = document.getElementById('status');
+
+            // 使用北京天安门坐标作为测试位置
+            userLocation = {
+                lat: 39.908823,
+                lng: 116.397470
+            };
+
+            locationSource = 'gps';
+            locationAccuracyRadius = 100;
+
+            console.log('使用测试位置:', userLocation);
+
+            updateMapWithLocation();
+
+            statusEl.textContent = `测试位置已设置 (${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)})`;
+            statusEl.className = 'status success';
+            
+            if (currentUser) {
+                loadNearbyPhotos();
+            }
+        }
+
+
+
+        // 回车键提交评论
+        document.getElementById('commentInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addComment();
+            }
+        });
+
+        // 点击模态框外部关闭
+        document.getElementById('photoModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        document.getElementById('locationPhotosModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeLocationModal();
+            }
+        });
+
+        document.getElementById('loginModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeLoginModal();
+            }
+        });
+    </script>
+</body>
+</html>

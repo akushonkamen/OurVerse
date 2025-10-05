@@ -1,2 +1,17 @@
 .vercel
 .env*.local
+
+# Node workspaces
+node_modules/
+npm-debug.log*
+
+# Backend runtime data
+backend/node_modules/
+backend/logs/
+backend/uploads/
+backend/storage/
+backend/.env
+
+# IDE and system files
+.DS_Store
+Thumbs.db
