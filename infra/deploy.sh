@@ -29,11 +29,46 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# 工具函数
+escape_sed() {
+    printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
+get_env_value() {
+    local key="$1"
+    if [ -f "$ENV_FILE" ]; then
+        grep -E "^${key}=" "$ENV_FILE" | tail -n1 | cut -d= -f2-
+    fi
+}
+
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local escaped_value
+    escaped_value=$(escape_sed "$value")
+
+    if grep -q "^${key}=" "$ENV_FILE"; then
+        sed -i.bak "s|^${key}=.*|${key}=${escaped_value}|" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    fi
+}
+
+ensure_env_default() {
+    local key="$1"
+    local default_value="$2"
+    local current
+    current=$(get_env_value "$key")
+    if [ -z "$current" ]; then
+        set_env_value "$key" "$default_value"
+    fi
+}
+
 # 检查必要工具
 check_requirements() {
     echo -e "${YELLOW}🔍 检查系统要求...${NC}"
     
-    local requirements=("docker" "node" "npm")
+    local requirements=("docker" "node" "npm" "openssl")
     for req in "${requirements[@]}"; do
         if ! command -v "$req" &> /dev/null; then
             echo -e "${RED}❌ 缺少 $req，请先安装${NC}"
@@ -57,17 +92,75 @@ setup_environment() {
             exit 1
         fi
     fi
+
+    ensure_env_default "MONGO_USERNAME" "ourverse"
+    ensure_env_default "MONGO_PASSWORD" "ourverse"
+    ensure_env_default "MONGO_PORT" "27017"
+    ensure_env_default "MONGO_INITDB_DATABASE" "ourverse"
+    ensure_env_default "APP_PORT" "3000"
+
+    local app_port
+    app_port=$(get_env_value "APP_PORT")
+    if [ -z "$app_port" ]; then
+        app_port="3000"
+    fi
+
+    if [ -z "$(get_env_value "PORT")" ]; then
+        set_env_value "PORT" "$app_port"
+    fi
+
+    ensure_env_default "UPLOADS_DIR" "uploads"
+
+    local default_origin="http://localhost:${app_port}"
+    if [ -z "$(get_env_value "ALLOWED_ORIGINS")" ]; then
+        set_env_value "ALLOWED_ORIGINS" "$default_origin"
+    fi
+    if [ -z "$(get_env_value "FRONTEND_URL")" ]; then
+        set_env_value "FRONTEND_URL" "$default_origin"
+    fi
+
+    local mongo_username mongo_password mongo_database
+    mongo_username=$(get_env_value "MONGO_USERNAME")
+    mongo_password=$(get_env_value "MONGO_PASSWORD")
+    mongo_database=$(get_env_value "MONGO_INITDB_DATABASE")
+
+    if [ -z "$mongo_username" ]; then
+        mongo_username="ourverse"
+    fi
+    if [ -z "$mongo_password" ]; then
+        mongo_password="ourverse"
+    fi
+    if [ -z "$mongo_database" ]; then
+        mongo_database="ourverse"
+    fi
+
+    local default_uri="mongodb://${mongo_username}:${mongo_password}@mongodb:27017/${mongo_database}?authSource=admin"
+    ensure_env_default "MONGODB_URI" "$default_uri"
     
     # 生成强密码JWT密钥
     if ! grep -q "^JWT_SECRET=.*[a-zA-Z0-9]\{32\}" "$ENV_FILE"; then
         local jwt_secret=$(openssl rand -hex 32)
         if grep -q '^JWT_SECRET=' "$ENV_FILE"; then
-            sed -i.bak "s#^JWT_SECRET=.*#JWT_SECRET=$jwt_secret#" "$ENV_FILE"
+            set_env_value "JWT_SECRET" "$jwt_secret"
         else
-            echo "JWT_SECRET=$jwt_secret" >> "$ENV_FILE"
+            set_env_value "JWT_SECRET" "$jwt_secret"
         fi
         echo -e "${GREEN}✅ 已生成安全的JWT密钥${NC}"
     fi
+
+    local jwt_secret_value
+    jwt_secret_value=$(get_env_value "JWT_SECRET")
+    if [ -z "$jwt_secret_value" ]; then
+        jwt_secret_value=$(openssl rand -hex 32)
+        set_env_value "JWT_SECRET" "$jwt_secret_value"
+    fi
+
+    if [ -z "$(get_env_value "SESSION_SECRET")" ]; then
+        set_env_value "SESSION_SECRET" "$jwt_secret_value"
+        echo -e "${GREEN}✅ SESSION_SECRET 已同步为 JWT_SECRET${NC}"
+    fi
+
+    rm -f "$ENV_FILE.bak"
 }
 
 # 构建应用
@@ -131,18 +224,19 @@ health_check() {
 
 # 部署完成信息
 deployment_info() {
-    local app_port=${DOCKER_APP_PORT:-3000}
-    local nginx_http_port=${DOCKER_NGINX_HTTP_PORT:-80}
-    local nginx_https_port=${DOCKER_NGINX_HTTPS_PORT:-443}
+    local app_port=$(get_env_value "APP_PORT")
+    local mongo_port=$(get_env_value "MONGO_PORT")
     local domain=${DOMAIN:-your-domain.com}
     local protocol=${PROTOCOL:-https}
+    local mongo_username=$(get_env_value "MONGO_USERNAME")
+    local mongo_password=$(get_env_value "MONGO_PASSWORD")
+    local mongo_database=$(get_env_value "MONGO_INITDB_DATABASE")
 
     echo -e "${GREEN}🎉 部署完成！${NC}"
     echo ""
     echo -e "${GREEN}📍 访问地址:${NC}"
-    echo -e "   本地访问: http://localhost:${nginx_http_port}"
-    echo -e "   HTTPS访问: ${protocol}://${domain}:${nginx_https_port}"
-    echo -e "   API地址: http://localhost:${app_port}"
+    echo -e "   API: http://localhost:${app_port}"
+    echo -e "   生产可配置: ${protocol}://${domain}:${app_port}"
     echo ""
     echo -e "${YELLOW}🔧 GitHub OAuth配置说明:${NC}"
     echo -e "   1. 在GitHub上创建OAuth应用"
@@ -150,8 +244,9 @@ deployment_info() {
     echo -e "   3. Authorization callback URL: ${protocol}://${domain}/api/auth/github/callback"
     echo -e "   4. 更新.env文件中的DOMAIN、PROTOCOL和GITHUB_CALLBACK_URL"
     echo ""
-    echo -e "${GREEN}📱 移动端访问:${NC}"
-    echo -e "   ${protocol}://${domain}:${nginx_https_port}"
+    echo -e "${GREEN}🍃 MongoDB 连接信息:${NC}"
+    echo -e "   URI: mongodb://${mongo_username}:${mongo_password}@localhost:${mongo_port}/${mongo_database}?authSource=admin"
+    echo -e "   远程容器: mongodb://$mongo_username:$mongo_password@mongodb:27017/${mongo_database}?authSource=admin"
     echo ""
     echo -e "${GREEN}🛠️  常用命令:${NC}"
     echo -e "   查看日志: $COMPOSE_BIN logs -f"
