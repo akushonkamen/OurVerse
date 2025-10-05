@@ -8,6 +8,22 @@ const { getClientIp, getDeviceFingerprint } = require('../utils/request-utils');
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const isDuplicateDeviceIdError = error => (
+  error?.code === 11000
+  && (
+    error.keyPattern?.registrationDeviceId
+    || (typeof error.message === 'string' && error.message.includes('registrationDeviceId'))
+  )
+);
+
+const isDuplicateEmailError = error => (
+  error?.code === 11000
+  && (
+    error.keyPattern?.email
+    || (typeof error.message === 'string' && error.message.includes('email_1'))
+  )
+);
+
 const register = async (req, res) => {
   try {
     const usernameInput = (req.body.username || '').trim();
@@ -64,7 +80,23 @@ const register = async (req, res) => {
     }
 
     const user = new User(userData);
-    await user.save();
+    const originalDeviceId = userData.registrationDeviceId;
+
+    try {
+      await user.save();
+    } catch (error) {
+      if (isDuplicateDeviceIdError(error) && originalDeviceId) {
+        console.warn('Duplicate registrationDeviceId detected, regenerating identifier', {
+          username: usernameInput,
+          deviceId: originalDeviceId
+        });
+
+        user.registrationDeviceId = `${originalDeviceId}::${crypto.randomUUID()}`;
+        await user.save();
+      } else {
+        throw error;
+      }
+    }
 
     const token = jwt.sign({ userId: user._id }, config.jwtSecret, { expiresIn: '7d' });
 
@@ -86,13 +118,13 @@ const register = async (req, res) => {
       const keyPattern = error.keyPattern || {};
       const message = error.message || '';
 
-      if (keyPattern.registrationDeviceId || message.includes('registrationDeviceId')) {
+      if (isDuplicateDeviceIdError(error)) {
         return res.status(400).json({ error: '该设备已注册账号，请使用已有账号登录' });
       }
       if (keyPattern.username || message.includes('username_1')) {
         return res.status(400).json({ error: '用户名已被注册' });
       }
-      if (keyPattern.email || message.includes('email_1')) {
+      if (isDuplicateEmailError(error)) {
         return res.status(400).json({ error: '邮箱已被注册' });
       }
       if (keyPattern.githubId || message.includes('githubId')) {
