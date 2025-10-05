@@ -16,6 +16,7 @@ SERVICE_FILE="/etc/systemd/system/ourverse.service"
 UPLOADS_DIR="$REPO_ROOT/backend/uploads"
 LOGS_DIR="$REPO_ROOT/backend/logs"
 ORIGINAL_USER="${SUDO_USER:-root}"
+BACKEND_ENV="$REPO_ROOT/backend/.env"
 
 log() {
     local level="$1"; shift
@@ -31,6 +32,16 @@ require_file() {
 }
 
 require_file "$COMPOSE_FILE"
+require_file "$BACKEND_ENV"
+
+get_env_value_from_file() {
+    local file="$1" key="$2"
+    grep -E "^${key}=" "$file" | tail -n1 | cut -d= -f2-
+}
+
+to_lower() {
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]'
+}
 
 detect_os() {
     if [ -f /etc/os-release ]; then
@@ -115,43 +126,6 @@ ensure_compose_command() {
     fi
 }
 
-prompt_value() {
-    local prompt="$1"; local default="$2"; local allow_empty="${3:-false}"; local value
-    while true; do
-        read -r -p "$prompt [$default]: " value || value=""
-        if [ -z "$value" ]; then
-            value="$default"
-        fi
-        if [ "$allow_empty" = "true" ] || [ -n "$value" ]; then
-            printf '%s' "$value"
-            return
-        fi
-    done
-}
-
-prompt_sensitive() {
-    local prompt="$1"; local default="$2"; local value
-    read -r -s -p "$prompt [$default]: " value || value=""
-    printf '\n'
-    if [ -z "$value" ]; then
-        value="$default"
-    fi
-    printf '%s' "$value"
-}
-
-fetch_default_domain() {
-    local ip
-    ip=$(curl -fsSL http://100.100.100.200/latest/meta-data/public-ipv4 2>/dev/null || true)
-    if [ -z "$ip" ]; then
-        ip=$(curl -fsSL https://api.ipify.org 2>/dev/null || true)
-    fi
-    if [ -n "$ip" ]; then
-        printf '%s' "$ip"
-    else
-        printf '%s' "localhost"
-    fi
-}
-
 prepare_directories() {
     mkdir -p "$UPLOADS_DIR" "$LOGS_DIR"
     if [ "$ORIGINAL_USER" != "root" ]; then
@@ -159,77 +133,97 @@ prepare_directories() {
     fi
 }
 
-create_env_file() {
-    local default_domain default_protocol app_port domain protocol mongo_user mongo_pass_default mongo_pass mongo_db mongo_port jwt_secret session_secret daily_limit max_distance amap_web amap_rest amap_code github_id github_secret github_token allowed_origins frontend_url custom_callback
+set_env_value() {
+    local file="$1" key="$2" value="$3"
+    local escaped
+    escaped=$(printf '%s' "$value" | sed 's/[\\/&]/\\&/g')
+    if grep -q "^${key}=" "$file"; then
+        sed -i.bak "s|^${key}=.*|${key}=${escaped}|" "$file"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$file"
+    fi
+}
 
-    default_domain=$(fetch_default_domain)
-    default_protocol="https"
-    if [ "$default_domain" = "localhost" ]; then
-        default_protocol="http"
+create_env_file() {
+    log 信息 "复制本地 backend/.env 配置"
+    cp "$BACKEND_ENV" "$ENV_FILE"
+
+    local app_port
+    app_port=$(get_env_value_from_file "$ENV_FILE" "PORT")
+    [ -z "$app_port" ] && app_port="3000"
+
+    local protocol
+    protocol=$(get_env_value_from_file "$ENV_FILE" "PROTOCOL")
+    [ -z "$protocol" ] && protocol="http"
+
+    local domain
+    domain=$(get_env_value_from_file "$ENV_FILE" "DOMAIN")
+    [ -z "$domain" ] && domain="localhost"
+
+    local frontend_url
+    frontend_url=$(get_env_value_from_file "$ENV_FILE" "FRONTEND_URL")
+    if [ -z "$frontend_url" ]; then
+        frontend_url="$protocol://$domain"
     fi
 
-    log 信息 "配置环境变量 (.env)"
-    app_port=$(prompt_value "应用访问端口" "3000")
-    domain=$(prompt_value "公网访问域名或IP" "$default_domain")
-    protocol=$(prompt_value "访问协议 (http/https)" "$default_protocol")
+    local allowed_origins
+    allowed_origins=$(get_env_value_from_file "$ENV_FILE" "ALLOWED_ORIGINS")
+    if [ -z "$allowed_origins" ]; then
+        allowed_origins=$(get_env_value_from_file "$ENV_FILE" "CORS_ORIGIN")
+    fi
+    if [ -z "$allowed_origins" ]; then
+        allowed_origins="$frontend_url"
+    fi
 
-    mongo_user=$(prompt_value "MongoDB 管理员用户名" "ourverse")
-    mongo_pass_default="$(openssl rand -hex 12)"
-    mongo_pass=$(prompt_sensitive "MongoDB 管理员密码" "$mongo_pass_default")
-    mongo_db=$(prompt_value "MongoDB 数据库" "ourverse")
-    mongo_port=$(prompt_value "MongoDB 暴露端口" "27017")
+    local raw_mongo_uri
+    raw_mongo_uri=$(get_env_value_from_file "$ENV_FILE" "MONGODB_URI")
 
-    jwt_secret="$(openssl rand -hex 32)"
-    session_secret="$(openssl rand -hex 32)"
+    local mongo_db mongo_user mongo_pass mongo_port
+    mongo_port=$(get_env_value_from_file "$ENV_FILE" "MONGO_PORT")
+    [ -z "$mongo_port" ] && mongo_port="27017"
 
-    daily_limit=$(prompt_value "每日上传次数限制" "5")
-    max_distance=$(prompt_value "最大距离验证 (km)" "50")
+    if [ -n "$raw_mongo_uri" ]; then
+        mongo_db=${raw_mongo_uri##*/}
+        mongo_db=${mongo_db%%\?*}
+        if [[ "$raw_mongo_uri" =~ mongodb://([^:@/]+):([^@/]+)@ ]]; then
+            mongo_user="${BASH_REMATCH[1]}"
+            mongo_pass="${BASH_REMATCH[2]}"
+        fi
+    fi
 
-    amap_web=$(prompt_value "高德 Web 服务 key (可留空)" "" true)
-    amap_rest=$(prompt_value "高德 REST key (可留空)" "" true)
-    amap_code=$(prompt_value "高德安全码 (可留空)" "" true)
+    [ -z "$mongo_db" ] && mongo_db=$(get_env_value_from_file "$ENV_FILE" "MONGO_INITDB_DATABASE")
+    [ -z "$mongo_db" ] && mongo_db="ourverse"
+    [ -z "$mongo_user" ] && mongo_user=$(get_env_value_from_file "$ENV_FILE" "MONGO_USERNAME")
+    [ -z "$mongo_pass" ] && mongo_pass=$(get_env_value_from_file "$ENV_FILE" "MONGO_PASSWORD")
+    [ -z "$mongo_user" ] && mongo_user="ourverse"
+    [ -z "$mongo_pass" ] && mongo_pass="ourverse"
 
-    github_id=$(prompt_value "GitHub OAuth Client ID (可留空)" "" true)
-    github_secret=$(prompt_sensitive "GitHub OAuth Client Secret (可留空)" "")
-    github_token=$(prompt_sensitive "GitHub Personal Access Token (可留空)" "")
+    local container_mongo_uri="mongodb://${mongo_user}:${mongo_pass}@mongodb:27017/${mongo_db}?authSource=admin"
 
-    allowed_origins=$(prompt_value "后端允许的跨域来源" "$protocol://$domain")
-    frontend_url=$(prompt_value "前端应用地址" "$protocol://$domain")
-    custom_callback=$(prompt_value "GitHub OAuth 回调地址" "$protocol://$domain/api/auth/github/callback")
+    set_env_value "$ENV_FILE" "NODE_ENV" "production"
+    set_env_value "$ENV_FILE" "HOST" "0.0.0.0"
+    set_env_value "$ENV_FILE" "PORT" "$app_port"
+    set_env_value "$ENV_FILE" "APP_PORT" "$app_port"
+    set_env_value "$ENV_FILE" "ALLOWED_ORIGINS" "$allowed_origins"
+    set_env_value "$ENV_FILE" "FRONTEND_URL" "$frontend_url"
+    set_env_value "$ENV_FILE" "PROTOCOL" "$protocol"
+    set_env_value "$ENV_FILE" "DOMAIN" "$domain"
+    set_env_value "$ENV_FILE" "UPLOADS_DIR" "uploads"
+    set_env_value "$ENV_FILE" "MONGO_USERNAME" "$mongo_user"
+    set_env_value "$ENV_FILE" "MONGO_PASSWORD" "$mongo_pass"
+    set_env_value "$ENV_FILE" "MONGO_PORT" "$mongo_port"
+    set_env_value "$ENV_FILE" "MONGO_INITDB_DATABASE" "$mongo_db"
+    set_env_value "$ENV_FILE" "MONGODB_URI_ORIGINAL" "$raw_mongo_uri"
+    set_env_value "$ENV_FILE" "MONGODB_URI" "$container_mongo_uri"
 
-    cat > "$ENV_FILE" <<EOENV
-NODE_ENV=production
-HOST=0.0.0.0
-PORT=$app_port
-APP_PORT=$app_port
+    if ! grep -q "^SESSION_SECRET=" "$ENV_FILE" || [ -z "$(get_env_value_from_file "$ENV_FILE" "SESSION_SECRET")" ]; then
+        local jwt_secret
+        jwt_secret=$(get_env_value_from_file "$ENV_FILE" "JWT_SECRET")
+        [ -z "$jwt_secret" ] && jwt_secret=$(openssl rand -hex 32)
+        set_env_value "$ENV_FILE" "SESSION_SECRET" "$jwt_secret"
+    fi
 
-MONGO_USERNAME=$mongo_user
-MONGO_PASSWORD=$mongo_pass
-MONGO_PORT=$mongo_port
-MONGO_INITDB_DATABASE=$mongo_db
-MONGODB_URI=mongodb://$mongo_user:$mongo_pass@mongodb:27017/$mongo_db?authSource=admin
-
-JWT_SECRET=$jwt_secret
-SESSION_SECRET=$session_secret
-
-ALLOWED_ORIGINS=$allowed_origins
-FRONTEND_URL=$frontend_url
-UPLOADS_DIR=uploads
-DAILY_UPLOAD_LIMIT=$daily_limit
-MAX_DISTANCE_VERIFICATION=$max_distance
-BCRYPT_SALT_ROUNDS=10
-
-AMAP_WEB_API_KEY=$amap_web
-AMAP_REST_API_KEY=$amap_rest
-AMAP_SECURITY_CODE=$amap_code
-GITHUB_CLIENT_ID=$github_id
-GITHUB_CLIENT_SECRET=$github_secret
-GITHUB_CALLBACK_URL=$custom_callback
-GITHUB_TOKEN=$github_token
-PROTOCOL=$protocol
-DOMAIN=$domain
-EOENV
-
+    rm -f "$ENV_FILE.bak"
     chmod 640 "$ENV_FILE"
     if [ "$ORIGINAL_USER" != "root" ]; then
         chown "$ORIGINAL_USER":"$ORIGINAL_USER" "$ENV_FILE"
