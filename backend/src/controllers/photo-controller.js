@@ -116,15 +116,17 @@ const uploadPhoto = async (req, res) => {
       if (distanceToUser > config.maxDistanceVerification) {
         return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
       }
-    } else if (locationSource === 'gps' || locationSource === 'amap') {
+    } else if (locationSource === 'amap') {
+      // 只接受高德地图定位
       if (!hasUserCoords) {
-        return res.status(400).json({ error: '缺少当前位置坐标，无法记录照片位置' });
+        return res.status(400).json({ error: '请使用高德地图定位服务获取位置信息' });
       }
       photoLat = parsedUserLat;
       photoLng = parsedUserLng;
       distanceToUser = 0;
     } else {
-      return res.status(400).json({ error: '为了确保照片真实性，请使用GPS定位后再上传照片，或选择包含位置信息的照片' });
+      // 不允许任何降级处理，必须使用高德地图定位
+      return res.status(400).json({ error: '必须使用高德地图定位服务，请刷新页面重试' });
     }
 
     if (!Number.isFinite(photoLat) || !Number.isFinite(photoLng)) {

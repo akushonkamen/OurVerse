@@ -6,13 +6,15 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "tunnel": "node scripts/start-ngrok.js",
-    "normalize:uploads": "node scripts/normalise-uploads.js"
+    "normalize:uploads": "node scripts/normalise-uploads.js",
+    "stop": "pkill -f 'node server.js' || true",
+    "restart": "npm run stop && sleep 2 && npm start"
   },
   "dependencies": {
     "axios": "^1.12.2",
     "bcrypt": "^6.0.0",
     "compression": "^1.7.4",
+    "connect-mongo": "^5.1.0",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "exif-parser": "^0.1.12",

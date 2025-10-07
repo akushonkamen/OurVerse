@@ -918,7 +918,7 @@
 
     <div class="container">
         <div class="status" id="status">
-            正在获取位置信息...
+            正在准备施法定位...
             <br>
             <button onclick="improvedLocationRequest()" style="margin-top: 10px; padding: 8px 16px; background: #111; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-right: 10px;">手动定位</button>
             <button onclick="testLocation()" style="margin-top: 10px; padding: 8px 16px; background: #666; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">测试定位</button>
@@ -926,7 +926,7 @@
 
         <div class="map-container">
             <div id="map"></div>
-            <div class="location-info" id="locationInfo">正在获取位置信息...</div>
+            <div class="location-info" id="locationInfo">正在施法获取位置信息...</div>
         </div>
 
         <div class="upload-section">
@@ -1063,7 +1063,7 @@
         let isAdmin = false;
         let currentUser = null;
         let authToken = null;
-        let locationSource = null; // 'amap', 'gps', 'ip', or null
+        let locationSource = null; // 'amap' only
         let locationAccuracyRadius = null;
         let currentLocationPromise = null;
         let pendingAmapRetry = false;
@@ -1113,6 +1113,15 @@
             // 生产环境从当前域名构造
             return `${window.location.protocol}//${window.location.host}`;
         }
+
+// 生产环境强制HTTPS重定向
+if (window.location.hostname === 'www.our-verse.com' && window.location.protocol === 'http:') {
+    console.log('生产环境检测到HTTP访问，重定向到HTTPS...');
+    window.location.href = 'https://' + window.location.host + window.location.pathname + window.location.search;
+}
+
+// 统一使用高德地图定位
+console.log('所有浏览器统一使用高德地图定位服务');
 
 const API_BASE_URL = getApiBaseUrl();
 window.API_BASE_URL = API_BASE_URL;
@@ -1232,7 +1241,7 @@ function getDeviceId() {
 
             const photosGrid = document.getElementById('photosGrid');
             if (photosGrid) {
-                photosGrid.innerHTML = '<div class="empty-state">正在加载附近照片...</div>';
+                photosGrid.innerHTML = '<div class="empty-state">正在搜罗附近的诗...</div>';
             }
 
             const uploadStatus = document.getElementById('uploadStatus');
@@ -1480,7 +1489,7 @@ function getDeviceId() {
             try {
                 const photosGrid = document.getElementById('photosGrid');
                 if (photosGrid) {
-                    photosGrid.innerHTML = '<div class="empty-state">正在加载我的照片...</div>';
+                    photosGrid.innerHTML = '<div class="empty-state">正在从我的库存里找诗...</div>';
                 }
 
                 const response = await fetch(`${API_BASE_URL}/api/photos/my`, {
@@ -1657,7 +1666,7 @@ function getDeviceId() {
 
 
 
-        // 定位流程（优先高德JS，失败回退IP）
+        // 统一使用高德地图定位
         async function improvedLocationRequest() {
             if (currentLocationPromise) {
                 if (!window.amapLoaded) {
@@ -1676,33 +1685,30 @@ function getDeviceId() {
 
             currentLocationPromise = (async () => {
                 let success = false;
+
+                // 只使用高德地图定位
                 try {
                     if (typeof AMap !== 'undefined' && window.amapLoaded) {
                         pendingAmapRetry = false;
-                        statusEl.textContent = '正在使用高德定位服务...';
+                        statusEl.textContent = '正在施法确定你的位置...';
                         statusEl.className = 'status';
-                        try {
-                            success = await amapGeolocationRequest();
-                        } catch (error) {
-                            console.warn('高德定位异常:', error);
-                            success = false;
-                        }
+                        success = await amapGeolocationRequest();
                     } else {
                         pendingAmapRetry = true;
-                    }
-
-                    if (!success) {
-                        statusEl.textContent = '定位失败，尝试IP定位...';
+                        statusEl.textContent = '等待高德地图加载...';
                         statusEl.className = 'status';
-                        success = await ipLocationRequest();
                     }
-                } finally {
-                    const finalResult = success;
-                    currentLocationPromise = null;
-                    if (!finalResult && pendingAmapRetry && window.amapLoaded && locationSource !== 'amap') {
-                        pendingAmapRetry = false;
-                        setTimeout(() => improvedLocationRequest(), 0);
-                    }
+                } catch (error) {
+                    console.warn('地图魔法异常:', error);
+                    statusEl.textContent = '地图魔法暂时不可用';
+                    statusEl.className = 'status error';
+                }
+
+                const finalResult = success;
+                currentLocationPromise = null;
+                if (!finalResult && pendingAmapRetry && window.amapLoaded && locationSource !== 'amap') {
+                    pendingAmapRetry = false;
+                    setTimeout(() => improvedLocationRequest(), 0);
                 }
                 return success;
             })();
@@ -1715,7 +1721,7 @@ function getDeviceId() {
             const statusEl = document.getElementById('status');
 
             if (typeof AMap === 'undefined' || !window.amapLoaded) {
-                console.warn('高德定位插件未就绪，暂不定位');
+                console.warn('地图魔法未就绪，暂不定位');
                 return false;
             }
 
@@ -1724,7 +1730,7 @@ function getDeviceId() {
                 try {
                     AMap.plugin('AMap.Geolocation', () => {
                         timeoutId = setTimeout(() => {
-                            console.warn('高德定位超时');
+                            console.warn('地图魔法施法超时');
                             resolve(false);
                         }, 12000);
 
@@ -1744,7 +1750,7 @@ function getDeviceId() {
                                 const lat = typeof position.getLat === 'function' ? position.getLat() : position.lat;
 
                                 if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-                                    console.warn('高德定位返回无效坐标:', result);
+                                    console.warn('地图魔法失灵了，返回无效坐标:', result);
                                     resolve(false);
                                     return;
                                 }
@@ -1763,7 +1769,7 @@ function getDeviceId() {
                                 }
                                 const accuracyText = locationAccuracyRadius ? ` (精度约${Math.round(locationAccuracyRadius)}米)` : '';
 
-                                statusEl.textContent = `高德定位成功${accuracyText}`;
+                                statusEl.textContent = `地图魔法施法成功，找到你了${accuracyText}`;
                                 statusEl.className = 'status success';
 
                                 try {
@@ -1775,13 +1781,13 @@ function getDeviceId() {
                                 }
                             } else {
                                 clearTimeout(timeoutId);
-                                console.warn('高德定位失败:', result);
+                                console.warn('地图魔法施法失败:', result);
                                 resolve(false);
                             }
                         });
                     });
                 } catch (error) {
-                    console.error('高德定位调用失败:', error);
+                    console.error('地图魔法施法失败:', error);
                     if (timeoutId) {
                         clearTimeout(timeoutId);
                     }
@@ -1797,7 +1803,7 @@ function getDeviceId() {
             const locationInfoEl = document.getElementById('locationInfo');
 
             try {
-                console.log('正在获取详细地址信息...');
+                console.log('正在施法获取详细地址信息...');
                 const response = await fetch(`${API_BASE_URL}/api/location/regeo?lat=${userLocation.lat}&lng=${userLocation.lng}`);
 
                 if (response.ok) {
@@ -1920,7 +1926,7 @@ function getDeviceId() {
                         <text x="10" y="14" text-anchor="middle" fill="#F39C12" font-size="10" font-weight="bold">IP</text>
                     </svg>
                 `);
-            } else if (locationSource === 'gps' || locationSource === 'amap') {
+            } else if (locationSource === 'amap') {
                 markerIcon = 'data:image/svg+xml;base64,' + btoa(`
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
                         <circle cx="10" cy="10" r="8" fill="#27AE60" opacity="0.9"/>
@@ -1976,7 +1982,7 @@ function getDeviceId() {
 
             const photosGrid = document.getElementById('photosGrid');
             if (photosGrid) {
-                photosGrid.innerHTML = '<div class="empty-state">正在加载附近照片...</div>';
+                photosGrid.innerHTML = '<div class="empty-state">正在搜罗附近的诗...</div>';
             }
 
             try {
@@ -2171,7 +2177,7 @@ function getDeviceId() {
             // 显示上传中状态
             uploadBtn.textContent = '上传中...';
             uploadBtn.disabled = true;
-            uploadStatus.textContent = '正在处理照片...';
+            uploadStatus.textContent = '正在烹饪诗句...';
 
             try {
                 const file = photoInput.files[0];
@@ -2503,7 +2509,7 @@ function getDeviceId() {
                 if (deleteButton.classList.contains('photo-delete-btn')) {
                     deleteButton.textContent = '…';
                 } else {
-                    deleteButton.textContent = '正在删除...';
+                    deleteButton.textContent = '正在从本次元抹除...';
                 }
             }
 
@@ -2644,7 +2650,7 @@ function getDeviceId() {
                 lng: 116.397470
             };
 
-            locationSource = 'gps';
+            locationSource = 'amap';
             locationAccuracyRadius = 100;
 
             console.log('使用测试位置:', userLocation);

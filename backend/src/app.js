@@ -86,11 +86,10 @@ if (fs.existsSync(websitePath)) {
     res.sendFile(websitePath);
   });
 
-  if (!config.isProduction) {
-    app.get('/', (req, res) => {
-      res.sendFile(websitePath);
-    });
-  }
+  // 在生产环境下也支持根路径访问
+  app.get('/', (req, res) => {
+    res.sendFile(websitePath);
+  });
 }
 
 app.use('/api', routes);

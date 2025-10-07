@@ -73,6 +73,10 @@ const config = {
 
 config.getGitHubCallbackUrl = () => {
   if (config.env === 'development') {
+    // 在开发环境下，如果有ngrok隧道，优先使用ngrok URL
+    if (config.frontendUrl && config.frontendUrl.includes('ngrok')) {
+      return `${config.frontendUrl}/api/auth/github/callback`;
+    }
     return `http://localhost:${config.port}/api/auth/github/callback`;
   }
   return config.github.callbackUrl || `${config.protocol}://${config.domain}/api/auth/github/callback`;
