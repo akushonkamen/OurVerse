@@ -75,6 +75,9 @@ const parseByteSize = (value, fallback) => {
   return Math.round(numeric * multiplier);
 };
 
+const maxFileSizeRaw = parseByteSize(process.env.MAX_FILE_SIZE, 0);
+const maxFileSize = Number.isFinite(maxFileSizeRaw) && maxFileSizeRaw > 0 ? maxFileSizeRaw : null;
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -86,7 +89,7 @@ const config = {
   uploadsDir: process.env.UPLOADS_DIR || 'uploads',
   allowedOriginsRaw: (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || ''),
   allowedFileTypesRaw: process.env.ALLOWED_FILE_TYPES || '',
-  maxFileSize: parseByteSize(process.env.MAX_FILE_SIZE, 100 * 1024 * 1024),
+  maxFileSize,
   sessionCookieMaxAge: parseInteger(process.env.SESSION_COOKIE_MAX_AGE, 24 * 60 * 60 * 1000),
   rateLimit: {
     windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),

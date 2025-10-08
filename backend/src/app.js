@@ -70,9 +70,17 @@ app.use(helmet({
 app.use(cors(corsOptions));
 app.use(compression());
 
-const bodyPayloadLimit = Math.max(config.maxFileSize, 1 * 1024 * 1024);
-app.use(express.json({ limit: bodyPayloadLimit }));
-app.use(express.urlencoded({ limit: bodyPayloadLimit, extended: true }));
+const defaultBodyPayloadLimit = 1 * 1024 * 1024;
+const unlimitedBodyPayloadLimit = '10gb';
+
+if (Number.isFinite(config.maxFileSize) && config.maxFileSize > 0) {
+  const bodyPayloadLimit = Math.max(config.maxFileSize, defaultBodyPayloadLimit);
+  app.use(express.json({ limit: bodyPayloadLimit }));
+  app.use(express.urlencoded({ limit: bodyPayloadLimit, extended: true }));
+} else {
+  app.use(express.json({ limit: unlimitedBodyPayloadLimit }));
+  app.use(express.urlencoded({ limit: unlimitedBodyPayloadLimit, extended: true }));
+}
 app.use(rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.maxRequests

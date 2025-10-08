@@ -12,11 +12,16 @@ const getMimeWhitelist = () => {
   return overrides.length ? overrides : defaultTypes;
 };
 
+const buildLimits = () => {
+  if (Number.isFinite(config.maxFileSize) && config.maxFileSize > 0) {
+    return { fileSize: config.maxFileSize };
+  }
+  return undefined;
+};
+
 const upload = multer({
   storage,
-  limits: {
-    fileSize: config.maxFileSize
-  },
+  limits: buildLimits(),
   fileFilter: (req, file, cb) => {
     const whitelist = getMimeWhitelist();
     if (whitelist.includes(file.mimetype)) {
