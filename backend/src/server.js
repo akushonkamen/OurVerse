@@ -38,7 +38,7 @@ const startServer = async () => {
     if (config.env === 'development') {
       console.log(`HTTP Server running on http://${config.host}:${config.port}`);
       console.log(`GitHub callback URL: ${config.getGitHubCallbackUrl()}`);
-      console.log(`Access website at: http://localhost:${config.port}/website.html`);
+      console.log(`API server running at: http://localhost:${config.port}`);
     } else {
       console.log(`Server running on port ${config.port}`);
     }

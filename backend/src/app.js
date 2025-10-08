@@ -80,17 +80,15 @@ if (!fs.existsSync(uploadsPath)) {
 }
 app.use(`/${config.uploadsDir}`, express.static(uploadsPath));
 
-const websitePath = path.resolve(__dirname, '..', 'public', 'website.html');
-if (fs.existsSync(websitePath)) {
-  app.get('/website.html', (req, res) => {
-    res.sendFile(websitePath);
+// 根路径处理 - 返回简单的API信息
+app.get('/', (req, res) => {
+  res.json({
+    message: 'OurVerse API Server',
+    version: '1.0.0',
+    docs: '/api',
+    health: '/health'
   });
-
-  // 在生产环境下也支持根路径访问
-  app.get('/', (req, res) => {
-    res.sendFile(websitePath);
-  });
-}
+});
 
 app.use('/api', routes);
 
