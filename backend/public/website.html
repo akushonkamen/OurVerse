@@ -2041,21 +2041,47 @@ function getDeviceId() {
             if (!photosGrid) return;
             photosGrid.innerHTML = '';
 
-            const locationGroups = {};
+            const CLUSTER_RADIUS_METERS = 30;
+            const clusters = [];
+
             photos.forEach(photo => {
-                const locationKey = `${Math.round(photo.lat * 1000000)},${Math.round(photo.lng * 1000000)}`;
-                if (!locationGroups[locationKey]) {
-                    locationGroups[locationKey] = [];
+                let cluster = clusters.find(existing =>
+                    calculateDistance(existing.lat, existing.lng, photo.lat, photo.lng) <= CLUSTER_RADIUS_METERS
+                );
+
+                if (!cluster) {
+                    cluster = {
+                        lat: photo.lat,
+                        lng: photo.lng,
+                        sumLat: 0,
+                        sumLng: 0,
+                        photos: []
+                    };
+                    clusters.push(cluster);
                 }
-                locationGroups[locationKey].push(photo);
+
+                cluster.photos.push(photo);
+                cluster.sumLat += photo.lat;
+                cluster.sumLng += photo.lng;
+                const count = cluster.photos.length;
+                cluster.lat = cluster.sumLat / count;
+                cluster.lng = cluster.sumLng / count;
+            });
+
+            clusters.forEach(cluster => {
+                cluster.photos.sort((a, b) => {
+                    const aTime = new Date(a.createdAt || 0).getTime();
+                    const bTime = new Date(b.createdAt || 0).getTime();
+                    return bTime - aTime;
+                });
             });
 
             amapPhotoMarkers.forEach(marker => marker.setMap(null));
             amapPhotoMarkers = [];
 
-            Object.values(locationGroups).forEach(photosAtLocation => {
-                const firstPhoto = photosAtLocation[0];
-                const photoCount = photosAtLocation.length;
+            clusters.forEach(cluster => {
+                const firstPhoto = cluster.photos[0];
+                const photoCount = cluster.photos.length;
 
                 let iconSize;
                 let iconSvg;
@@ -2085,7 +2111,7 @@ function getDeviceId() {
                 }
 
                 const marker = new AMap.Marker({
-                    position: [firstPhoto.lng, firstPhoto.lat],
+                    position: [cluster.lng, cluster.lat],
                     map: map,
                     icon: new AMap.Icon({
                         image: 'data:image/svg+xml;base64,' + btoa(iconSvg),
@@ -2097,7 +2123,7 @@ function getDeviceId() {
                     if (photoCount === 1) {
                         openPhotoModal(firstPhoto.id);
                     } else {
-                        openLocationPhotosModal(photosAtLocation);
+                        openLocationPhotosModal(cluster.photos);
                     }
                 });
 
