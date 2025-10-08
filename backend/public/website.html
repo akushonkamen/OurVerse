@@ -1133,7 +1133,12 @@ function getDeviceId() {
         if (window.crypto && typeof window.crypto.randomUUID === 'function') {
             deviceId = window.crypto.randomUUID();
         } else {
-            deviceId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+            // 改进的fallback：使用更多随机性来确保唯一性
+            const timestamp = Date.now();
+            const random1 = Math.random().toString(36).substring(2, 15);
+            const random2 = Math.random().toString(36).substring(2, 15);
+            const random3 = Math.random().toString(36).substring(2, 15);
+            deviceId = `${timestamp}-${random1}-${random2}-${random3}`;
         }
         localStorage.setItem('ourverse_device_id', deviceId);
     }

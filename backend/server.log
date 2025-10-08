@@ -6,23 +6,10 @@ Warning: connect.session() MemoryStore is not
 designed for a production environment, as it will leak
 memory, and will not scale past a single process.
 Connected to MongoDB
-node:events:502
-      throw er; // Unhandled 'error' event
-      ^
-
-Error: listen EADDRINUSE: address already in use 0.0.0.0:8444
-    at Server.setupListenHandle [as _listen2] (node:net:1908:16)
-    at listenInCluster (node:net:1965:12)
-    at doListen (node:net:2139:7)
-    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
-Emitted 'error' event on Server instance at:
-    at emitErrorNT (node:net:1944:8)
-    at process.processTicksAndRejections (node:internal/process/task_queues:82:21) {
-  code: 'EADDRINUSE',
-  errno: -98,
-  syscall: 'listen',
-  address: '0.0.0.0',
-  port: 8444
-}
-
-Node.js v20.19.5
+Server running on port 8444
+Dropped legacy githubId index
+Failed to drop legacy registrationDeviceId index: cannot perform operation: an index build is currently running for collection with UUID: dde366cf-1283-4082-9291-8a4ba1ddba67. Found index build: 219b9803-8158-4000-bd39-76764f33a102
+Photo asset normalisation complete: { processed: 14, migrated: 0, updatedUrls: 0, missing: 5 }
+Ensured non-unique registrationDeviceId index
+Failed to drop legacy email index: cannot perform operation: an index build is currently running for collection with UUID: dde366cf-1283-4082-9291-8a4ba1ddba67. Found index build: 219b9803-8158-4000-bd39-76764f33a102
+Ensured partial unique email index
