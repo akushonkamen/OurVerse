@@ -8,8 +8,9 @@ const createSessionMiddleware = () => session({
   cookie: {
     httpOnly: true,
     secure: config.isProduction,
-    sameSite: config.isProduction ? 'none' : 'lax',
-    maxAge: config.sessionCookieMaxAge
+    sameSite: 'lax', // 统一使用'lax'以确保session cookie在同一域名下正常工作
+    maxAge: config.sessionCookieMaxAge,
+    path: '/'
   }
 });
 

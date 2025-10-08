@@ -198,6 +198,13 @@ const beginGitHubAuth = (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
   req.session.oauthState = state;
 
+  console.log('Generated new OAuth state:', {
+    state,
+    sessionId: req.sessionID,
+    hasSession: !!req.session,
+    sessionKeys: Object.keys(req.session || {})
+  });
+
   const githubAuthUrl = `https://github.com/login/oauth/authorize?`
     + `client_id=${config.github.clientId}&`
     + `redirect_uri=${encodeURIComponent(config.getGitHubCallbackUrl())}&`
