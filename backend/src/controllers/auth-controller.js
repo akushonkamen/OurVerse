@@ -223,7 +223,9 @@ const handleGitHubCallback = async (req, res, next) => {
       sessionId: req.sessionID,
       sessionState: req.session.oauthState,
       hasSession: !!req.session,
-      headers: req.headers
+      sessionKeys: req.session ? Object.keys(req.session) : 'no session',
+      cookies: req.headers.cookie || 'no cookies',
+      userAgent: req.headers['user-agent']
     });
 
     if (!state || state !== req.session.oauthState) {
