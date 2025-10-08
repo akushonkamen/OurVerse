@@ -69,7 +69,10 @@ app.use(helmet({
 }));
 app.use(cors(corsOptions));
 app.use(compression());
-app.use(express.json());
+
+const bodyPayloadLimit = Math.max(config.maxFileSize, 1 * 1024 * 1024);
+app.use(express.json({ limit: bodyPayloadLimit }));
+app.use(express.urlencoded({ limit: bodyPayloadLimit, extended: true }));
 app.use(rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.maxRequests
