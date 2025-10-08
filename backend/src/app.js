@@ -27,8 +27,9 @@ const allowedOrigins = new Set(
 if (!config.isProduction) {
   allowedOrigins.add(`http://localhost:${config.port}`);
   allowedOrigins.add(`http://127.0.0.1:${config.port}`);
-  allowedOrigins.add('https://www.our-verse.com');
 }
+// Always allow www.our-verse.com for development testing
+allowedOrigins.add('https://www.our-verse.com');
 
 if (!allowedOrigins.size) {
   console.warn('No CORS origins configured; defaulting to allow all origins.');
