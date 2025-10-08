@@ -2209,7 +2209,14 @@ function getDeviceId() {
                     body: formData
                 });
 
-                const data = await response.json();
+                const contentType = response.headers.get('content-type') || '';
+                let data;
+                if (contentType.includes('application/json')) {
+                    data = await response.json();
+                } else {
+                    const text = await response.text();
+                    data = { error: text };
+                }
 
                 if (response.ok) {
                     // 上传成功
@@ -2221,6 +2228,10 @@ function getDeviceId() {
 
                     alert('照片上传成功！');
                 } else {
+                    if (response.status === 413) {
+                        alert('文件太大啦，请将照片压缩后再试（当前限制约200MB）。');
+                        return;
+                    }
                     // 处理不同的错误情况
                     if (data.error && data.error.includes('每日最多只能上传')) {
                         alert(data.error + '\n\n请明天再来记录更多美好时刻！');
@@ -2230,7 +2241,10 @@ function getDeviceId() {
                 }
             } catch (error) {
                 console.error('上传照片错误:', error);
-                alert('上传失败，请重试');
+                const message = error?.message?.includes('Unexpected token')
+                    ? '上传失败：服务器返回了意外的响应，请稍后重试'
+                    : '上传失败，请重试';
+                alert(message);
             } finally {
                 // 恢复按钮状态
                 uploadBtn.textContent = '记录';
