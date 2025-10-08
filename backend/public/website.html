@@ -1105,8 +1105,10 @@
                 return apiUrlParam;
             }
 
-            // 开发环境默认值
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            // 本地开发环境检测
+            if (window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1' ||
+                window.location.hostname === 'www.our-verse.com') {
                 return 'http://localhost:8444';
             }
 
