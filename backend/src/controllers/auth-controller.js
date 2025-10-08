@@ -207,7 +207,7 @@ const beginGitHubAuth = (req, res) => {
 
   const githubAuthUrl = `https://github.com/login/oauth/authorize?`
     + `client_id=${config.github.clientId}&`
-    + `redirect_uri=${encodeURIComponent(config.getGitHubCallbackUrl())}&`
+    + `redirect_uri=${encodeURIComponent(config.getGitHubCallbackUrl(req))}&`
     + `scope=user:email&`
     + `state=${state}`;
 
@@ -236,7 +236,7 @@ const handleGitHubCallback = async (req, res, next) => {
         sessionId: req.sessionID
       });
       delete req.session.oauthState;
-      const frontendBaseUrl = config.getFrontendBaseUrl();
+      const frontendBaseUrl = config.getFrontendBaseUrl(req);
       const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=invalid_state`;
       console.log('Redirecting to:', redirectUrl);
       return res.redirect(redirectUrl);
@@ -247,7 +247,7 @@ const handleGitHubCallback = async (req, res, next) => {
     passport.authenticate('github', { session: false }, async (err, user, info) => {
       if (err || !user) {
         console.error('GitHub OAuth error:', err || info);
-        const frontendBaseUrl = config.getFrontendBaseUrl();
+        const frontendBaseUrl = config.getFrontendBaseUrl(req);
         const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=github_auth_failed`;
         console.log('Redirecting due to auth error to:', redirectUrl);
         return res.redirect(redirectUrl);
@@ -256,13 +256,13 @@ const handleGitHubCallback = async (req, res, next) => {
       try {
         const token = jwt.sign({ userId: user._id }, config.jwtSecret, { expiresIn: '7d' });
         console.log('GitHub login successful for user:', user.username);
-        const frontendBaseUrl = config.getFrontendBaseUrl();
+        const frontendBaseUrl = config.getFrontendBaseUrl(req);
         const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?token=${token}`;
         console.log('Redirecting to success page:', redirectUrl);
         return res.redirect(redirectUrl);
       } catch (tokenError) {
         console.error('Token generation error:', tokenError);
-        const frontendBaseUrl = config.getFrontendBaseUrl();
+        const frontendBaseUrl = config.getFrontendBaseUrl(req);
         const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=token_generation_failed`;
         console.log('Redirecting due to token error:', redirectUrl);
         return res.redirect(redirectUrl);
@@ -270,7 +270,7 @@ const handleGitHubCallback = async (req, res, next) => {
     })(req, res, next);
   } catch (error) {
     console.error('GitHub OAuth callback error:', error);
-    const frontendBaseUrl = config.getFrontendBaseUrl();
+    const frontendBaseUrl = config.getFrontendBaseUrl(req);
     const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=auth_callback_error`;
     console.log('Redirecting due to callback error:', redirectUrl);
     return res.redirect(redirectUrl);

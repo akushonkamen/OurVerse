@@ -71,20 +71,109 @@ const config = {
   }
 };
 
-config.getGitHubCallbackUrl = () => {
-  if (config.env === 'development') {
-    // 在开发环境下，如果有ngrok隧道，优先使用ngrok URL
-    if (config.frontendUrl && config.frontendUrl.includes('ngrok')) {
-      return `${config.frontendUrl}/api/auth/github/callback`;
-    }
-    return `http://localhost:${config.port}/api/auth/github/callback`;
+const pickFirstHeaderValue = value => {
+  if (!value) {
+    return null;
   }
-  return config.github.callbackUrl || `${config.protocol}://${config.domain}/api/auth/github/callback`;
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return String(value).split(',')[0].trim();
 };
 
-config.getFrontendBaseUrl = () => {
-  if (config.frontendUrl) {
-    return config.frontendUrl;
+const normaliseBaseUrl = value => (value ? value.replace(/\/+$/, '') : value);
+
+const stripPort = host => {
+  if (!host) {
+    return host;
+  }
+  const [hostname] = host.split(':');
+  return hostname.toLowerCase();
+};
+
+const getUrlHost = value => {
+  if (!value) {
+    return null;
+  }
+  try {
+    return new URL(value).host;
+  } catch (error) {
+    return null;
+  }
+};
+
+const getRequestHost = req => {
+  if (!req) {
+    return null;
+  }
+  const forwarded = pickFirstHeaderValue(req.headers?.['x-forwarded-host']);
+  return forwarded || pickFirstHeaderValue(req.headers?.host);
+};
+
+const getRequestProtocol = req => {
+  if (!req) {
+    return null;
+  }
+  const forwarded = pickFirstHeaderValue(req.headers?.['x-forwarded-proto']);
+  if (forwarded) {
+    return forwarded;
+  }
+  if (typeof req.protocol === 'string' && req.protocol.length) {
+    return req.protocol;
+  }
+  if (req.secure === true) {
+    return 'https';
+  }
+  return null;
+};
+
+const isLocalHost = host => {
+  if (!host) {
+    return false;
+  }
+  const normalised = stripPort(host);
+  return normalised === 'localhost' || normalised === '127.0.0.1';
+};
+
+config.getGitHubCallbackUrl = req => {
+  const requestHost = getRequestHost(req);
+  const requestProtocol = getRequestProtocol(req) || config.protocol || 'https';
+  const envCallback = normaliseBaseUrl(config.github.callbackUrl);
+  const envCallbackHost = getUrlHost(envCallback);
+
+  if (requestHost && !isLocalHost(requestHost)) {
+    if (envCallbackHost && stripPort(envCallbackHost) === stripPort(requestHost)) {
+      return envCallback;
+    }
+    return `${requestProtocol}://${requestHost}/api/auth/github/callback`;
+  }
+
+  if (envCallback) {
+    return envCallback;
+  }
+
+  if (config.env === 'development') {
+    return `http://localhost:${config.port}/api/auth/github/callback`;
+  }
+
+  return `${config.protocol}://${config.domain}/api/auth/github/callback`;
+};
+
+config.getFrontendBaseUrl = req => {
+  const requestHost = getRequestHost(req);
+  const requestProtocol = getRequestProtocol(req) || config.protocol || 'https';
+  const envFrontend = normaliseBaseUrl(config.frontendUrl);
+  const envFrontendHost = getUrlHost(envFrontend);
+
+  if (requestHost && !isLocalHost(requestHost)) {
+    if (envFrontendHost && stripPort(envFrontendHost) === stripPort(requestHost)) {
+      return envFrontend;
+    }
+    return normaliseBaseUrl(`${requestProtocol}://${requestHost}`);
+  }
+
+  if (envFrontend) {
+    return envFrontend;
   }
 
   if (config.env === 'development') {
