@@ -1089,31 +1089,34 @@
             }
         });
 
+        function normaliseApiUrl(url) {
+            if (!url) {
+                return url;
+            }
+            return url.replace(/\/+$/, '');
+        }
+
         // API服务器地址 - 从环境变量或URL参数获取
         function getApiBaseUrl() {
-            // 尝试从URL参数获取
             const urlParams = new URLSearchParams(window.location.search);
             const apiUrlParam = urlParams.get('api_url');
 
-            // 尝试从环境变量获取（如果在构建时设置）
+            // 优先使用构建时注入的配置
             if (window.ENV && window.ENV.API_BASE_URL) {
-                return window.ENV.API_BASE_URL;
+                return normaliseApiUrl(window.ENV.API_BASE_URL);
             }
 
-            // 从URL参数获取
             if (apiUrlParam) {
-                return apiUrlParam;
+                return normaliseApiUrl(apiUrlParam);
             }
 
-            // 本地开发环境检测
-            if (window.location.hostname === 'localhost' ||
-                window.location.hostname === '127.0.0.1' ||
-                window.location.hostname === 'www.our-verse.com') {
+            const localHosts = new Set(['localhost', '127.0.0.1']);
+            if (localHosts.has(window.location.hostname)) {
                 return 'http://localhost:8444';
             }
 
-            // 生产环境从当前域名构造
-            return `${window.location.protocol}//${window.location.host}`;
+            // 默认回退到当前站点域名
+            return normaliseApiUrl(`${window.location.protocol}//${window.location.host}`);
         }
 
 // 生产环境强制HTTPS重定向
