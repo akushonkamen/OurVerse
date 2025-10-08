@@ -32,6 +32,49 @@ const parseInteger = (value, fallback) => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
+const parseByteSize = (value, fallback) => {
+  if (value === undefined || value === null) {
+    return fallback;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  const raw = String(value).trim();
+  if (!raw.length) {
+    return fallback;
+  }
+
+  const match = raw.match(/^(\d+(?:\.\d+)?)(b|kb|k|mb|m|gb|g)?$/i);
+  if (!match) {
+    return fallback;
+  }
+
+  const numeric = Number.parseFloat(match[1]);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  const unit = (match[2] || 'b').toLowerCase();
+  const multipliers = {
+    b: 1,
+    k: 1024,
+    kb: 1024,
+    m: 1024 * 1024,
+    mb: 1024 * 1024,
+    g: 1024 * 1024 * 1024,
+    gb: 1024 * 1024 * 1024
+  };
+
+  const multiplier = multipliers[unit];
+  if (!multiplier) {
+    return fallback;
+  }
+
+  return Math.round(numeric * multiplier);
+};
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -43,7 +86,7 @@ const config = {
   uploadsDir: process.env.UPLOADS_DIR || 'uploads',
   allowedOriginsRaw: (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || ''),
   allowedFileTypesRaw: process.env.ALLOWED_FILE_TYPES || '',
-  maxFileSize: parseInteger(process.env.MAX_FILE_SIZE, 10 * 1024 * 1024),
+  maxFileSize: parseByteSize(process.env.MAX_FILE_SIZE, 100 * 1024 * 1024),
   sessionCookieMaxAge: parseInteger(process.env.SESSION_COOKIE_MAX_AGE, 24 * 60 * 60 * 1000),
   rateLimit: {
     windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
