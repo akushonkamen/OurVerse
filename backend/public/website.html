@@ -2184,14 +2184,21 @@ function getDeviceId() {
                 return;
             }
 
-            // 显示上传中状态
-            uploadBtn.textContent = '上传中...';
-            uploadBtn.disabled = true;
-            uploadStatus.textContent = '正在烹饪诗句...';
+            const MAX_UPLOAD_SIZE_BYTES = 100 * 1024 * 1024;
 
             try {
                 const file = photoInput.files[0];
                 const caption = captionInput.value.trim();
+
+                if (file.size > MAX_UPLOAD_SIZE_BYTES) {
+                    alert('文件太大啦，请将照片压缩后再试（当前限制约100MB）。');
+                    return;
+                }
+
+                // 显示上传中状态
+                uploadBtn.textContent = '上传中...';
+                uploadBtn.disabled = true;
+                uploadStatus.textContent = '正在烹饪诗句...';
 
                 // 创建FormData
                 const formData = new FormData();
@@ -2229,7 +2236,7 @@ function getDeviceId() {
                     alert('照片上传成功！');
                 } else {
                     if (response.status === 413) {
-                        alert('文件太大啦，请将照片压缩后再试（当前限制约200MB）。');
+                        alert('文件太大啦，请将照片压缩后再试（当前限制约100MB）。');
                         return;
                     }
                     // 处理不同的错误情况
