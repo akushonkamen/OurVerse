@@ -209,13 +209,26 @@ const beginGitHubAuth = (req, res) => {
 
 const handleGitHubCallback = async (req, res, next) => {
   try {
-    const { state } = req.query;
+    const { state, code } = req.query;
+    console.log('GitHub callback received:', {
+      state,
+      code: code ? 'present' : 'missing',
+      sessionId: req.sessionID,
+      sessionState: req.session.oauthState,
+      hasSession: !!req.session,
+      headers: req.headers
+    });
 
     if (!state || state !== req.session.oauthState) {
-      console.error('State validation failed:', { received: state, expected: req.session.oauthState });
+      console.error('State validation failed:', {
+        received: state,
+        expected: req.session.oauthState,
+        sessionExists: !!req.session.oauthState,
+        sessionId: req.sessionID
+      });
       delete req.session.oauthState;
       const frontendBaseUrl = config.getFrontendBaseUrl();
-      const redirectUrl = `${frontendBaseUrl}${frontendBaseUrl.endsWith('/') ? '' : '/'}website.html?error=invalid_state`;
+      const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=invalid_state`;
       console.log('Redirecting to:', redirectUrl);
       return res.redirect(redirectUrl);
     }
@@ -226,7 +239,8 @@ const handleGitHubCallback = async (req, res, next) => {
       if (err || !user) {
         console.error('GitHub OAuth error:', err || info);
         const frontendBaseUrl = config.getFrontendBaseUrl();
-        const redirectUrl = `${frontendBaseUrl}${frontendBaseUrl.endsWith('/') ? '' : '/'}website.html?error=github_auth_failed`;
+        const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=github_auth_failed`;
+        console.log('Redirecting due to auth error to:', redirectUrl);
         return res.redirect(redirectUrl);
       }
 
