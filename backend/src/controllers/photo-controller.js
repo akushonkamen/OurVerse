@@ -275,10 +275,14 @@ const getNearbyPhotos = async (req, res) => {
         continue;
       }
 
+      const fullUrl = (normalizedUrl || photo.url).startsWith('http')
+        ? (normalizedUrl || photo.url)
+        : `${req.protocol}://${req.get('host')}${normalizedUrl || photo.url}`;
+
       nearbyPhotos.push({
         id: String(photo.id),
         userId: ownerId,
-        url: normalizedUrl || photo.url,
+        url: fullUrl,
         caption: photo.caption,
         lat: photo.lat,
         lng: photo.lng,
@@ -337,21 +341,27 @@ const getMyPhotos = async (req, res) => {
     }
 
     res.json({
-      photos: filteredPhotos.map(photo => ({
-        id: photo._id,
-        url: photo.url,
-        caption: photo.caption,
-        lat: photo.lat,
-        lng: photo.lng,
-        locationInfo: photo.locationInfo,
-        user: {
-          username: user.username,
-          avatar: user.avatar
-        },
-        comments: photo.comments.length,
-        createdAt: photo.createdAt,
-        canDelete: true
-      })),
+      photos: filteredPhotos.map(photo => {
+        const fullUrl = photo.url.startsWith('http')
+          ? photo.url
+          : `${req.protocol}://${req.get('host')}${photo.url}`;
+
+        return {
+          id: photo._id,
+          url: fullUrl,
+          caption: photo.caption,
+          lat: photo.lat,
+          lng: photo.lng,
+          locationInfo: photo.locationInfo,
+          user: {
+            username: user.username,
+            avatar: user.avatar
+          },
+          comments: photo.comments.length,
+          createdAt: photo.createdAt,
+          canDelete: true
+        };
+      }),
       pagination: {
         page: numericPage,
         limit: numericLimit,
@@ -393,10 +403,14 @@ const getPhotoDetails = async (req, res) => {
     const viewerId = req.userId ? String(req.userId) : getViewerIdFromRequest(req);
     const canDelete = Boolean(viewerId && ownerId && viewerId === ownerId);
 
+    const fullUrl = photo.url.startsWith('http')
+      ? photo.url
+      : `${req.protocol}://${req.get('host')}${photo.url}`;
+
     res.json({
       photo: {
         id: photo._id,
-        url: photo.url,
+        url: fullUrl,
         caption: photo.caption,
         lat: photo.lat,
         lng: photo.lng,
