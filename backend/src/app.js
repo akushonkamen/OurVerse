@@ -56,7 +56,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://*.amap.com", "blob:"],
       scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://*.amap.com"],
-      imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.amap.com"],
+      imgSrc: ["'self'", "data:", "https:", "blob:", "https://*.amap.com", "http://localhost:8444"],
       connectSrc: ["'self'", "https://*.amap.com", "http://localhost:8444"],
       workerSrc: ["'self'", "blob:"],
       fontSrc: ["'self'", "https://*.amap.com"],
