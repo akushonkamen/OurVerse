@@ -5,14 +5,6 @@ db = db.getSiblingDB('ourverse');
 db.users.createIndex({ "username": 1 }, { unique: true });
 db.users.createIndex({ "email": 1 }, { unique: true, sparse: true });
 
-try {
-  db.users.dropIndex("githubId_1");
-} catch (error) {
-  if (error.codeName !== 'IndexNotFound') {
-    print('移除旧 githubId 索引失败:', error);
-  }
-}
-
 db.users.createIndex(
   { "githubId": 1 },
   {
@@ -24,25 +16,7 @@ db.users.createIndex(
   }
 );
 
-try {
-  db.users.dropIndex("registrationDeviceId_1");
-  print('已移除旧的 registrationDeviceId 唯一索引');
-} catch (error) {
-  if (error.codeName !== 'IndexNotFound') {
-    print('移除旧 registrationDeviceId 索引失败:', error);
-  }
-}
-
 db.users.createIndex({ "registrationDeviceId": 1 }, { name: "registrationDeviceId_1", sparse: true });
-
-try {
-  db.users.dropIndex("email_1");
-  print('已移除旧的 email 索引');
-} catch (error) {
-  if (error.codeName !== 'IndexNotFound') {
-    print('移除旧 email 索引失败:', error);
-  }
-}
 
 db.users.createIndex(
   { "email": 1 },
@@ -74,4 +48,4 @@ db.users.updateOne(
   { upsert: true }
 );
 
-print("OurVerse MongoDB 初始化完成");
+print("OurVerse MongoDB 初始化完成（索引由应用程序在运行时维护）");
