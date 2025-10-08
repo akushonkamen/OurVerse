@@ -214,7 +214,9 @@ const handleGitHubCallback = async (req, res, next) => {
     if (!state || state !== req.session.oauthState) {
       console.error('State validation failed:', { received: state, expected: req.session.oauthState });
       delete req.session.oauthState;
-      const redirectUrl = `${config.getFrontendBaseUrl()}/website.html?error=invalid_state`;
+      const frontendBaseUrl = config.getFrontendBaseUrl();
+      const redirectUrl = `${frontendBaseUrl}${frontendBaseUrl.endsWith('/') ? '' : '/'}website.html?error=invalid_state`;
+      console.log('Redirecting to:', redirectUrl);
       return res.redirect(redirectUrl);
     }
 
@@ -223,24 +225,28 @@ const handleGitHubCallback = async (req, res, next) => {
     passport.authenticate('github', { session: false }, async (err, user, info) => {
       if (err || !user) {
         console.error('GitHub OAuth error:', err || info);
-        const redirectUrl = `${config.getFrontendBaseUrl()}/website.html?error=github_auth_failed`;
+        const frontendBaseUrl = config.getFrontendBaseUrl();
+        const redirectUrl = `${frontendBaseUrl}${frontendBaseUrl.endsWith('/') ? '' : '/'}website.html?error=github_auth_failed`;
         return res.redirect(redirectUrl);
       }
 
       try {
         const token = jwt.sign({ userId: user._id }, config.jwtSecret, { expiresIn: '7d' });
         console.log('GitHub login successful for user:', user.username);
-        const redirectUrl = `${config.getFrontendBaseUrl()}/website.html?token=${token}`;
+        const frontendBaseUrl = config.getFrontendBaseUrl();
+        const redirectUrl = `${frontendBaseUrl}${frontendBaseUrl.endsWith('/') ? '' : '/'}website.html?token=${token}`;
         return res.redirect(redirectUrl);
       } catch (tokenError) {
         console.error('Token generation error:', tokenError);
-        const redirectUrl = `${config.getFrontendBaseUrl()}/website.html?error=token_generation_failed`;
+        const frontendBaseUrl = config.getFrontendBaseUrl();
+        const redirectUrl = `${frontendBaseUrl}${frontendBaseUrl.endsWith('/') ? '' : '/'}website.html?error=token_generation_failed`;
         return res.redirect(redirectUrl);
       }
     })(req, res, next);
   } catch (error) {
     console.error('GitHub OAuth callback error:', error);
-    const redirectUrl = `${config.getFrontendBaseUrl()}/website.html?error=auth_callback_error`;
+    const frontendBaseUrl = config.getFrontendBaseUrl();
+    const redirectUrl = `${frontendBaseUrl}${frontendBaseUrl.endsWith('/') ? '' : '/'}website.html?error=auth_callback_error`;
     return res.redirect(redirectUrl);
   }
 };
