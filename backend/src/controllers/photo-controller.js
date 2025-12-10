@@ -216,10 +216,12 @@ const uploadPhoto = async (req, res) => {
 
 const getNearbyPhotos = async (req, res) => {
   try {
-    const { lat, lng, radius = 300 } = req.query;
+    const { lat, lng, radius = 300, page = 1, limit = 20 } = req.query;
     const userLat = Number(lat);
     const userLng = Number(lng);
     const searchRadius = Math.max(0, Number(radius) || 0) || 300;
+    const numericLimit = Number.parseInt(limit, 10) || 20;
+    const numericPage = Number.parseInt(page, 10) || 1;
 
     if (!Number.isFinite(userLat) || !Number.isFinite(userLng)) {
       return res.status(400).json({ error: '缺少或无效的当前位置坐标' });
@@ -263,9 +265,14 @@ const getNearbyPhotos = async (req, res) => {
       }
     ]);
 
+    const total = nearbyPhotosRaw.length;
+    const startIndex = (numericPage - 1) * numericLimit;
+    const endIndex = startIndex + numericLimit;
+    const paginatedPhotosRaw = nearbyPhotosRaw.slice(startIndex, endIndex);
+
     const nearbyPhotos = [];
 
-    for (const photo of nearbyPhotosRaw) {
+    for (const photo of paginatedPhotosRaw) {
       const normalizedUrl = await ensurePhotoRecordAsset(photo);
       const ownerId = photo.userId ? String(photo.userId) : null;
       const assetPath = resolvePhotoFilePath(normalizedUrl || photo.url);
@@ -296,7 +303,16 @@ const getNearbyPhotos = async (req, res) => {
       });
     }
 
-    res.json({ photos: nearbyPhotos });
+    res.json({
+      photos: nearbyPhotos,
+      pagination: {
+        page: numericPage,
+        limit: numericLimit,
+        total,
+        pages: Math.ceil(total / numericLimit),
+        returned: nearbyPhotos.length
+      }
+    });
   } catch (error) {
     console.error('Nearby photos error:', error);
     res.status(500).json({ error: 'Failed to fetch photos' });

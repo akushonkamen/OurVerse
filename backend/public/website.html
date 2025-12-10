@@ -336,6 +336,38 @@
             font-size: 13px;
         }
 
+        /* 分页控件 */
+        .pagination {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            padding: 20px;
+            margin-top: 10px;
+        }
+
+        .pagination-info {
+            font-size: 13px;
+            color: #666;
+            font-weight: 300;
+        }
+
+        .pagination-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .pagination-buttons .admin-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pagination-buttons .admin-btn:disabled:hover {
+            background: none;
+            color: #111;
+        }
+
         /* 模态框 */
         .modal {
             display: none;
@@ -1063,6 +1095,10 @@
         let isAdmin = false;
         let currentUser = null;
         let authToken = null;
+        let myPhotosCurrentPage = 1;
+        let myPhotosPagination = null;
+        let nearbyPhotosCurrentPage = 1;
+        let nearbyPhotosPagination = null;
         let locationSource = null; // 'amap' only
         let locationAccuracyRadius = null;
         let currentLocationPromise = null;
@@ -1129,7 +1165,7 @@ if (window.location.hostname === 'www.our-verse.com' && window.location.protocol
 console.log('所有浏览器统一使用高德地图定位服务');
 
 const API_BASE_URL = getApiBaseUrl();
-window.API_BASE_URL = API_BASE_URL;
+window.API_BASE_URL = window.location.origin;
 console.log('API_BASE_URL:', API_BASE_URL); // 调试信息
 
 function getDeviceId() {
@@ -1248,6 +1284,10 @@ function getDeviceId() {
 
             updateNavUser(user);
             isViewingMyPhotos = false;
+            myPhotosCurrentPage = 1;
+            myPhotosPagination = null;
+            nearbyPhotosCurrentPage = 1;
+            nearbyPhotosPagination = null;
 
             const photosGrid = document.getElementById('photosGrid');
             if (photosGrid) {
@@ -1490,11 +1530,13 @@ function getDeviceId() {
 
 
         // 显示我的照片
-        async function showMyPhotos() {
+        async function showMyPhotos(page = 1) {
             if (!currentUser || !authToken) {
                 showLoginModal();
                 return;
             }
+
+            myPhotosCurrentPage = page;
 
             try {
                 const photosGrid = document.getElementById('photosGrid');
@@ -1502,7 +1544,7 @@ function getDeviceId() {
                     photosGrid.innerHTML = '<div class="empty-state">正在从我的库存里找诗...</div>';
                 }
 
-                const response = await fetch(`${API_BASE_URL}/api/photos/my`, {
+                const response = await fetch(`${API_BASE_URL}/api/photos/my?page=${page}&limit=20`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`
                     }
@@ -1510,6 +1552,7 @@ function getDeviceId() {
 
                 if (response.ok) {
                     const data = await response.json();
+                    myPhotosPagination = data.pagination || null;
                     displayMyPhotos(data);
                 } else {
                     console.error('获取我的照片失败');
@@ -1540,6 +1583,11 @@ function getDeviceId() {
             backButton.onclick = () => {
                 photosTitle.textContent = '附近300米';
                 backButton.remove();
+                isViewingMyPhotos = false;
+                myPhotosCurrentPage = 1;
+                myPhotosPagination = null;
+                nearbyPhotosCurrentPage = 1;
+                nearbyPhotosPagination = null;
                 loadNearbyPhotos();
             };
 
@@ -1597,6 +1645,46 @@ function getDeviceId() {
 
                     photosGrid.appendChild(photoDiv);
                 });
+
+                // 添加分页控件
+                if (myPhotosPagination && myPhotosPagination.pages > 1) {
+                    const paginationDiv = document.createElement('div');
+                    paginationDiv.className = 'pagination';
+                    
+                    const pageInfo = document.createElement('div');
+                    pageInfo.className = 'pagination-info';
+                    pageInfo.textContent = `第 ${myPhotosPagination.page} 页 / 共 ${myPhotosPagination.pages} 页（共 ${myPhotosPagination.total} 张）`;
+                    
+                    const buttonsDiv = document.createElement('div');
+                    buttonsDiv.className = 'pagination-buttons';
+                    
+                    const prevBtn = document.createElement('button');
+                    prevBtn.className = 'admin-btn';
+                    prevBtn.textContent = '上一页';
+                    prevBtn.disabled = myPhotosPagination.page <= 1;
+                    prevBtn.onclick = () => {
+                        if (myPhotosPagination.page > 1) {
+                            showMyPhotos(myPhotosPagination.page - 1);
+                        }
+                    };
+                    
+                    const nextBtn = document.createElement('button');
+                    nextBtn.className = 'admin-btn';
+                    nextBtn.textContent = '下一页';
+                    nextBtn.disabled = myPhotosPagination.page >= myPhotosPagination.pages;
+                    nextBtn.onclick = () => {
+                        if (myPhotosPagination.page < myPhotosPagination.pages) {
+                            showMyPhotos(myPhotosPagination.page + 1);
+                        }
+                    };
+                    
+                    buttonsDiv.appendChild(prevBtn);
+                    buttonsDiv.appendChild(nextBtn);
+                    
+                    paginationDiv.appendChild(pageInfo);
+                    paginationDiv.appendChild(buttonsDiv);
+                    photosGrid.appendChild(paginationDiv);
+                }
             }
         }
 
@@ -1606,6 +1694,10 @@ function getDeviceId() {
             authToken = null;
             localStorage.removeItem('authToken');
             isViewingMyPhotos = false;
+            myPhotosCurrentPage = 1;
+            myPhotosPagination = null;
+            nearbyPhotosCurrentPage = 1;
+            nearbyPhotosPagination = null;
 
             const navUser = document.getElementById('navUser');
             navUser.innerHTML = '<button class="admin-btn" onclick="showLoginModal()" id="loginBtn">登录</button>';
@@ -1975,10 +2067,13 @@ function getDeviceId() {
         }
 
         // 从API加载附近照片
-        async function loadNearbyPhotos() {
+        async function loadNearbyPhotos(page = 1) {
             if (!userLocation) return;
 
             isViewingMyPhotos = false;
+            myPhotosCurrentPage = 1;
+            myPhotosPagination = null;
+            nearbyPhotosCurrentPage = page;
             const requestId = ++nearbyPhotosRequestId;
 
             const photosTitle = document.querySelector('.photos-title');
@@ -2001,7 +2096,7 @@ function getDeviceId() {
                     headers['Authorization'] = `Bearer ${authToken}`;
                 }
 
-                const response = await fetch(`${API_BASE_URL}/api/photos/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=300`, {
+                const response = await fetch(`${API_BASE_URL}/api/photos/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=300&page=${page}&limit=20`, {
                     headers
                 });
 
@@ -2012,6 +2107,7 @@ function getDeviceId() {
                     }
 
                     photos = data.photos || [];
+                    nearbyPhotosPagination = data.pagination || null;
                     displayPhotosOnMap();
                 } else {
                     console.error('加载附近照片失败');
@@ -2165,6 +2261,46 @@ function getDeviceId() {
 
                     photosGrid.appendChild(photoDiv);
                 });
+
+                // 添加分页控件
+                if (nearbyPhotosPagination) {
+                    const paginationDiv = document.createElement('div');
+                    paginationDiv.className = 'pagination';
+                    
+                    const pageInfo = document.createElement('div');
+                    pageInfo.className = 'pagination-info';
+                    pageInfo.textContent = `第 ${nearbyPhotosPagination.page} 页 / 共 ${nearbyPhotosPagination.pages} 页（共 ${nearbyPhotosPagination.total} 张）`;
+                    
+                    const buttonsDiv = document.createElement('div');
+                    buttonsDiv.className = 'pagination-buttons';
+                    
+                    const prevBtn = document.createElement('button');
+                    prevBtn.className = 'admin-btn';
+                    prevBtn.textContent = '上一页';
+                    prevBtn.disabled = nearbyPhotosPagination.page <= 1;
+                    prevBtn.onclick = () => {
+                        if (nearbyPhotosPagination.page > 1) {
+                            loadNearbyPhotos(nearbyPhotosPagination.page - 1);
+                        }
+                    };
+                    
+                    const nextBtn = document.createElement('button');
+                    nextBtn.className = 'admin-btn';
+                    nextBtn.textContent = '下一页';
+                    nextBtn.disabled = nearbyPhotosPagination.page >= nearbyPhotosPagination.pages;
+                    nextBtn.onclick = () => {
+                        if (nearbyPhotosPagination.page < nearbyPhotosPagination.pages) {
+                            loadNearbyPhotos(nearbyPhotosPagination.page + 1);
+                        }
+                    };
+                    
+                    buttonsDiv.appendChild(prevBtn);
+                    buttonsDiv.appendChild(nextBtn);
+                    
+                    paginationDiv.appendChild(pageInfo);
+                    paginationDiv.appendChild(buttonsDiv);
+                    photosGrid.appendChild(paginationDiv);
+                }
             }
         }
 
@@ -2586,10 +2722,9 @@ function getDeviceId() {
                     const deletedId = data.id || actualPhotoId;
 
                     if (isViewingMyPhotos) {
-                        await showMyPhotos();
+                        await showMyPhotos(myPhotosCurrentPage);
                     } else {
-                        photos = photos.filter(p => p.id !== deletedId);
-                        displayPhotosOnMap();
+                        await loadNearbyPhotos(nearbyPhotosCurrentPage);
                     }
                 } else {
                     const errorMessage = data.error || '删除失败，请稍后重试';

@@ -7,9 +7,101 @@ designed for a production environment, as it will leak
 memory, and will not scale past a single process.
 Connected to MongoDB
 Server running on port 8444
-Dropped legacy githubId index
-Failed to drop legacy registrationDeviceId index: cannot perform operation: an index build is currently running for collection with UUID: dde366cf-1283-4082-9291-8a4ba1ddba67. Found index build: 219b9803-8158-4000-bd39-76764f33a102
-Photo asset normalisation complete: { processed: 14, migrated: 0, updatedUrls: 0, missing: 5 }
+Photo asset normalisation complete: { processed: 0, migrated: 0, updatedUrls: 0, missing: 0 }
+Dropped legacy registrationDeviceId index
 Ensured non-unique registrationDeviceId index
-Failed to drop legacy email index: cannot perform operation: an index build is currently running for collection with UUID: dde366cf-1283-4082-9291-8a4ba1ddba67. Found index build: 219b9803-8158-4000-bd39-76764f33a102
+Dropped legacy email index
 Ensured partial unique email index
+CORS check for origin: undefined
+Allowed origins: [
+  'https://www.ourverse.com',
+  'https://our-verse.com',
+  'https://www.our-verse.com'
+]
+No origin header, allowing
+CORS check for origin: undefined
+Allowed origins: [
+  'https://www.ourverse.com',
+  'https://our-verse.com',
+  'https://www.our-verse.com'
+]
+No origin header, allowing
+CORS check for origin: undefined
+Allowed origins: [
+  'https://www.ourverse.com',
+  'https://our-verse.com',
+  'https://www.our-verse.com'
+]
+No origin header, allowing
+CORS check for origin: http://127.0.0.1:8444
+Allowed origins: [
+  'https://www.ourverse.com',
+  'https://our-verse.com',
+  'https://www.our-verse.com'
+]
+Blocked CORS origin: http://127.0.0.1:8444
+Error: Not allowed by CORS
+    at origin (/Users/yp1017/OurVerse/backend/src/app.js:51:21)
+    at /Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:204:7)
+    at Layer.handle [as handle_request] (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/layer.js:95:5)
+    at trim_prefix (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:328:13)
+    at /Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:286:9
+    at Function.process_params (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:346:12)
+    at next (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:280:10)
+    at internalNext (/Users/yp1017/OurVerse/backend/node_modules/helmet/index.cjs:537:6)
+CORS check for origin: http://127.0.0.1:8444
+Allowed origins: [
+  'https://www.ourverse.com',
+  'https://our-verse.com',
+  'https://www.our-verse.com'
+]
+Blocked CORS origin: http://127.0.0.1:8444
+Error: Not allowed by CORS
+    at origin (/Users/yp1017/OurVerse/backend/src/app.js:51:21)
+    at /Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:204:7)
+    at Layer.handle [as handle_request] (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/layer.js:95:5)
+    at trim_prefix (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:328:13)
+    at /Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:286:9
+    at Function.process_params (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:346:12)
+    at next (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:280:10)
+    at internalNext (/Users/yp1017/OurVerse/backend/node_modules/helmet/index.cjs:537:6)
+CORS check for origin: http://127.0.0.1:8444
+Allowed origins: [
+  'https://www.ourverse.com',
+  'https://our-verse.com',
+  'https://www.our-verse.com'
+]
+Blocked CORS origin: http://127.0.0.1:8444
+Error: Not allowed by CORS
+    at origin (/Users/yp1017/OurVerse/backend/src/app.js:51:21)
+    at /Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:204:7)
+    at Layer.handle [as handle_request] (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/layer.js:95:5)
+    at trim_prefix (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:328:13)
+    at /Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:286:9
+    at Function.process_params (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:346:12)
+    at next (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:280:10)
+    at internalNext (/Users/yp1017/OurVerse/backend/node_modules/helmet/index.cjs:537:6)
+CORS check for origin: http://127.0.0.1:8444
+Allowed origins: [
+  'https://www.ourverse.com',
+  'https://our-verse.com',
+  'https://www.our-verse.com'
+]
+Blocked CORS origin: http://127.0.0.1:8444
+Error: Not allowed by CORS
+    at origin (/Users/yp1017/OurVerse/backend/src/app.js:51:21)
+    at /Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:219:13
+    at optionsCallback (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:199:9)
+    at corsMiddleware (/Users/yp1017/OurVerse/backend/node_modules/cors/lib/index.js:204:7)
+    at Layer.handle [as handle_request] (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/layer.js:95:5)
+    at trim_prefix (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:328:13)
+    at /Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:286:9
+    at Function.process_params (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:346:12)
+    at next (/Users/yp1017/OurVerse/backend/node_modules/express/lib/router/index.js:280:10)
+    at internalNext (/Users/yp1017/OurVerse/backend/node_modules/helmet/index.cjs:537:6)
