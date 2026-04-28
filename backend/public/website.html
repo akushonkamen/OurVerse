@@ -95,6 +95,7 @@
             height: 45vh;
             position: relative;
             background: #f5f5f5;
+            border-bottom: 0.5px solid rgba(0,0,0,0.06);
         }
 
         #map {
@@ -368,18 +369,18 @@
             color: #111;
         }
 
-        /* 模态框 */
+        /* 模态框 — bottom sheet */
         .modal {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(20px);
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             z-index: 2000;
-            overflow-y: auto;
+        }
+        .modal.show {
+            display: block;
             animation: fadeIn 0.3s ease;
         }
 
@@ -388,60 +389,108 @@
             to { opacity: 1; }
         }
 
+        /* sheet 从底部弹出 */
         .modal-content {
+            position: fixed;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%) translateY(100%);
+            width: 100%;
+            max-width: 480px;
             background: #fff;
-            margin: 40px 20px;
-            border-radius: 16px;
-            overflow: hidden;
-            max-width: 500px;
-            margin: 40px auto;
-            animation: slideUp 0.4s ease;
+            border-radius: 16px 16px 0 0;
+            border-top: 0.5px solid rgba(0,0,0,0.08);
+            overflow-y: auto;
+            max-height: 90vh;
+            animation: sheetUp 0.38s cubic-bezier(.16,1,.3,1) forwards;
+        }
+        @keyframes sheetUp {
+            from { transform: translateX(-50%) translateY(100%); }
+            to   { transform: translateX(-50%) translateY(0); }
+        }
+        @keyframes sheetDown {
+            from { transform: translateX(-50%) translateY(0); }
+            to   { transform: translateX(-50%) translateY(100%); }
         }
 
-        @keyframes slideUp {
-            from { 
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to { 
-                opacity: 1;
-                transform: translateY(0);
-            }
+        /* handle 条 */
+        .modal-content::before {
+            content: '';
+            display: block;
+            width: 30px; height: 3px;
+            background: rgba(0,0,0,0.08);
+            border-radius: 2px;
+            margin: 10px auto 0;
         }
 
         .modal-header {
-            padding: 20px;
+            padding: 14px 20px 12px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 0.5px solid rgba(0, 0, 0, 0.05);
+            border-bottom: 0.5px solid rgba(0,0,0,0.05);
         }
 
         .modal-header h3 {
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 300;
             color: #111;
+            letter-spacing: .02em;
         }
 
         .close-btn {
             background: none;
-            border: none;
-            font-size: 24px;
+            border: 0.5px solid rgba(0,0,0,0.15);
+            border-radius: 20px;
+            font-size: 16px;
             color: #999;
             cursor: pointer;
             padding: 0;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            transition: all 0.3s ease;
+            width: 28px; height: 28px;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s ease;
+            line-height: 1;
         }
 
         .close-btn:hover {
-            background: #f5f5f5;
-            color: #111;
+            background: #111;
+            color: #fff;
+            border-color: #111;
+        }
+
+        /* 酒吧 sheet */
+        .bar-sheet-body {
+            padding: 0 20px 24px;
+        }
+        .bar-sheet-info {
+            margin-bottom: 20px;
+        }
+        .bar-sheet-address {
+            font-size: 13px;
+            color: #999;
+            font-weight: 300;
+            margin: 0;
+        }
+        .bar-checkin-btn {
+            width: 100%;
+            padding: 14px;
+            background: #111;
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 300;
+            letter-spacing: .02em;
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+        .bar-checkin-btn:hover {
+            opacity: 0.85;
+        }
+        .bar-checkin-btn:disabled {
+            background: #ddd;
+            color: #999;
+            cursor: default;
         }
 
         .modal-body {
@@ -683,9 +732,7 @@
                 gap: 15px;
             }
             
-            .modal-content {
-                margin: 20px 15px;
-            }
+            /* bottom sheet — 不需要 margin */
             
             .photo-item img {
                 height: 120px;
@@ -699,9 +746,7 @@
         }
 
         @media (max-width: 480px) {
-            .modal-content {
-                margin: 10px;
-            }
+            /* bottom sheet — 不需要 margin */
         }
 
         /* 空状态 */
@@ -1087,6 +1132,22 @@
         </div>
     </div>
 
+    <!-- 酒吧详情 sheet -->
+    <div class="modal" id="barModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="barSheetName">酒吧</h3>
+                <button class="close-btn" onclick="closeBarSheet()">×</button>
+            </div>
+            <div class="bar-sheet-body">
+                <div class="bar-sheet-info">
+                    <p class="bar-sheet-address" id="barSheetAddress"></p>
+                </div>
+                <button class="bar-checkin-btn" id="barCheckinBtn" onclick="checkinAtBar()">在此打卡</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let map;
         let userLocation;
@@ -1109,6 +1170,8 @@
         let amapUserMarker = null;
         let amapAccuracyCircle = null;
         let amapPhotoMarkers = [];
+        let amapBarMarkers = [];
+        let cachedBars = [];
 
         document.addEventListener('amap:loaded', () => {
             if (window.appInitialized && typeof initMap === 'function') {
@@ -1335,15 +1398,21 @@ function getDeviceId() {
 
         // 显示登录模态框
         function showLoginModal() {
-            document.getElementById('loginModal').style.display = 'block';
+            document.getElementById('loginModal').classList.add('show');
             document.body.style.overflow = 'hidden';
             showLoginForm(); // 默认显示登录表单
         }
 
         // 关闭登录模态框
         function closeLoginModal() {
-            document.getElementById('loginModal').style.display = 'none';
-            document.body.style.overflow = 'auto';
+            const modal = document.getElementById('loginModal');
+            const content = modal.querySelector('.modal-content');
+            content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
+            setTimeout(() => {
+                modal.classList.remove('show');
+                content.style.animation = '';
+                document.body.style.overflow = 'auto';
+            }, 260);
         }
 
         // 显示登录表单
@@ -1878,6 +1947,7 @@ function getDeviceId() {
                                     clearTimeout(timeoutId);
                                     await updateMapWithLocation();
                                     await updateLocationInfo();
+                                    loadNearbyBars();
                                 } finally {
                                     resolve(true);
                                 }
@@ -2066,6 +2136,149 @@ function getDeviceId() {
             });
         }
 
+        // 搜索用户附近的酒吧
+        function loadNearbyBars() {
+            if (!userLocation || !window.AMap) return;
+
+            AMap.plugin('AMap.PlaceSearch', () => {
+                const placeSearch = new AMap.PlaceSearch({
+                    type: '050702',
+                    pageSize: 20,
+                    pageIndex: 1,
+                });
+
+                placeSearch.searchNearBy(
+                    '',
+                    [userLocation.lng, userLocation.lat],
+                    500,
+                    (status, result) => {
+                        if (status === 'complete' && result.poiList) {
+                            cachedBars = result.poiList.pois.map(poi => ({
+                                id:      poi.id,
+                                name:    poi.name,
+                                address: poi.address,
+                                lng:     poi.location.lng,
+                                lat:     poi.location.lat,
+                                heat:    0,
+                            }));
+                            renderBarPins(cachedBars);
+                        }
+                    }
+                );
+            });
+        }
+
+        // 在地图上渲染酒吧 pin
+        function renderBarPins(bars) {
+            if (!map || !window.mapReady) return;
+
+            // 清除旧的酒吧 marker
+            amapBarMarkers.forEach(marker => marker.setMap(null));
+            amapBarMarkers = [];
+
+            bars.forEach(bar => {
+                const barSvg = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+                        <path d="M14 0C6.268 0 0 5.4 0 12c0 4.2 2.8 7.8 7 9.8V34c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V21.8c4.2-2 7-5.6 7-9.8C28 5.4 21.732 0 14 0z" fill="#111" opacity="0.9"/>
+                        <circle cx="14" cy="12" r="6" fill="white" opacity="0.95"/>
+                        <path d="M11 10.5h6M12 12.5h4" stroke="#111" stroke-width="1.2" stroke-linecap="round"/>
+                    </svg>
+                `;
+
+                const marker = new AMap.Marker({
+                    position: [bar.lng, bar.lat],
+                    map: map,
+                    icon: new AMap.Icon({
+                        image: 'data:image/svg+xml;base64,' + btoa(barSvg),
+                        size: new AMap.Size(28, 36),
+                        offset: new AMap.Pixel(-14, -36),
+                    }),
+                    zIndex: 90,
+                });
+
+                marker.on('click', () => {
+                    openBarSheet(bar);
+                });
+
+                amapBarMarkers.push(marker);
+            });
+        }
+
+        let currentBar = null;
+
+        function openBarSheet(bar) {
+            currentBar = bar;
+            document.getElementById('barSheetName').textContent = bar.name;
+            document.getElementById('barSheetAddress').textContent = bar.address || '';
+
+            const checkinBtn = document.getElementById('barCheckinBtn');
+            if (!currentUser) {
+                checkinBtn.disabled = true;
+                checkinBtn.textContent = '登录后打卡';
+            } else {
+                checkinBtn.disabled = false;
+                checkinBtn.textContent = '在此打卡';
+            }
+
+            document.getElementById('barModal').classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeBarSheet() {
+            const modal = document.getElementById('barModal');
+            const content = modal.querySelector('.modal-content');
+            content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
+            setTimeout(() => {
+                modal.classList.remove('show');
+                content.style.animation = '';
+                document.body.style.overflow = 'auto';
+            }, 260);
+        }
+
+        async function checkinAtBar() {
+            if (!currentUser || !currentBar) return;
+            const btn = document.getElementById('barCheckinBtn');
+            btn.disabled = true;
+            btn.textContent = '打卡中...';
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/bars/checkin`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`,
+                    },
+                    body: JSON.stringify({
+                        amapPoiId: currentBar.id,
+                        name: currentBar.name,
+                        address: currentBar.address,
+                        lng: currentBar.lng,
+                        lat: currentBar.lat,
+                        userLng: userLocation.lng,
+                        userLat: userLocation.lat,
+                    }),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    btn.textContent = '已打卡';
+                } else {
+                    btn.textContent = data.error || '打卡失败';
+                    setTimeout(() => {
+                        btn.disabled = false;
+                        btn.textContent = '在此打卡';
+                    }, 2000);
+                }
+            } catch (err) {
+                console.error('打卡请求失败:', err);
+                btn.textContent = '网络错误';
+                setTimeout(() => {
+                    btn.disabled = false;
+                    btn.textContent = '在此打卡';
+                }, 2000);
+            }
+        }
+
         // 从API加载附近照片
         async function loadNearbyPhotos(page = 1) {
             if (!userLocation) return;
@@ -2186,22 +2399,22 @@ function getDeviceId() {
                     iconSize = 32;
                     iconSvg = `
                         <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-                            <circle cx="16" cy="16" r="14" fill="white" stroke="#111" stroke-width="2" opacity="0.95"/>
-                            <rect x="11" y="12" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/>
-                            <circle cx="13" cy="14.5" r="1.5" fill="#111"/>
-                            <circle cx="16" cy="14.5" r="1.5" fill="#111"/>
+                            <circle cx="16" cy="16" r="13" fill="white" stroke="#111" stroke-width="1.5" opacity="0.96"/>
+                            <rect x="11" y="12" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.3"/>
+                            <circle cx="16" cy="16" r="2.2" fill="#111"/>
+                            <path d="M13.5 12l1-2h3l1 2" stroke="#111" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                         </svg>
                     `;
                 } else {
                     iconSize = 36;
                     iconSvg = `
                         <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
-                            <circle cx="18" cy="18" r="16" fill="white" stroke="#111" stroke-width="2" opacity="0.95"/>
-                            <rect x="13" y="14" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.5"/>
-                            <circle cx="15" cy="16.5" r="1.5" fill="#111"/>
-                            <circle cx="18" cy="16.5" r="1.5" fill="#111"/>
-                            <circle cx="24" cy="12" r="5" fill="#E74C3C" stroke="white" stroke-width="1"/>
-                            <text x="24" y="15" text-anchor="middle" fill="white" font-size="10" font-weight="bold">${photoCount}</text>
+                            <circle cx="18" cy="18" r="15" fill="white" stroke="#111" stroke-width="1.5" opacity="0.96"/>
+                            <rect x="13" y="14" width="10" height="8" rx="1.5" fill="none" stroke="#111" stroke-width="1.3"/>
+                            <circle cx="18" cy="18" r="2.2" fill="#111"/>
+                            <path d="M15.5 14l1-2h3l1 2" stroke="#111" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                            <circle cx="26" cy="12" r="5" fill="#111" stroke="white" stroke-width="1.2"/>
+                            <text x="26" y="15.5" text-anchor="middle" fill="white" font-size="7" font-weight="400" font-family="sans-serif">${photoCount}</text>
                         </svg>
                     `;
                 }
@@ -2559,15 +2772,22 @@ function getDeviceId() {
                 }
             }
             
-            document.getElementById('photoModal').style.display = 'block';
+            document.getElementById('photoModal').classList.add('show');
             document.body.style.overflow = 'hidden';
         }
 
         // 关闭模态框
         function closeModal() {
-            document.getElementById('photoModal').style.display = 'none';
-            document.getElementById('adminControls').classList.remove('show');
-            document.body.style.overflow = 'auto';
+            const modal = document.getElementById('photoModal');
+            const content = modal.querySelector('.modal-content');
+            // 先播关闭动画再隐藏
+            content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
+            setTimeout(() => {
+                modal.classList.remove('show');
+                content.style.animation = '';
+                document.getElementById('adminControls').classList.remove('show');
+                document.body.style.overflow = 'auto';
+            }, 260);
         }
 
         // 打开位置照片集合模态框
@@ -2598,14 +2818,20 @@ function getDeviceId() {
                 grid.appendChild(photoDiv);
             });
             
-            modal.style.display = 'block';
+            modal.classList.add('show');
             document.body.style.overflow = 'hidden';
         }
 
         // 关闭位置照片集合模态框
         function closeLocationModal() {
-            document.getElementById('locationPhotosModal').style.display = 'none';
-            document.body.style.overflow = 'auto';
+            const modal = document.getElementById('locationPhotosModal');
+            const content = modal.querySelector('.modal-content');
+            content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
+            setTimeout(() => {
+                modal.classList.remove('show');
+                content.style.animation = '';
+                document.body.style.overflow = 'auto';
+            }, 260);
         }
 
         // 加载评论
@@ -2875,6 +3101,12 @@ function getDeviceId() {
         document.getElementById('loginModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeLoginModal();
+            }
+        });
+
+        document.getElementById('barModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeBarSheet();
             }
         });
     </script>
