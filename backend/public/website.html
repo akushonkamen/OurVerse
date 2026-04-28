@@ -1399,11 +1399,12 @@ function getDeviceId() {
         // 显示登录模态框
         function showLoginModal() {
             if (loginModalCloseTimer) { clearTimeout(loginModalCloseTimer); loginModalCloseTimer = null; }
-            const content = document.getElementById('loginModal').querySelector('.modal-content');
+            const modal = document.getElementById('loginModal');
+            const content = modal.querySelector('.modal-content');
+            modal.classList.add('show');
             content.style.animation = 'none';
             void content.offsetWidth;
             content.style.animation = '';
-            document.getElementById('loginModal').classList.add('show');
             document.body.style.overflow = 'hidden';
             showLoginForm();
         }
@@ -2232,10 +2233,10 @@ function getDeviceId() {
             }
 
             const content = document.getElementById('barModal').querySelector('.modal-content');
+            document.getElementById('barModal').classList.add('show');
             content.style.animation = 'none';
             void content.offsetWidth;
             content.style.animation = '';
-            document.getElementById('barModal').classList.add('show');
             document.body.style.overflow = 'hidden';
         }
 
@@ -2791,10 +2792,10 @@ function getDeviceId() {
             }
 
             const content = document.getElementById('photoModal').querySelector('.modal-content');
+            document.getElementById('photoModal').classList.add('show');
             content.style.animation = 'none';
             void content.offsetWidth;
             content.style.animation = '';
-            document.getElementById('photoModal').classList.add('show');
             document.body.style.overflow = 'hidden';
         }
 
@@ -2846,10 +2847,10 @@ function getDeviceId() {
             });
 
             const content = modal.querySelector('.modal-content');
+            modal.classList.add('show');
             content.style.animation = 'none';
             void content.offsetWidth;
             content.style.animation = '';
-            modal.classList.add('show');
             document.body.style.overflow = 'hidden';
         }
 
