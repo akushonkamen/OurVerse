@@ -1035,7 +1035,7 @@
     </div>
 
     <!-- 照片详情模态框 -->
-    <div class="modal" id="photoModal">
+    <div class="modal" id="photoModal" style="z-index: 2100;">
         <div class="modal-content">
             <div class="modal-header">
                 <h3>详情</h3>
@@ -2801,7 +2801,11 @@ function getDeviceId() {
                 const photoDiv = document.createElement('div');
                 photoDiv.className = 'location-photo-item';
                 photoDiv.onclick = () => {
-                    closeLocationModal();
+                    // 立即隐藏位置弹窗，避免两个弹窗同时存在导致层级冲突
+                    const locModal = document.getElementById('locationPhotosModal');
+                    const locContent = locModal.querySelector('.modal-content');
+                    locModal.classList.remove('show');
+                    locContent.style.animation = '';
                     openPhotoModal(photo.id);
                 };
 
