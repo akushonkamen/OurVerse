@@ -1398,9 +1398,14 @@ function getDeviceId() {
 
         // 显示登录模态框
         function showLoginModal() {
+            if (loginModalCloseTimer) { clearTimeout(loginModalCloseTimer); loginModalCloseTimer = null; }
+            const content = document.getElementById('loginModal').querySelector('.modal-content');
+            content.style.animation = 'none';
+            void content.offsetWidth;
+            content.style.animation = '';
             document.getElementById('loginModal').classList.add('show');
             document.body.style.overflow = 'hidden';
-            showLoginForm(); // 默认显示登录表单
+            showLoginForm();
         }
 
         // 关闭登录模态框
@@ -1408,10 +1413,11 @@ function getDeviceId() {
             const modal = document.getElementById('loginModal');
             const content = modal.querySelector('.modal-content');
             content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
-            setTimeout(() => {
+            loginModalCloseTimer = setTimeout(() => {
                 modal.classList.remove('show');
                 content.style.animation = '';
                 document.body.style.overflow = 'auto';
+                loginModalCloseTimer = null;
             }, 260);
         }
 
@@ -2205,8 +2211,13 @@ function getDeviceId() {
         }
 
         let currentBar = null;
+        let photoModalCloseTimer = null;
+        let locationModalCloseTimer = null;
+        let loginModalCloseTimer = null;
+        let barModalCloseTimer = null;
 
         function openBarSheet(bar) {
+            if (barModalCloseTimer) { clearTimeout(barModalCloseTimer); barModalCloseTimer = null; }
             currentBar = bar;
             document.getElementById('barSheetName').textContent = bar.name;
             document.getElementById('barSheetAddress').textContent = bar.address || '';
@@ -2220,6 +2231,10 @@ function getDeviceId() {
                 checkinBtn.textContent = '在此打卡';
             }
 
+            const content = document.getElementById('barModal').querySelector('.modal-content');
+            content.style.animation = 'none';
+            void content.offsetWidth;
+            content.style.animation = '';
             document.getElementById('barModal').classList.add('show');
             document.body.style.overflow = 'hidden';
         }
@@ -2228,10 +2243,11 @@ function getDeviceId() {
             const modal = document.getElementById('barModal');
             const content = modal.querySelector('.modal-content');
             content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
-            setTimeout(() => {
+            barModalCloseTimer = setTimeout(() => {
                 modal.classList.remove('show');
                 content.style.animation = '';
                 document.body.style.overflow = 'auto';
+                barModalCloseTimer = null;
             }, 260);
         }
 
@@ -2745,6 +2761,8 @@ function getDeviceId() {
 
         // 打开照片模态框
         function openPhotoModal(photoId) {
+            if (photoModalCloseTimer) { clearTimeout(photoModalCloseTimer); photoModalCloseTimer = null; }
+
             currentPhotoId = photoId;
             loadPhotoDetails(photoId);
 
@@ -2771,7 +2789,11 @@ function getDeviceId() {
                     commentButton.textContent = '说完了';
                 }
             }
-            
+
+            const content = document.getElementById('photoModal').querySelector('.modal-content');
+            content.style.animation = 'none';
+            void content.offsetWidth;
+            content.style.animation = '';
             document.getElementById('photoModal').classList.add('show');
             document.body.style.overflow = 'hidden';
         }
@@ -2780,32 +2802,33 @@ function getDeviceId() {
         function closeModal() {
             const modal = document.getElementById('photoModal');
             const content = modal.querySelector('.modal-content');
-            // 先播关闭动画再隐藏
             content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
-            setTimeout(() => {
+            photoModalCloseTimer = setTimeout(() => {
                 modal.classList.remove('show');
                 content.style.animation = '';
                 document.getElementById('adminControls').classList.remove('show');
                 document.body.style.overflow = 'auto';
+                photoModalCloseTimer = null;
             }, 260);
         }
 
         // 打开位置照片集合模态框
         function openLocationPhotosModal(photosAtLocation) {
+            if (locationModalCloseTimer) { clearTimeout(locationModalCloseTimer); locationModalCloseTimer = null; }
+
             const modal = document.getElementById('locationPhotosModal');
             const grid = document.getElementById('locationPhotosGrid');
-            
+
             grid.innerHTML = '';
-            
+
             photosAtLocation.forEach(photo => {
                 const photoDiv = document.createElement('div');
                 photoDiv.className = 'location-photo-item';
                 photoDiv.onclick = () => {
                     // 立即隐藏位置弹窗，避免两个弹窗同时存在导致层级冲突
-                    const locModal = document.getElementById('locationPhotosModal');
-                    const locContent = locModal.querySelector('.modal-content');
-                    locModal.classList.remove('show');
-                    locContent.style.animation = '';
+                    if (locationModalCloseTimer) { clearTimeout(locationModalCloseTimer); locationModalCloseTimer = null; }
+                    modal.classList.remove('show');
+                    modal.querySelector('.modal-content').style.animation = '';
                     openPhotoModal(photo.id);
                 };
 
@@ -2821,7 +2844,11 @@ function getDeviceId() {
 
                 grid.appendChild(photoDiv);
             });
-            
+
+            const content = modal.querySelector('.modal-content');
+            content.style.animation = 'none';
+            void content.offsetWidth;
+            content.style.animation = '';
             modal.classList.add('show');
             document.body.style.overflow = 'hidden';
         }
@@ -2831,10 +2858,11 @@ function getDeviceId() {
             const modal = document.getElementById('locationPhotosModal');
             const content = modal.querySelector('.modal-content');
             content.style.animation = 'sheetDown 0.28s cubic-bezier(.4,0,1,1) forwards';
-            setTimeout(() => {
+            locationModalCloseTimer = setTimeout(() => {
                 modal.classList.remove('show');
                 content.style.animation = '';
                 document.body.style.overflow = 'auto';
+                locationModalCloseTimer = null;
             }, 260);
         }
 
