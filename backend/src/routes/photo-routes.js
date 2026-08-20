@@ -24,6 +24,6 @@ router.delete('/anonymous/:id', optionalAuth, deleteAnonymousPhoto);
 router.get('/anonymous/my', optionalAuth, getAnonymousMyPhotos);
 router.delete('/:id', authenticate, deletePhoto);
 router.get('/:id', getPhotoDetails);
-router.post('/:id/comments', authenticate, addPhotoComment);
+router.post('/:id/comments', optionalAuth, addPhotoComment);
 
 module.exports = router;

@@ -2256,13 +2256,8 @@ function getDeviceId() {
             document.getElementById('barSheetAddress').textContent = bar.address || '';
 
             const checkinBtn = document.getElementById('barCheckinBtn');
-            if (!currentUser) {
-                checkinBtn.disabled = true;
-                checkinBtn.textContent = '登录后打卡';
-            } else {
-                checkinBtn.disabled = false;
-                checkinBtn.textContent = '在此打卡';
-            }
+            checkinBtn.disabled = false;
+            checkinBtn.textContent = '在此打卡';
 
             const content = document.getElementById('barModal').querySelector('.modal-content');
             document.getElementById('barModal').classList.add('show');
@@ -2285,18 +2280,23 @@ function getDeviceId() {
         }
 
         async function checkinAtBar() {
-            if (!currentUser || !currentBar) return;
+            if (!currentBar) return;
             const btn = document.getElementById('barCheckinBtn');
             btn.disabled = true;
             btn.textContent = '打卡中...';
 
             try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                } else {
+                    headers['x-anonymous-id'] = getOrCreateAnonymousId();
+                }
                 const response = await fetch(`${API_BASE_URL}/api/bars/checkin`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`,
-                    },
+                    headers,
                     body: JSON.stringify({
                         amapPoiId: currentBar.id,
                         name: currentBar.name,
@@ -2679,8 +2679,6 @@ function getDeviceId() {
                     // 处理不同的错误情况
                     if (data.error && data.error.includes('每日最多只能上传')) {
                         alert(data.error + '\n\n请明天再来记录更多美好时刻！');
-                    } else if (data.error && data.error.includes('每日匿名打卡上限')) {
-                        alert(data.error + '\n\n登录后可记录更多美好时刻！');
                     } else {
                         alert(data.error || '上传失败');
                     }
@@ -2824,25 +2822,14 @@ function getDeviceId() {
             const commentInput = document.getElementById('commentInput');
             const commentButton = document.querySelector('.comment-submit');
 
-            if (!currentUser) {
-                if (commentInput) {
-                    commentInput.value = '';
-                    commentInput.placeholder = '登录后才能评论';
-                    commentInput.setAttribute('disabled', 'disabled');
-                }
-                if (commentButton) {
-                    commentButton.disabled = true;
-                    commentButton.textContent = '登录后评论';
-                }
-            } else {
-                if (commentInput) {
-                    commentInput.placeholder = '说点什么...';
-                    commentInput.removeAttribute('disabled');
-                }
-                if (commentButton) {
-                    commentButton.disabled = false;
-                    commentButton.textContent = '说完了';
-                }
+            if (commentInput) {
+                commentInput.value = '';
+                commentInput.placeholder = '说点什么...';
+                commentInput.removeAttribute('disabled');
+            }
+            if (commentButton) {
+                commentButton.disabled = false;
+                commentButton.textContent = '说完了';
             }
 
             const content = document.getElementById('photoModal').querySelector('.modal-content');
@@ -2948,24 +2935,23 @@ function getDeviceId() {
 
         // 添加评论到API
         async function addComment() {
-            if (!currentUser || !authToken) {
-                alert('请先登录');
-                showLoginModal();
-                return;
-            }
-
             const commentInput = document.getElementById('commentInput');
             const comment = commentInput.value.trim();
 
             if (!comment) return;
 
             try {
+                const headers = {
+                    'Content-Type': 'application/json',
+                };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                } else {
+                    headers['x-anonymous-id'] = getOrCreateAnonymousId();
+                }
                 const response = await fetch(`${API_BASE_URL}/api/photos/${currentPhotoId}/comments`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${authToken}`
-                    },
+                    headers,
                     body: JSON.stringify({ comment })
                 });
 

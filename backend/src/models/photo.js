@@ -15,8 +15,10 @@ const locationInfoSchema = new mongoose.Schema({
 }, { _id: false });
 
 const commentSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
+  anonymousId: { type: String, default: null },
   username: String,
+  avatar: { type: String, default: '' },
   text: String,
   createdAt: { type: Date, default: Date.now }
 }, { _id: false });

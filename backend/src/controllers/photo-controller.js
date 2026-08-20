@@ -474,9 +474,23 @@ const addPhotoComment = async (req, res) => {
       return res.status(400).json({ error: 'Comment required' });
     }
 
-    const user = await User.findById(req.userId);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    let username = '匿名旅人';
+    let avatar = '';
+    let userId = null;
+    let anonymousId = null;
+
+    if (req.userId) {
+      const user = await User.findById(req.userId);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      username = user.username;
+      avatar = user.avatar || '';
+      userId = req.userId;
+    } else if (req.anonymousId) {
+      anonymousId = req.anonymousId;
+    } else {
+      return res.status(401).json({ error: '请先登录或提供匿名标识' });
     }
 
     const photo = await Photo.findById(req.params.id);
@@ -485,8 +499,10 @@ const addPhotoComment = async (req, res) => {
     }
 
     photo.comments.push({
-      userId: req.userId,
-      username: user.username,
+      userId,
+      anonymousId,
+      username,
+      avatar,
       text: comment
     });
 
@@ -499,7 +515,7 @@ const addPhotoComment = async (req, res) => {
       success: true,
       comment: {
         username: latestComment.userId?.username || latestComment.username,
-        avatar: latestComment.userId?.avatar || '',
+        avatar: latestComment.userId?.avatar || latestComment.avatar || '',
         text: latestComment.text,
         createdAt: latestComment.createdAt
       }
