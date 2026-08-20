@@ -22,7 +22,7 @@ const commentSchema = new mongoose.Schema({
 }, { _id: false });
 
 const photoSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false },
   url: { type: String, required: true },
   caption: { type: String, required: true },
   lat: { type: Number, required: true },
@@ -36,11 +36,14 @@ const photoSchema = new mongoose.Schema({
   distanceToUser: Number,
   locationInfo: locationInfoSchema,
   comments: [commentSchema],
+  isAnonymous: { type: Boolean, default: false, index: true },
+  anonymousId: { type: String, index: true, sparse: true },
   createdAt: { type: Date, default: Date.now }
 });
 
 photoSchema.index({ location: '2dsphere' });
 photoSchema.index({ userId: 1, createdAt: -1 });
+photoSchema.index({ isAnonymous: 1, anonymousId: 1, createdAt: -1 });
 
 photoSchema.pre('save', function(next) {
   if (Number.isFinite(this.lat) && Number.isFinite(this.lng)) {

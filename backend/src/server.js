@@ -8,23 +8,28 @@ const startServer = async () => {
     await connectDatabase();
     console.log('Connected to MongoDB');
 
-    normaliseAllPhotoAssets()
-      .then(result => {
-        const { processed, migrated, updatedUrls, missing, error } = result;
-        if (error) {
-          console.warn('Photo asset normalisation encountered issues:', error);
-        } else {
-          console.log('Photo asset normalisation complete:', {
-            processed,
-            migrated,
-            updatedUrls,
-            missing
-          });
-        }
-      })
-      .catch(normaliseError => {
-        console.warn('Photo asset normalisation failed:', normaliseError.message);
-      });
+    const shouldRunMigration = process.env.MIGRATE_PHOTO_ASSETS === '1' || config.env === 'development';
+    if (shouldRunMigration) {
+      normaliseAllPhotoAssets()
+        .then(result => {
+          const { processed, migrated, updatedUrls, missing, error } = result;
+          if (error) {
+            console.warn('Photo asset normalisation encountered issues:', error);
+          } else {
+            console.log('Photo asset normalisation complete:', {
+              processed,
+              migrated,
+              updatedUrls,
+              missing
+            });
+          }
+        })
+        .catch(normaliseError => {
+          console.warn('Photo asset normalisation failed:', normaliseError.message);
+        });
+    } else {
+      console.log('Skipping photo asset normalisation on startup (set MIGRATE_PHOTO_ASSETS=1 to enable)');
+    }
   } catch (error) {
     console.error('MongoDB connection error:', error);
     process.exit(1);

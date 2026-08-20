@@ -37,14 +37,20 @@ if (!allowedOrigins.size) {
 
 const corsOptions = {
   origin(origin, callback) {
-    console.log('CORS check for origin:', origin);
-    console.log('Allowed origins:', Array.from(allowedOrigins));
+    if (!config.isProduction) {
+      console.log('CORS check for origin:', origin);
+      console.log('Allowed origins:', Array.from(allowedOrigins));
+    }
     if (!origin) {
-      console.log('No origin header, allowing');
+      if (!config.isProduction) {
+        console.log('No origin header, allowing');
+      }
       return callback(null, true);
     }
     if (!allowedOrigins.size || allowedOrigins.has(origin)) {
-      console.log('Origin allowed:', origin);
+      if (!config.isProduction) {
+        console.log('Origin allowed:', origin);
+      }
       return callback(null, true);
     }
     console.warn('Blocked CORS origin:', origin);

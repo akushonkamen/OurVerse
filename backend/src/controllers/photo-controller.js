@@ -16,6 +16,9 @@ const {
   pruneEmptyParentDirs,
   fileExists
 } = require('../services/photo-storage-service');
+const { getOrCreateAnonymousId, assertAnonymousUploadQuota } = require('../services/anonymous-service');
+
+const ANONYMOUS_DAILY_LIMIT = Number.parseInt(process.env.ANONYMOUS_DAILY_UPLOAD_LIMIT, 10) || 1;
 
 const uploadsRoot = path.resolve(__dirname, '..', '..', config.uploadsDir);
 
@@ -229,7 +232,16 @@ const getNearbyPhotos = async (req, res) => {
 
     const viewerId = getViewerIdFromRequest(req);
 
-    const nearbyPhotosRaw = await Photo.aggregate([
+    const total = await Photo.countDocuments({
+      location: {
+        $near: {
+          $geometry: { type: 'Point', coordinates: [userLng, userLat] },
+          $maxDistance: searchRadius
+        }
+      }
+    });
+
+    const paginatedPhotosRaw = await Photo.aggregate([
       {
         $geoNear: {
           near: { type: 'Point', coordinates: [userLng, userLat] },
@@ -262,13 +274,10 @@ const getNearbyPhotos = async (req, res) => {
           userAvatar: { $arrayElemAt: ['$user.avatar', 0] },
           createdAt: 1
         }
-      }
+      },
+      { $skip: (numericPage - 1) * numericLimit },
+      { $limit: numericLimit }
     ]);
-
-    const total = nearbyPhotosRaw.length;
-    const startIndex = (numericPage - 1) * numericLimit;
-    const endIndex = startIndex + numericLimit;
-    const paginatedPhotosRaw = nearbyPhotosRaw.slice(startIndex, endIndex);
 
     const nearbyPhotos = [];
 
@@ -550,11 +559,294 @@ const deletePhoto = async (req, res) => {
   }
 };
 
+const uploadAnonymousPhoto = async (req, res) => {
+  try {
+    const { caption, userLat, userLng, locationSource } = req.body;
+    const file = req.file;
+
+    if (req.fileValidationError) {
+      return res.status(400).json({ error: req.fileValidationError });
+    }
+
+    if (!file) {
+      return res.status(400).json({ error: 'No photo provided' });
+    }
+
+    if (!caption) {
+      return res.status(400).json({ error: 'Caption required' });
+    }
+
+    if (!req.anonymousId) {
+      req.anonymousId = getOrCreateAnonymousId(req);
+    }
+
+    try {
+      await assertAnonymousUploadQuota(req.anonymousId, ANONYMOUS_DAILY_LIMIT);
+    } catch (quotaError) {
+      if (quotaError.code === 'QUOTA_EXCEEDED') {
+        return res.status(400).json({ error: quotaError.message });
+      }
+      throw quotaError;
+    }
+
+    let exif = { tags: {} };
+    try {
+      exif = exifParser.create(file.buffer).parse();
+    } catch (parseError) {
+      console.warn('EXIF解析失败，将视为无GPS信息:', parseError.message);
+    }
+
+    const gps = exif.tags || {};
+    const hasExifCoords = Number.isFinite(gps.GPSLatitude) && Number.isFinite(gps.GPSLongitude);
+
+    const parsedUserLat = Number(userLat);
+    const parsedUserLng = Number(userLng);
+    const hasUserCoords = Number.isFinite(parsedUserLat) && Number.isFinite(parsedUserLng);
+
+    let photoLat;
+    let photoLng;
+    let distanceToUser = 0;
+
+    if (hasExifCoords) {
+      photoLat = Number(gps.GPSLatitude);
+      photoLng = Number(gps.GPSLongitude);
+      if (gps.GPSLatitudeRef === 'S') {
+        photoLat = -photoLat;
+      }
+      if (gps.GPSLongitudeRef === 'W') {
+        photoLng = -photoLng;
+      }
+
+      if (!hasUserCoords) {
+        return res.status(400).json({ error: '缺少当前位置坐标，无法验证照片位置' });
+      }
+
+      distanceToUser = calculateDistance(parsedUserLat, parsedUserLng, photoLat, photoLng);
+      if (distanceToUser > config.maxDistanceVerification) {
+        return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
+      }
+    } else if (locationSource === 'amap') {
+      if (!hasUserCoords) {
+        return res.status(400).json({ error: '请使用高德地图定位服务获取位置信息' });
+      }
+      photoLat = parsedUserLat;
+      photoLng = parsedUserLng;
+      distanceToUser = 0;
+    } else {
+      return res.status(400).json({ error: '必须使用高德地图定位服务，请刷新页面重试' });
+    }
+
+    if (!Number.isFinite(photoLat) || !Number.isFinite(photoLng)) {
+      return res.status(400).json({ error: '无法识别照片的地理位置信息' });
+    }
+
+    await ensureUploadsDir();
+
+    const ownerDirSegment = 'anonymous';
+    const now = new Date();
+    const yearSegment = String(now.getUTCFullYear());
+    const monthSegment = String(now.getUTCMonth() + 1).padStart(2, '0');
+
+    const relativeDir = path.join(config.uploadsDir, ownerDirSegment, yearSegment, monthSegment);
+    const absoluteDir = path.resolve(__dirname, '..', '..', relativeDir);
+    await fs.promises.mkdir(absoluteDir, { recursive: true });
+
+    const filename = `${crypto.randomBytes(16).toString('hex')}.jpg`;
+    const filepath = path.join(absoluteDir, filename);
+
+    await sharp(file.buffer)
+      .resize({ width: 800, height: 800, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 80 })
+      .toFile(filepath);
+
+    const normalizedUploadsDir = config.uploadsDir.replace(/\\/g, '/');
+    const baseSegments = normalizedUploadsDir.split('/').filter(Boolean);
+    const urlSegments = [...baseSegments, ownerDirSegment, yearSegment, monthSegment, filename];
+    const imageUrl = '/' + path.posix.join(...urlSegments);
+
+    const CLUSTER_RADIUS_METERS = 10;
+    let clusterAnchor;
+    try {
+      clusterAnchor = await Photo.findOne({
+        location: {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [photoLng, photoLat] },
+            $maxDistance: CLUSTER_RADIUS_METERS
+          }
+        }
+      }).select({ location: 1, locationInfo: 1 }).lean();
+    } catch (clusterError) {
+      console.warn('Nearby photo lookup for clustering failed:', clusterError.message);
+    }
+
+    if (clusterAnchor?.location?.coordinates?.length === 2) {
+      const [clusterLng, clusterLat] = clusterAnchor.location.coordinates;
+      photoLat = clusterLat;
+      photoLng = clusterLng;
+      if (hasUserCoords) {
+        distanceToUser = calculateDistance(parsedUserLat, parsedUserLng, photoLat, photoLng);
+      }
+    }
+
+    const locationInfo = clusterAnchor?.locationInfo
+      ? clusterAnchor.locationInfo
+      : await buildPhotoLocationInfo(photoLat, photoLng);
+
+    const photo = new Photo({
+      userId: null,
+      isAnonymous: true,
+      anonymousId: req.anonymousId,
+      url: imageUrl,
+      caption,
+      lat: photoLat,
+      lng: photoLng,
+      location: {
+        type: 'Point',
+        coordinates: [photoLng, photoLat]
+      },
+      exifLat: hasExifCoords ? photoLat : null,
+      exifLng: hasExifCoords ? photoLng : null,
+      distanceToUser,
+      locationInfo
+    });
+
+    await photo.save();
+
+    res.json({ success: true, photo, anonymousId: req.anonymousId });
+  } catch (error) {
+    console.error('Anonymous upload error:', error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ error: '照片数据校验失败，请重试' });
+    }
+    res.status(500).json({ error: 'Upload failed' });
+  }
+};
+
+const deleteAnonymousPhoto = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({ error: 'Photo id is required' });
+    }
+
+    const photo = await Photo.findById(id);
+    if (!photo) {
+      return res.status(404).json({ error: 'Photo not found' });
+    }
+
+    if (!photo.isAnonymous || !photo.anonymousId) {
+      return res.status(403).json({ error: '无权删除这张照片' });
+    }
+
+    if (String(photo.anonymousId) !== String(req.anonymousId)) {
+      return res.status(403).json({ error: '无权删除这张照片' });
+    }
+
+    const elapsedMs = Date.now() - photo.createdAt.getTime();
+    if (elapsedMs >= 24 * 60 * 60 * 1000) {
+      return res.status(403).json({ error: '匿名打卡24小时后无法删除' });
+    }
+
+    const filePath = resolvePhotoFilePath(photo.url);
+
+    await photo.deleteOne();
+
+    if (filePath) {
+      try {
+        await fs.promises.unlink(filePath);
+      } catch (error) {
+        if (error.code !== 'ENOENT') {
+          console.warn('Failed to delete anonymous photo file:', {
+            filePath,
+            message: error.message
+          });
+        }
+      }
+
+      await pruneEmptyParentDirs(filePath, 'anonymous');
+    }
+
+    res.json({ success: true, id });
+  } catch (error) {
+    console.error('Delete anonymous photo error:', error);
+    res.status(500).json({ error: 'Failed to delete photo' });
+  }
+};
+
+const getAnonymousMyPhotos = async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+
+    const numericLimit = Number.parseInt(limit, 10) || 20;
+    const numericPage = Number.parseInt(page, 10) || 1;
+
+    const photos = await Photo.find({ isAnonymous: true, anonymousId: req.anonymousId })
+      .sort({ createdAt: -1 })
+      .limit(numericLimit)
+      .skip((numericPage - 1) * numericLimit);
+
+    const filteredPhotos = [];
+    let missingAssets = 0;
+
+    for (const photo of photos) {
+      await ensurePhotoDocumentAsset(photo);
+      const assetPath = resolvePhotoFilePath(photo.url);
+      const assetExists = await fileExists(assetPath);
+
+      if (!assetExists) {
+        missingAssets += 1;
+        continue;
+      }
+
+      filteredPhotos.push(photo);
+    }
+
+    const total = await Photo.countDocuments({ isAnonymous: true, anonymousId: req.anonymousId });
+
+    res.json({
+      photos: filteredPhotos.map(photo => {
+        const fullUrl = photo.url.startsWith('http')
+          ? photo.url
+          : `${req.protocol}://${req.get('host')}${photo.url}`;
+
+        return {
+          id: photo._id,
+          url: fullUrl,
+          caption: photo.caption,
+          lat: photo.lat,
+          lng: photo.lng,
+          locationInfo: photo.locationInfo,
+          comments: photo.comments.length,
+          createdAt: photo.createdAt,
+          canDelete: Date.now() - photo.createdAt.getTime() < 24 * 60 * 60 * 1000
+        };
+      }),
+      pagination: {
+        page: numericPage,
+        limit: numericLimit,
+        total,
+        pages: Math.ceil(total / numericLimit),
+        returned: filteredPhotos.length
+      },
+      stats: {
+        missingAssetsInPage: missingAssets
+      }
+    });
+  } catch (error) {
+    console.error('Anonymous my photos error:', error);
+    res.status(500).json({ error: 'Failed to fetch photos' });
+  }
+};
+
 module.exports = {
   uploadPhoto,
   getNearbyPhotos,
   getMyPhotos,
   getPhotoDetails,
   addPhotoComment,
-  deletePhoto
+  deletePhoto,
+  uploadAnonymousPhoto,
+  deleteAnonymousPhoto,
+  getAnonymousMyPhotos
 };

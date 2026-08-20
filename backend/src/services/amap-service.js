@@ -3,6 +3,26 @@ const config = require('../config/env');
 const { toCleanString } = require('../utils/string-utils');
 const { calculateDistance, parseAmapRectangle } = require('../utils/geo-utils');
 
+const reverseGeocodeCache = new Map();
+const CACHE_TTL_MS = 60 * 60 * 1000;
+const CACHE_MAX = 1000;
+const cacheGet = key => {
+  const entry = reverseGeocodeCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.t > CACHE_TTL_MS) {
+    reverseGeocodeCache.delete(key);
+    return null;
+  }
+  return entry.v;
+};
+const cacheSet = (key, value) => {
+  if (reverseGeocodeCache.size >= CACHE_MAX) {
+    const firstKey = reverseGeocodeCache.keys().next().value;
+    reverseGeocodeCache.delete(firstKey);
+  }
+  reverseGeocodeCache.set(key, { v: value, t: Date.now() });
+};
+
 const getRestApiKey = () => {
   if (!config.amap.restApiKey) {
     throw new Error('高德Web服务API密钥未配置');
@@ -19,6 +39,10 @@ const getReverseGeocodeKey = () => {
 };
 
 const reverseGeocode = async (lat, lng, options = {}) => {
+  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) return cached;
+
   const apiKey = getReverseGeocodeKey();
 
   const params = {
@@ -37,6 +61,10 @@ const reverseGeocode = async (lat, lng, options = {}) => {
     params,
     timeout: options.timeout ?? 5000
   });
+
+  if (response.data?.status === '1') {
+    cacheSet(cacheKey, response.data);
+  }
 
   return response.data;
 };

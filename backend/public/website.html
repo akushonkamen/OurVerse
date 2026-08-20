@@ -989,6 +989,7 @@
     <nav class="nav">
         <h1>OurVerse</h1>
         <div class="nav-user" id="navUser">
+            <button class="admin-btn" onclick="showMyAnonymousPhotos()" id="myCheckinsBtn" style="margin-right: 8px;">我的打卡</button>
             <button class="admin-btn" onclick="showLoginModal()" id="loginBtn">登录</button>
         </div>
     </nav>
@@ -1387,7 +1388,7 @@ function getDeviceId() {
         function showLoginRequired() {
             const uploadStatus = document.getElementById('uploadStatus');
             if (uploadStatus) {
-                uploadStatus.textContent = '登录后可以上传照片和评论';
+                uploadStatus.textContent = '点一下开始写诗';
             }
 
             const photosTitle = document.querySelector('.photos-title');
@@ -1764,6 +1765,34 @@ function getDeviceId() {
             }
         }
 
+        // 显示未登录用户的打卡列表
+        async function showMyAnonymousPhotos(page = 1) {
+            myPhotosCurrentPage = page;
+            try {
+                const photosGrid = document.getElementById('photosGrid');
+                if (photosGrid) {
+                    photosGrid.innerHTML = '<div class="empty-state">正在查找你的打卡...</div>';
+                }
+
+                const anonId = getOrCreateAnonymousId();
+                const response = await fetch(`${API_BASE_URL}/api/photos/anonymous/my?page=${page}&limit=20`, {
+                    headers: { 'x-anonymous-id': anonId }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    myPhotosPagination = data.pagination || null;
+                    displayMyPhotos(data);
+                } else {
+                    console.error('获取匿名打卡失败');
+                    alert('获取打卡失败，请重试');
+                }
+            } catch (error) {
+                console.error('获取匿名打卡错误:', error);
+                alert('获取打卡失败，请重试');
+            }
+        }
+
         // 退出登录
         function logout() {
             currentUser = null;
@@ -1776,7 +1805,10 @@ function getDeviceId() {
             nearbyPhotosPagination = null;
 
             const navUser = document.getElementById('navUser');
-            navUser.innerHTML = '<button class="admin-btn" onclick="showLoginModal()" id="loginBtn">登录</button>';
+            navUser.innerHTML = `
+                <button class="admin-btn" onclick="showMyAnonymousPhotos()" id="myCheckinsBtn" style="margin-right: 8px;">我的打卡</button>
+                <button class="admin-btn" onclick="showLoginModal()" id="loginBtn">登录</button>
+            `;
 
             const photosTitle = document.querySelector('.photos-title');
             const backButton = photosTitle?.querySelector('.admin-btn');
@@ -2550,12 +2582,17 @@ function getDeviceId() {
         }
 
         // 上传照片到API
-        async function uploadPhoto() {
-            if (!currentUser || !authToken) {
-                showLoginModal();
-                return;
+        function getOrCreateAnonymousId() {
+            let id = localStorage.getItem('ourverse_anonymous_id');
+            if (!id) {
+                id = (crypto.randomUUID && crypto.randomUUID())
+                    || (Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+                localStorage.setItem('ourverse_anonymous_id', id);
             }
+            return id;
+        }
 
+        async function uploadPhoto() {
             if (!userLocation) {
                 alert('请先获取位置信息');
                 return;
@@ -2593,11 +2630,22 @@ function getDeviceId() {
                 formData.append('userLng', userLocation.lng);
                 formData.append('locationSource', locationSource || 'unknown');
 
-                const response = await fetch(`${API_BASE_URL}/api/photos/upload`, {
+                // 未登录走免登录打卡接口
+                const isLoggedIn = Boolean(currentUser && authToken);
+                const endpoint = isLoggedIn
+                    ? `${API_BASE_URL}/api/photos/upload`
+                    : `${API_BASE_URL}/api/photos/anonymous`;
+
+                const headers = {};
+                if (isLoggedIn) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                } else {
+                    headers['x-anonymous-id'] = getOrCreateAnonymousId();
+                }
+
+                const response = await fetch(endpoint, {
                     method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${authToken}`
-                    },
+                    headers,
                     body: formData
                 });
 
@@ -2618,7 +2666,11 @@ function getDeviceId() {
                     // 重新加载附近照片
                     await loadNearbyPhotos();
 
-                    alert('照片上传成功！');
+                    if (!isLoggedIn) {
+                        alert('免登录打卡成功！24小时内可删除');
+                    } else {
+                        alert('照片上传成功！');
+                    }
                 } else {
                     if (response.status === 413) {
                         alert('服务器拒绝了本次上传大小，请稍后重试或联系管理员。');
@@ -2627,6 +2679,8 @@ function getDeviceId() {
                     // 处理不同的错误情况
                     if (data.error && data.error.includes('每日最多只能上传')) {
                         alert(data.error + '\n\n请明天再来记录更多美好时刻！');
+                    } else if (data.error && data.error.includes('每日匿名打卡上限')) {
+                        alert(data.error + '\n\n登录后可记录更多美好时刻！');
                     } else {
                         alert(data.error || '上传失败');
                     }

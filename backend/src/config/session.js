@@ -1,12 +1,18 @@
 const session = require('express-session');
+const MongoStore = require('connect-mongo');
 const config = require('./env');
 
 const createSessionMiddleware = () => session({
   secret: config.sessionSecret,
   resave: false,
   saveUninitialized: false,
-  // 在生产环境中使用更稳定的session存储
-  store: config.isProduction ? undefined : undefined, // 暂时使用默认memory store进行测试
+  store: config.isProduction
+    ? MongoStore.create({
+      mongoUrl: config.mongodbUri,
+      collectionName: 'sessions',
+      touchAfter: 24 * 3600
+    })
+    : undefined,
   cookie: {
     httpOnly: true,
     secure: config.isProduction,

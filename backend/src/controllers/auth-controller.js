@@ -198,12 +198,7 @@ const beginGitHubAuth = (req, res) => {
   const state = crypto.randomBytes(16).toString('hex');
   req.session.oauthState = state;
 
-  console.log('Generated new OAuth state:', {
-    state,
-    sessionId: req.sessionID,
-    hasSession: !!req.session,
-    sessionKeys: Object.keys(req.session || {})
-  });
+  console.log('GitHub OAuth: beginning authorization');
 
   const githubAuthUrl = `https://github.com/login/oauth/authorize?`
     + `client_id=${config.github.clientId}&`
@@ -218,27 +213,20 @@ const handleGitHubCallback = async (req, res, next) => {
   try {
     const { state, code } = req.query;
     console.log('GitHub callback received:', {
-      state,
-      code: code ? 'present' : 'missing',
       sessionId: req.sessionID,
-      sessionState: req.session.oauthState,
-      hasSession: !!req.session,
-      sessionKeys: req.session ? Object.keys(req.session) : 'no session',
-      cookies: req.headers.cookie || 'no cookies',
-      userAgent: req.headers['user-agent']
+      stateMatch: state === req.session.oauthState,
+      hasCode: Boolean(code)
     });
 
     if (!state || state !== req.session.oauthState) {
       console.error('State validation failed:', {
-        received: state,
-        expected: req.session.oauthState,
-        sessionExists: !!req.session.oauthState,
-        sessionId: req.sessionID
+        sessionId: req.sessionID,
+        stateMatch: state === req.session.oauthState,
+        hasCode: Boolean(code)
       });
       delete req.session.oauthState;
       const frontendBaseUrl = config.getFrontendBaseUrl(req);
       const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=invalid_state`;
-      console.log('Redirecting to:', redirectUrl);
       return res.redirect(redirectUrl);
     }
 
@@ -249,7 +237,6 @@ const handleGitHubCallback = async (req, res, next) => {
         console.error('GitHub OAuth error:', err || info);
         const frontendBaseUrl = config.getFrontendBaseUrl(req);
         const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=github_auth_failed`;
-        console.log('Redirecting due to auth error to:', redirectUrl);
         return res.redirect(redirectUrl);
       }
 
@@ -258,13 +245,11 @@ const handleGitHubCallback = async (req, res, next) => {
         console.log('GitHub login successful for user:', user.username);
         const frontendBaseUrl = config.getFrontendBaseUrl(req);
         const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?token=${token}`;
-        console.log('Redirecting to success page:', redirectUrl);
         return res.redirect(redirectUrl);
       } catch (tokenError) {
         console.error('Token generation error:', tokenError);
         const frontendBaseUrl = config.getFrontendBaseUrl(req);
         const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=token_generation_failed`;
-        console.log('Redirecting due to token error:', redirectUrl);
         return res.redirect(redirectUrl);
       }
     })(req, res, next);
@@ -272,7 +257,6 @@ const handleGitHubCallback = async (req, res, next) => {
     console.error('GitHub OAuth callback error:', error);
     const frontendBaseUrl = config.getFrontendBaseUrl(req);
     const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=auth_callback_error`;
-    console.log('Redirecting due to callback error:', redirectUrl);
     return res.redirect(redirectUrl);
   }
 };

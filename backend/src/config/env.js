@@ -14,7 +14,9 @@ for (const candidate of envCandidates) {
   }
 }
 
-const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const requiredEnvVars = process.env.NODE_ENV === 'production'
+  ? ['MONGODB_URI', 'JWT_SECRET', 'MAX_FILE_SIZE']
+  : ['MONGODB_URI', 'JWT_SECRET'];
 const missingEnvVars = requiredEnvVars.filter(name => !process.env[name]);
 if (missingEnvVars.length) {
   console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
@@ -78,6 +80,11 @@ const parseByteSize = (value, fallback) => {
 const maxFileSizeRaw = parseByteSize(process.env.MAX_FILE_SIZE, 0);
 const maxFileSize = Number.isFinite(maxFileSizeRaw) && maxFileSizeRaw > 0 ? maxFileSizeRaw : null;
 
+if (process.env.NODE_ENV === 'production' && !maxFileSize) {
+  console.error('MAX_FILE_SIZE must be set in production');
+  process.exit(1);
+}
+
 const config = {
   env: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
@@ -96,6 +103,7 @@ const config = {
     maxRequests: parseInteger(process.env.RATE_LIMIT_MAX_REQUESTS, 100)
   },
   dailyUploadLimit: parseInteger(process.env.DAILY_UPLOAD_LIMIT, 5),
+  anonymousDailyUploadLimit: parseInteger(process.env.ANONYMOUS_DAILY_UPLOAD_LIMIT, 1),
   maxDistanceVerification: parseInteger(process.env.MAX_DISTANCE_VERIFICATION, 50),
   bcryptSaltRounds: parseInteger(process.env.BCRYPT_SALT_ROUNDS, 10),
   protocol: process.env.PROTOCOL || 'https',
