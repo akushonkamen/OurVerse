@@ -164,14 +164,20 @@ const uploadPhoto = async (req, res) => {
     const CLUSTER_RADIUS_METERS = 10;
     let clusterAnchor;
     try {
-      clusterAnchor = await Photo.findOne({
-        location: {
-          $near: {
-            $geometry: { type: 'Point', coordinates: [photoLng, photoLat] },
-            $maxDistance: CLUSTER_RADIUS_METERS
+      const anchorResult = await Photo.aggregate([
+        {
+          $geoNear: {
+            near: { type: 'Point', coordinates: [photoLng, photoLat] },
+            key: 'location',
+            distanceField: 'distance',
+            maxDistance: CLUSTER_RADIUS_METERS,
+            spherical: true
           }
-        }
-      }).select({ location: 1, locationInfo: 1 }).lean();
+        },
+        { $limit: 1 },
+        { $project: { location: 1, locationInfo: 1 } }
+      ]);
+      clusterAnchor = anchorResult[0] || null;
     } catch (clusterError) {
       console.warn('Nearby photo lookup for clustering failed:', clusterError.message);
     }
@@ -232,14 +238,19 @@ const getNearbyPhotos = async (req, res) => {
 
     const viewerId = getViewerIdFromRequest(req);
 
-    const total = await Photo.countDocuments({
-      location: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [userLng, userLat] },
-          $maxDistance: searchRadius
+    const totalResult = await Photo.aggregate([
+      {
+        $geoNear: {
+          near: { type: 'Point', coordinates: [userLng, userLat] },
+          key: 'location',
+          distanceField: 'distance',
+          maxDistance: searchRadius,
+          spherical: true
         }
-      }
-    });
+      },
+      { $count: 'total' }
+    ]);
+    const total = totalResult[0]?.total || 0;
 
     const paginatedPhotosRaw = await Photo.aggregate([
       {
@@ -683,14 +694,20 @@ const uploadAnonymousPhoto = async (req, res) => {
     const CLUSTER_RADIUS_METERS = 10;
     let clusterAnchor;
     try {
-      clusterAnchor = await Photo.findOne({
-        location: {
-          $near: {
-            $geometry: { type: 'Point', coordinates: [photoLng, photoLat] },
-            $maxDistance: CLUSTER_RADIUS_METERS
+      const anchorResult = await Photo.aggregate([
+        {
+          $geoNear: {
+            near: { type: 'Point', coordinates: [photoLng, photoLat] },
+            key: 'location',
+            distanceField: 'distance',
+            maxDistance: CLUSTER_RADIUS_METERS,
+            spherical: true
           }
-        }
-      }).select({ location: 1, locationInfo: 1 }).lean();
+        },
+        { $limit: 1 },
+        { $project: { location: 1, locationInfo: 1 } }
+      ]);
+      clusterAnchor = anchorResult[0] || null;
     } catch (clusterError) {
       console.warn('Nearby photo lookup for clustering failed:', clusterError.message);
     }
