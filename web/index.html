@@ -1,0 +1,1214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#efecdf">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 8 8%27%3E%3Crect width=%278%27 height=%278%27 fill=%27%23efecdf%27/%3E%3Crect x=%271%27 y=%271%27 width=%276%27 height=%276%27 fill=%27%2326241c%27/%3E%3Crect x=%272%27 y=%272%27 width=%272%27 height=%272%27 fill=%27%23a3463c%27/%3E%3Crect x=%274%27 y=%274%27 width=%272%27 height=%272%27 fill=%27%23efecdf%27/%3E%3C/svg%3E">
+<meta name="description" content="OUTIE：到现场打卡，收集宠物造型。">
+<title>OUTIE — 到现场打卡，收集造型</title>
+<style>
+:root{
+  --paper:#efecdf;--panel:#faf8ee;--ink:#26241c;--muted:#7c7867;--line:#c8c3ad;--faint:#e2ddc8;
+  --blue:#41597e;--red:#a3463c;--yellow:#a8842e;--green:#4a6c46;
+  font-family:ui-monospace,"SF Mono",Menlo,Consolas,"Courier New",monospace,"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+  color:var(--ink);background:var(--paper);
+}
+*{box-sizing:border-box}body{margin:0;min-width:300px;-webkit-font-smoothing:antialiased;background:var(--paper);background-image:repeating-conic-gradient(#26241c07 0% 25%,transparent 0% 50%);background-size:6px 6px}
+button,input{font:inherit;color:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation;border:0;line-height:1.3}button:disabled{cursor:default;opacity:.5}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--ink);outline-offset:2px}button:focus:not(:focus-visible){outline:none}
+a{color:inherit}svg{display:block}h1,h2,h3,p{margin:0}::selection{background:var(--ink);color:var(--paper)}
+[hidden]{display:none!important}.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.mono{letter-spacing:.08em}.eyebrow{font-size:10px;letter-spacing:.14em;font-weight:700}.muted{color:var(--muted)}
+.icon{width:100%;height:100%;flex:none}
+.shell{max-width:1184px;padding:0 28px;margin:0 auto}
+.skip-link{position:fixed;top:-100px;left:18px;background:var(--ink);color:var(--paper);padding:12px;z-index:20}.skip-link:focus{top:12px}
+.site-header{min-height:84px;display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:2px solid var(--ink);padding:10px 0}
+.brand{display:flex;align-items:center;gap:14px;background:none;padding:0;text-align:left}
+.brand svg{image-rendering:pixelated}
+.brand-caption{border-left:2px solid var(--line);padding-left:13px;font-size:9px;line-height:1.6;letter-spacing:.14em;color:var(--muted)}
+.desktop-nav{display:flex;gap:0;border:2px solid var(--ink);background:var(--panel)}
+.nav-btn{background:none;padding:11px 22px;font-size:13px;font-weight:700;letter-spacing:.06em;border-right:2px solid var(--ink)}
+.nav-btn:last-child{border-right:0}
+.nav-btn[aria-current="page"]{background:var(--ink);color:var(--paper)}
+.header-end{display:flex;align-items:center;gap:10px}
+.demo-badge{font-size:9px;letter-spacing:.12em;border:2px solid var(--ink);padding:6px 9px;background:var(--panel);font-weight:700}
+.icon-btn{min-width:42px;height:42px;border:2px solid var(--ink);background:var(--panel);font-size:10px;font-weight:700;letter-spacing:.1em;padding:0 10px}
+.icon-btn:hover{background:var(--ink);color:var(--paper)}
+.corner-badge{position:fixed;z-index:30;border:2px solid var(--ink);background:var(--paper);color:var(--ink);font-size:9px;font-weight:700;letter-spacing:.14em;padding:6px 8px;font-family:inherit}
+.corner-badge.dev{top:12px;right:12px}
+.corner-badge.dev:hover{background:var(--ink);color:var(--paper)}
+.corner-badge.offline{left:12px;bottom:12px;cursor:default}
+.page-intro{display:flex;align-items:end;justify-content:space-between;gap:24px;margin:30px 0 22px}
+.page-intro h1{font-size:27px;line-height:1.4;letter-spacing:-.01em;font-weight:700}
+.intro-copy{font-size:13px;line-height:1.8;color:var(--muted);margin-top:8px}
+.intro-mark{font-size:9px;letter-spacing:.14em;white-space:nowrap;border:2px solid var(--ink);padding:8px 10px;background:var(--panel);font-weight:700;margin-bottom:8px}
+.main-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:24px;align-items:start}
+.panel{background:var(--panel);border:2px solid var(--ink)}
+.pet-card{background:var(--panel);border:2px solid var(--ink);padding:12px;position:relative}
+.pet-topline{display:flex;justify-content:space-between;align-items:center;font-size:9px;letter-spacing:.14em;padding:0 2px 10px;color:var(--muted)}
+.pet-online{display:flex;gap:6px;align-items:center}
+.live-dot{width:7px;height:7px;display:inline-block;background:var(--green)}
+.pet-canvas{position:relative;border:2px solid var(--ink);height:365px;overflow:hidden;background-color:#ece8d6;background-image:linear-gradient(#26241c0d 1px,transparent 1px),linear-gradient(90deg,#26241c0d 1px,transparent 1px);background-size:22px 22px}
+.pet-canvas.music{background-color:#e2e5ea}.pet-canvas.art{background-color:#ece2da}.pet-canvas.market{background-color:#eae4cc}
+.pet-canvas.evolved{background-color:#2e2c25;background-image:linear-gradient(#ffffff14 1px,transparent 1px),linear-gradient(90deg,#ffffff14 1px,transparent 1px);color:var(--paper)}
+.canvas-id{position:absolute;top:13px;left:14px;font-size:9px;letter-spacing:.14em;font-weight:700;z-index:1;background:var(--paper);border:2px solid var(--ink);padding:4px 7px;color:var(--ink)}
+.pet-canvas.evolved .canvas-id{background:var(--paper)}
+.deco{position:absolute;font-size:14px;font-weight:700;z-index:1;opacity:.5}
+.deco.d1{left:22px;top:110px}.deco.d2{right:26px;top:170px}
+.pet-touch{width:290px;height:280px;position:absolute;bottom:28px;left:50%;transform:translateX(-50%);background:none;padding:0;z-index:2}
+.pet-touch svg{width:100%;height:100%;image-rendering:pixelated;animation:bob 1.4s steps(1,end) infinite}
+.pet-touch.hop svg{animation:hop .5s steps(1,end) 1}
+@keyframes bob{0%,49%{transform:translateY(0)}50%,100%{transform:translateY(-4px)}}
+@keyframes hop{0%,24%{transform:translateY(0)}25%,49%{transform:translateY(-14px)}50%,74%{transform:translateY(0)}75%,100%{transform:translateY(-7px)}}
+.ground{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);width:190px;height:10px;border-bottom:3px solid var(--ink);background:repeating-conic-gradient(#26241c30 0% 25%,transparent 0% 50%) 0 0/6px 6px}
+.evolved .ground{border-bottom-color:#efecdf;background:repeating-conic-gradient(#efecdf40 0% 25%,transparent 0% 50%) 0 0/6px 6px}
+.orbit-note{position:absolute;left:16px;bottom:16px;font-size:8px;letter-spacing:.16em;z-index:3;color:var(--muted)}
+.evolved .orbit-note{color:#b9b4a0}
+.screen-badge{position:absolute;right:16px;bottom:16px;border:2px solid var(--ink);background:var(--paper);color:var(--ink);padding:7px 9px;font-size:9px;letter-spacing:.14em;font-weight:700;z-index:3}
+.pet-caption{display:flex;align-items:center;justify-content:space-between;padding:15px 2px 4px;gap:12px}
+.pet-name{font-size:21px;font-weight:700;letter-spacing:.02em;overflow-wrap:anywhere}
+.pet-caption .look-label{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:5px;letter-spacing:.06em}
+.look-chip{display:flex;align-items:center;gap:5px;border:2px solid var(--line);padding:7px 9px;font-size:10px;white-space:nowrap;background:var(--paper)}
+.hero-under{display:flex;justify-content:space-between;gap:10px;font-size:9px;letter-spacing:.12em;color:var(--muted);padding:13px 2px 0;font-weight:700}
+.side-stack{display:flex;flex-direction:column;gap:18px}
+.adopt-panel{padding:28px}
+.adopt-panel .eyebrow{color:var(--muted);margin-bottom:16px}
+.adopt-panel h2{font-size:30px;line-height:1.3;margin-bottom:14px;font-weight:700}
+.adopt-panel p{font-size:13px;color:var(--muted);line-height:1.9}
+.name-label{font-size:12px;font-weight:700;display:flex;justify-content:space-between;margin:22px 0 9px;align-items:center}
+.name-label span{font-size:10px;font-weight:400;color:var(--muted)}
+.name-input{width:100%;background:var(--paper);border:2px solid var(--line);padding:13px 14px;font-size:16px;font-weight:700;min-width:0}
+.name-input:focus{border-color:var(--ink);outline:none;background:#fffef6}
+.input-error{font-size:12px;line-height:1.5;color:#8c2f26;margin-top:7px;min-height:0}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;padding:12px 18px;border:2px solid var(--ink);font-size:13px;font-weight:700;letter-spacing:.08em;background:var(--panel)}
+.btn:hover{background:var(--ink);color:var(--paper)}
+.btn-primary{background:var(--ink);color:var(--paper)}
+.btn-primary:hover{background:#000}
+.btn-dark{background:var(--paper)}
+.btn-dark:hover{background:var(--ink);color:var(--paper)}
+.btn-quiet{border-color:var(--line);color:var(--muted)}
+.btn-quiet:hover{border-color:var(--ink);color:var(--paper)}
+a.btn{text-decoration:none}
+.adopt-panel .btn{margin-top:15px}
+.form-foot{display:flex;align-items:center;justify-content:center;gap:5px;font-size:10px;color:var(--muted);margin-top:12px}
+.howto{padding:19px 21px}
+.how-title{font-size:9px;letter-spacing:.16em;margin-bottom:15px;color:var(--muted);font-weight:700}
+.steps{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.step-num{font-size:10px;border:2px solid var(--ink);width:26px;height:26px;display:grid;place-items:center;background:var(--faint);margin-bottom:8px;font-weight:700}
+.step strong{font-size:12px;display:block;margin-bottom:5px}
+.step p{font-size:10px;color:var(--muted);line-height:1.6}
+.goal-panel{padding:24px;background:var(--panel);position:relative}
+.section-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.section-top h2{font-size:15px;font-weight:700}
+.section-top .small-meta{font-size:10px;color:var(--muted)}
+.goal-panel .eyebrow{color:var(--muted)}
+.goal-panel h2{font-size:21px;line-height:1.5;margin:6px 0;letter-spacing:.01em}
+.goal-panel .goal-copy{font-size:12px;line-height:1.8;color:var(--muted)}
+.progress-row{display:flex;align-items:center;gap:12px;margin:20px 0 16px}
+.stamp-track{display:flex;align-items:center;gap:8px;flex:1}
+.stamp{width:40px;height:40px;display:grid;place-items:center;border:2px dashed var(--line);background:var(--paper);color:var(--line)}
+.stamp .icon{width:20px;height:20px}
+.stamp.done{border:2px solid var(--ink);background:var(--ink);color:var(--paper)}
+.track-line{width:18px;height:3px;background:var(--line)}
+.track-line.done{background:var(--ink)}
+.count{display:flex;align-items:center}
+.count svg{image-rendering:pixelated}
+.goal-panel .btn{min-height:45px;font-size:12px}
+.collection{padding:22px}
+.looks-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px}
+.look-option{padding:5px;background:var(--paper);min-width:0;text-align:center;border:2px solid var(--line)}
+.look-thumb{aspect-ratio:1;position:relative;display:flex;align-items:center;justify-content:center;background:var(--faint);overflow:hidden}
+.look-thumb.music{background:#e2e5ea}.look-thumb.art{background:#ece2da}.look-thumb.market{background:#eae4cc}.look-thumb.evolved{background:#dcd7c2}
+.look-thumb svg{width:92%;height:92%;image-rendering:pixelated}
+.look-option.locked svg{opacity:.3}
+.look-option.locked .look-thumb{background:repeating-conic-gradient(#26241c10 0% 25%,transparent 0% 50%) 0 0/6px 6px,var(--faint)}
+.look-option.active{border-color:var(--ink);background:#fffef6}
+.look-option.active .look-thumb{border:2px solid var(--ink)}
+.look-option:hover{border-color:var(--ink)}
+.look-name{display:block;margin-top:7px;font-size:10px;white-space:nowrap}
+.lock-pin{position:absolute;right:4px;bottom:4px;width:18px;height:18px;display:grid;place-items:center;background:var(--paper);border:2px solid var(--ink);color:var(--ink)}
+.lock-pin .icon{width:10px;height:10px}
+.wear-pin{position:absolute;right:4px;top:4px;width:18px;height:18px;display:grid;place-items:center;background:var(--ink);color:var(--paper)}
+.wear-pin .icon{width:10px;height:10px}
+.collection-note{font-size:10px;color:var(--muted);line-height:1.8;margin-top:14px}
+.quiet-note{font-size:11px;line-height:1.9;color:var(--muted);padding:14px 16px;border:2px dashed var(--line);background:var(--paper)}
+.footer{display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:30px;padding:18px 0 24px;gap:15px;font-size:9px;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.storage-warning{background:var(--panel);border:2px solid #8c6a1f;color:#5d4512;padding:10px 12px;font-size:12px;line-height:1.6;margin-top:16px}
+.activity-heading .back-link{background:var(--panel);border:2px solid var(--ink);padding:9px 13px;font-size:11px;font-weight:700;letter-spacing:.08em;white-space:nowrap}
+.activity-heading .back-link:hover{background:var(--ink);color:var(--paper)}
+.event-banner{border:2px solid var(--ink);background:var(--panel);margin-bottom:20px;position:relative;overflow:hidden}
+.event-banner-main{padding:26px 28px;position:relative}
+.event-tags{display:flex;gap:8px;align-items:center;font-size:9px;letter-spacing:.1em;margin-bottom:16px;font-weight:700}
+.event-tag{border:2px solid var(--ink);padding:5px 8px;background:var(--paper)}
+.event-wordmark-line{margin:4px 0 4px;overflow-x:auto}
+.event-wordmark-line svg{image-rendering:pixelated;max-width:100%}
+.event-sub{margin-top:12px;font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--muted)}
+.event-banner-side{display:flex;align-items:center;justify-content:center;border-top:2px solid var(--ink);background:repeating-conic-gradient(#26241c12 0% 25%,transparent 0% 50%) 0 0/8px 8px;min-height:120px}
+.ticket-box{border:2px solid var(--ink);background:var(--panel);padding:14px 22px;display:flex;flex-direction:column;align-items:center;gap:8px}
+.ticket-box .count{min-height:30px}
+.ticket-box span{font-size:9px;letter-spacing:.14em;font-weight:700;color:var(--muted)}
+.demo-notice{font-size:11px;color:var(--muted);line-height:1.8;border:2px dashed var(--line);padding:10px 13px;margin-bottom:18px;background:var(--paper)}
+.spots-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.spot-card{border:2px solid var(--ink);background:var(--panel);display:flex;flex-direction:column;scroll-margin-top:25px}
+.spot-card.focus-spot{outline:4px solid var(--ink);outline-offset:2px}
+.spot-art{height:160px;position:relative;overflow:hidden;border-bottom:2px solid var(--ink)}
+.spot-art.music{background:#dde1e9}.spot-art.art{background:#e9dcd3}.spot-art.market{background:#e6dfc4}
+.spot-number{position:absolute;left:12px;top:12px;font-size:9px;letter-spacing:.12em;font-weight:700;background:var(--paper);border:2px solid var(--ink);padding:4px 6px;z-index:2}
+.spot-word{position:absolute;left:12px;top:44px;z-index:1;opacity:.9}
+.spot-word svg{image-rendering:pixelated}
+.spot-art .pet-svg{position:absolute;width:120px;height:120px;right:10px;bottom:14px;image-rendering:pixelated;z-index:1}
+.dither-band{position:absolute;left:0;right:0;bottom:0;height:26px;border-top:2px solid var(--ink);background:repeating-conic-gradient(#26241c2e 0% 25%,transparent 0% 50%) 0 0/6px 6px;z-index:0}
+.claimed-flag{position:absolute;right:10px;top:10px;display:flex;align-items:center;gap:5px;border:2px solid var(--ink);background:var(--ink);color:var(--paper);padding:5px 7px;font-size:9px;letter-spacing:.1em;font-weight:700;z-index:2}
+.claimed-flag .icon{width:11px;height:11px}
+.spot-body{padding:18px;display:flex;flex-direction:column;gap:0;flex:1}
+.spot-headline{display:flex;align-items:center;justify-content:space-between;gap:7px;margin-bottom:9px}
+.spot-headline h2{font-size:17px;font-weight:700}
+.spot-zone{font-size:9px;letter-spacing:.12em;color:var(--muted);font-weight:700;white-space:nowrap;border:2px solid var(--line);padding:4px 6px}
+.spot-reward{font-size:12px;line-height:1.8;margin-bottom:15px}
+.spot-reward span{color:var(--muted)}
+.spot-body .btn{font-size:11px;min-height:43px;margin-top:auto}
+.route-note{display:flex;align-items:center;gap:10px;justify-content:center;padding:19px;font-size:11px;color:var(--muted);flex-wrap:wrap}
+.route-note button{font-size:11px;text-decoration:underline;text-underline-offset:3px;background:none;padding:0;font-weight:700;color:var(--ink)}
+/* ---- offline note ---- */
+.offline-note{border:2px dashed var(--line);background:var(--paper);color:var(--muted);font-size:11px;letter-spacing:.08em;padding:10px 13px;margin:0 0 16px;line-height:1.8;font-weight:700}
+/* ---- pixel city map (去哪儿) ---- */
+.map-wrap{position:relative;border:2px solid var(--ink);background:#ece8d6;overflow:hidden;margin-bottom:20px}
+.city-svg{width:100%;height:auto;display:block}
+.map-tag{position:absolute;top:10px;left:10px;font-size:9px;letter-spacing:.14em;font-weight:700;background:var(--paper);border:2px solid var(--ink);padding:4px 7px;color:var(--ink);z-index:3}
+.map-legend{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:12px;border:2px solid var(--ink);background:var(--paper);padding:6px 9px;font-size:8px;letter-spacing:.1em;font-weight:700;color:var(--muted);z-index:3}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-swatch{width:9px;height:9px;border:2px solid var(--ink);background:var(--paper);flex:none}
+.legend-swatch.done{background:var(--ink)}
+.legend-swatch.here{border-color:var(--ink);background:var(--red);animation:blink 1.1s steps(1,end) infinite}
+.map-marker{position:absolute;z-index:4;width:34px;height:34px;transform:translate(-50%,-50%);border:2px solid var(--ink);background:var(--paper);color:var(--ink);display:grid;place-items:center;padding:0}
+.map-marker .icon{width:16px;height:16px}
+.map-marker.done{background:var(--ink);color:var(--paper)}
+.map-marker:hover,.map-marker:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.map-marker .marker-no{position:absolute;bottom:calc(100% + 5px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:8px;letter-spacing:.1em;font-weight:700;border:2px solid var(--ink);background:var(--paper);color:var(--ink);padding:2px 4px}
+.you-dot{position:absolute;z-index:3;width:12px;height:12px;transform:translate(-50%,-50%);background:var(--red);outline:2px solid var(--ink);border:2px solid var(--paper);animation:blink 1.1s steps(1,end) infinite;pointer-events:none}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.map-caption{font-size:9px;letter-spacing:.12em;color:var(--muted);font-weight:700;padding:0 2px;margin:-8px 0 18px}
+/* ---- real map (高德 JS API · 纸感灰调底图 + 像素标记) ---- */
+.map-holder{position:relative;aspect-ratio:1/1;background:#ece8d6;overflow:hidden}
+.map-canvas{position:absolute;inset:0;z-index:1;filter:grayscale(.7) sepia(.1) brightness(1.02);background:#ece8d6}
+.map-canvas .amap-logo,.map-canvas .amap-copyright,.map-canvas .amap-lib-container{display:none!important}
+.map-canvas .map-marker{position:relative;left:auto;top:auto;transform:none}
+.map-canvas .you-dot{background:#b23327}
+.map-loading{position:absolute;inset:0;z-index:2;display:grid;place-items:center;font-size:10px;letter-spacing:.16em;color:var(--muted);font-weight:700;background:#ece8d6}
+.map-credit{position:absolute;left:8px;bottom:8px;z-index:4;font-size:8px;letter-spacing:.08em;font-weight:700;color:var(--ink);background:#efecdfd9;border:2px solid var(--line);padding:2px 5px}
+.map-zoom{position:absolute;top:10px;right:10px;z-index:5;display:flex;border:2px solid var(--ink);background:var(--panel)}
+.map-zoom-btn{background:none;padding:6px 8px;font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink)}
+.map-zoom-btn+.map-zoom-btn{border-left:2px solid var(--ink)}
+.map-zoom-btn[aria-pressed="true"],.map-zoom-btn:hover{background:var(--ink);color:var(--paper)}
+.map-fallback-tag{position:absolute;top:10px;right:10px;z-index:5;font-size:9px;letter-spacing:.14em;font-weight:700;border:2px solid var(--ink);background:var(--paper);color:var(--red);padding:4px 7px}
+/* ---- live photo feed (现场) ---- */
+.live-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;max-width:800px}
+.live-frame{border:2px solid var(--ink);background:var(--paper);padding:6px;min-width:0}
+.live-frame img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--faint)}
+.live-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 1px 1px;font-size:9px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.live-meta .live-cap{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.live-cell-empty{border:2px dashed var(--line);background:var(--paper);padding:34px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;min-height:220px}
+.live-dither{width:104px;height:70px;border:2px solid var(--ink);background:repeating-conic-gradient(#26241c1f 0% 25%,transparent 0% 50%) 0 0/8px 8px}
+.live-cell-empty p{font-size:11px;color:var(--muted);line-height:1.8;letter-spacing:.06em;font-weight:700}
+.live-status-btn{margin-top:4px;border:2px solid var(--ink);background:var(--panel);padding:9px 14px;font-size:11px;font-weight:700;letter-spacing:.08em}
+.live-status-btn:hover{background:var(--ink);color:var(--paper)}
+/* ---- set page ---- */
+.set-stack{display:flex;flex-direction:column;gap:18px;max-width:640px}
+.set-panel{padding:24px}
+.set-panel h2{font-size:21px;margin-bottom:10px}
+.set-panel .set-copy{font-size:12px;color:var(--muted);line-height:1.9}
+.dialog{position:fixed;border:2px solid var(--ink);border-radius:0;background:var(--panel);color:var(--ink);padding:0;width:min(440px,calc(100% - 28px));max-height:calc(100dvh - 40px);overflow-y:auto}
+.dialog::backdrop{background:#26241c66}
+.modal-inner{padding:26px;position:relative}
+.modal-close{position:absolute;right:14px;top:14px;width:34px;height:34px;z-index:4;background:var(--paper);border:2px solid var(--ink);font-size:14px;font-weight:700}
+.modal-close:hover{background:var(--ink);color:var(--paper)}
+.modal-eyebrow{font-size:9px;letter-spacing:.16em;color:var(--muted);margin:0 34px 12px 0;font-weight:700}
+.modal-inner h2{font-size:22px;letter-spacing:.01em;line-height:1.45;margin-bottom:8px}
+.modal-copy{font-size:12px;line-height:1.9;color:var(--muted)}
+.modal-copy strong{color:var(--ink)}
+.reward-stage{height:210px;position:relative;border:2px solid var(--ink);margin:16px 0;background:var(--faint);background-image:repeating-conic-gradient(#26241c10 0% 25%,transparent 0% 50%) 0 0/6px 6px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.reward-stage.music{background-color:#e2e5ea}.reward-stage.art{background-color:#ece2da}.reward-stage.market{background-color:#eae4cc}.reward-stage.base{background-color:#ece8d6}
+.reward-stage.evolved{background-color:#2e2c25;background-image:repeating-conic-gradient(#ffffff1a 0% 25%,transparent 0% 50%) 0 0/6px 6px}
+.reward-stage .pet-svg{width:200px;height:200px;image-rendering:pixelated;animation:pop-in .3s steps(2,end) 1}
+@keyframes pop-in{0%{transform:scale(.9)}50%{transform:scale(1.04)}100%{transform:scale(1)}}
+.reward-stage .stage-label{position:absolute;top:11px;left:12px;font-size:9px;letter-spacing:.16em;font-weight:700;color:var(--muted)}
+.reward-stage.evolved .stage-label{color:#b9b4a0}
+.reward-stamp{position:absolute;bottom:12px;right:12px;border:2px solid var(--ink);background:var(--ink);color:var(--paper);padding:6px 8px;font-size:9px;letter-spacing:.14em;font-weight:700}
+.reward-stage.evolved .reward-stamp{background:var(--paper);color:var(--ink)}
+.reward-stage .composite-preview{width:100%;height:100%;object-fit:cover;display:block}
+.reward-progress{font-size:12px;line-height:1.8;border:2px solid var(--ink);background:var(--paper);padding:11px 13px;margin:14px 0}
+.reward-progress strong{letter-spacing:.04em}
+.modal-actions{display:flex;flex-direction:column;gap:9px;margin-top:16px}
+.text-btn{background:none;padding:10px;font-size:12px;color:var(--muted);text-decoration:underline;text-underline-offset:4px}
+.text-btn:hover{color:var(--ink)}
+.checkin-frame{border:2px dashed var(--ink);padding:18px;display:flex;align-items:center;justify-content:center;gap:18px;margin:18px 0 14px;background:var(--paper)}
+.checkin-frame .qr{width:88px;height:88px;color:var(--ink);image-rendering:pixelated;flex:none}
+.checkin-frame .frame-note{font-size:9px;letter-spacing:.16em;color:var(--muted);font-weight:700;line-height:2;text-align:center}
+.modal-note{font-size:10px;color:var(--muted);line-height:1.9;margin-top:13px}
+.setting-section{border-top:2px solid var(--line);margin-top:18px;padding-top:16px}
+.setting-section h3{font-size:13px;margin-bottom:8px}
+.danger-btn{color:#8c2f26;border-color:#8c2f26;background:var(--paper)}
+.danger-btn:hover{background:#8c2f26;color:var(--paper)}
+.about-list{font-size:11px;color:var(--muted);line-height:2;margin-top:8px}
+.toast{position:fixed;bottom:30px;left:50%;transform:translate(-50%,15px);opacity:0;pointer-events:none;z-index:40;background:var(--ink);color:var(--paper);border:2px solid var(--paper);outline:2px solid var(--ink);padding:12px 18px;font-size:12px;letter-spacing:.04em;transition:opacity .15s steps(2,end),transform .15s steps(2,end);max-width:calc(100% - 32px);text-align:center}
+.toast.visible{opacity:1;transform:translate(-50%,0)}
+.confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:3}
+.confetti i{position:absolute;top:-16px;left:var(--x);width:8px;height:8px;background:var(--c);animation:confetti-drop 1.3s steps(14,end) var(--d) both}
+@keyframes confetti-drop{0%{transform:translateY(0)}100%{transform:translateY(560px)}}
+.success-chip{display:inline-flex;align-items:center;gap:6px;background:var(--ink);color:var(--paper);font-size:10px;letter-spacing:.12em;font-weight:700;padding:6px 9px;margin-bottom:13px}
+.success-chip .icon{width:11px;height:11px}
+.hidden-look .pet-svg{opacity:.92}
+.noscript{max-width:600px;margin:50px auto;padding:25px;border:2px solid var(--ink);background:var(--panel);font-size:14px;line-height:1.9}
+.pet-card.flash .pet-touch svg{animation:pop-in .3s steps(2,end) 1}
+.footer-local{display:flex;align-items:center;gap:6px}
+.mobile-nav{display:none}
+@media(min-width:1000px){.pet-card{position:sticky;top:20px}.event-banner{display:grid;grid-template-columns:minmax(0,1fr) 300px}.event-banner-side{border-top:0;border-left:2px solid var(--ink);min-height:0}}
+@media(max-width:950px){.brand-caption{display:none}.shell{padding:0 22px}.main-grid{gap:20px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.adopt-panel{padding:22px}.adopt-panel h2{font-size:26px}.pet-canvas{height:337px}.pet-touch{width:266px;height:256px;bottom:22px}.looks-grid{gap:6px}.collection{padding:18px 16px}.goal-panel{padding:20px}.spots-grid{gap:13px}.spot-body{padding:15px}.spot-headline{align-items:start;flex-direction:column;gap:6px}.spot-headline h2{font-size:16px}.nav-btn{padding:11px 14px;font-size:12px}.event-banner-main{padding:22px}.map-marker{width:30px;height:30px}.map-marker .icon{width:14px;height:14px}.map-legend{gap:8px;padding:5px 7px}.live-grid{gap:13px}}
+@media(max-width:700px){
+.shell{padding:0 16px}.site-header{min-height:70px}.desktop-nav{display:none}.header-end{gap:8px}
+.page-intro{margin:22px 0 16px;align-items:start;gap:12px}.page-intro h1{font-size:22px}.intro-copy{font-size:12px;margin-top:6px}.intro-mark{display:none}
+.main-grid{display:flex;flex-direction:column;gap:16px}
+.pet-card{padding:10px}.pet-topline{font-size:8px}.pet-canvas{height:290px;border-radius:0}.pet-touch{width:250px;height:240px;bottom:16px}.canvas-id{font-size:8px;padding:3px 5px}
+.ground{bottom:22px;width:160px}.screen-badge{right:12px;bottom:12px}.orbit-note{left:12px;bottom:12px}
+.pet-caption{padding:12px 2px 4px}.pet-name{font-size:18px}
+.hero-under{display:none}
+.side-stack{gap:14px}.adopt-panel{padding:20px}.adopt-panel h2{font-size:24px}.adopt-panel p{font-size:12px}.name-label{margin-top:16px}
+.footer{font-size:8px;flex-wrap:wrap}
+.mobile-nav{position:fixed;bottom:12px;bottom:calc(12px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:min(340px,calc(100% - 32px));display:flex;background:var(--panel);border:2px solid var(--ink);z-index:10}
+.mobile-nav .nav-btn{flex:1;padding:13px 8px;font-size:12px;min-height:46px}
+.has-pet{padding-bottom:84px}
+.event-banner{margin-bottom:16px}.event-banner-main{padding:20px 16px}.event-tags{gap:6px;font-size:8px;margin-bottom:12px;flex-wrap:wrap}
+.ticket-box{padding:10px 14px}.demo-notice{font-size:10px;margin-bottom:14px}
+.spots-grid{grid-template-columns:1fr;gap:14px}
+.spot-card{display:grid;grid-template-columns:116px minmax(0,1fr)}
+.spot-art{height:100%;min-height:150px;border-bottom:0;border-right:2px solid var(--ink)}
+.spot-art .pet-svg{width:100px;height:100px;right:-8px;bottom:12px}
+.spot-word{top:40px;left:10px}.spot-word svg{max-width:90px}
+.spot-body{padding:14px 12px}.spot-headline{flex-direction:row;align-items:center;gap:5px;margin-bottom:7px}.spot-headline h2{font-size:15px}
+.spot-zone{display:none}.spot-reward{font-size:10px;margin-bottom:12px}.spot-body .btn{font-size:10px;min-height:42px;padding:10px 6px}
+.claimed-flag{right:6px;top:6px;font-size:8px;padding:4px 5px}
+.route-note{font-size:10px;padding:16px 4px;gap:7px;line-height:1.8}
+.dialog{width:min(440px,calc(100% - 20px))}.modal-inner{padding:22px 18px}.modal-inner h2{font-size:19px}.reward-stage{height:196px}.reward-stage .pet-svg{width:184px;height:184px}
+.map-tag{top:8px;left:8px}.map-legend{right:8px;bottom:8px;font-size:7px;gap:6px}.map-marker{width:28px;height:28px}.map-marker .icon{width:13px;height:13px}.marker-no{display:none}.map-zoom{top:8px;right:8px}.map-zoom-btn{font-size:8px;padding:5px 6px}.map-credit{left:6px;bottom:6px;font-size:7px}
+.you-dot{width:10px;height:10px}.live-grid{gap:12px}.live-frame{padding:5px}.live-meta{font-size:8px}.set-panel{padding:18px}.offline-note{font-size:10px}
+.toast{bottom:96px}
+}
+@media(max-width:359px){.shell{padding:0 12px}.pet-touch{width:224px;height:214px}.looks-grid{gap:4px}.look-name{font-size:8px}.spot-card{grid-template-columns:96px minmax(0,1fr)}.demo-badge{display:none}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.confetti{display:none}}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">跳至主要内容</a>
+<button class="corner-badge dev mono" id="dev-badge" data-action="dev-info" type="button" hidden>DEV</button>
+<span class="corner-badge offline mono" id="offline-badge" hidden>离线</span>
+<div class="shell">
+  <header class="site-header">
+    <button class="brand" type="button" data-action="home" aria-label="OUTIE，返回我的宠物">
+      <span id="wordmark" aria-hidden="true"></span>
+      <span class="brand-caption mono">GO OUT. COLLECT.<br>EVOLVE. / 线下打卡收集</span>
+    </button>
+    <nav class="desktop-nav" id="desktop-nav" aria-label="主导航" hidden></nav>
+  </header>
+  <div class="storage-warning" id="storage-warning" role="status" hidden>浏览器不允许保存进度。你仍可以体验，但关闭页面后进度不会保留。</div>
+  <main id="main" tabindex="-1"></main>
+  <footer class="footer"><span class="mono">OUTIE</span><span class="footer-local mono" id="footer-local"></span></footer>
+</div>
+<nav class="mobile-nav" id="mobile-nav" aria-label="移动端主导航" hidden></nav>
+<dialog class="dialog" id="dialog" aria-labelledby="dialog-title"></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<noscript><div class="noscript">这个页面需要 JavaScript 才能领养宠物和记录进度。请在允许 JavaScript 的浏览器中打开。</div></noscript>
+<script>
+'use strict';
+/* OUTIE LIVE — API 版。
+   服务端（OurVerse）：http://127.0.0.1:8444/api/outie/*，身份用 x-anonymous-id 头。
+   启动时探测 API；探测失败自动回退 localStorage 离线玩法（角落显示「离线」）。 */
+const API_ORIGIN=(function(){try{return localStorage.getItem('outie.api-base')||'http://127.0.0.1:8444';}catch(e){return 'http://127.0.0.1:8444';}})();
+const API_BASE=API_ORIGIN+'/api';
+const IDENTITY_KEY='outie.identity.v1';
+const STORAGE_KEY='outie.singleplayer.v1';
+const ICON_BY_LOOK={music:'headphones',art:'glasses',market:'bag'};
+const OFFLINE_SPOTS=[
+  {id:'music',number:'01',name:'霓虹舞台',zone:'音乐区',en:'MUSIC',reward:'夜游耳机',short:'耳机',line:'主舞台东侧入口',icon:'headphones',lng:121.4426,lat:31.2240,radiusMeters:200},
+  {id:'art',number:'02',name:'像素画廊',zone:'展览区',en:'ART',reward:'数码眼镜',short:'眼镜',line:'画廊一层服务台',icon:'glasses',lng:121.4478,lat:31.2272,radiusMeters:200},
+  {id:'market',number:'03',name:'怪趣市集',zone:'市集区',en:'MARKET',reward:'星星背包',short:'背包',line:'中庭摊位区',icon:'bag',lng:121.4501,lat:31.2221,radiusMeters:200}
+];
+const MAP_VIEW={minLng:121.4385,maxLng:121.4540,minLat:31.2190,maxLat:31.2305,w:132,h:96};
+let SPOTS=OFFLINE_SPOTS;
+let LOOKS=[];
+function rebuildLooks(){
+  LOOKS=[
+    {id:'base',name:'原生形态',short:'初始',label:'NO.001'},
+    ...SPOTS.map((s,i)=>({id:s.id,name:s.reward,short:s.short,label:'NO.00'+(i+2)})),
+    {id:'evolved',name:'出逃星人',short:'限定',label:'NO.005'}
+  ];
+}
+rebuildLooks();
+const ACC={base:'#a3463c',music:'#41597e',art:'#a3463c',market:'#a8842e',evolved:'#4a6c46'};
+const ACC2={base:'#a3463c',music:'#41597e',art:'#41597e',market:'#a3463c',evolved:'#a8842e'};
+let mode='offline',eventData=null,devSkipGeo=false,pet=null,pendingEvolution=false,composeBusy=false;
+let svgId=0,storageOK=true,toastTimer=null,flashNext=false;
+let state=blankState();
+const VIEWS=['pet','explore','live','set'];
+function viewFromHash(){
+  const raw=(location.hash||'').replace(/^#\/?/,'');
+  return VIEWS.includes(raw)?raw:'pet';
+}
+let view=viewFromHash();
+let currentModal=null,lastFocused=null;
+let livePhotos=null,liveStatus='idle',publishing=false;
+const LIVE_CENTER={lat:31.2240,lng:121.4426,radius:5000,limit:30};
+const PHOTO_ORIGIN=API_ORIGIN;
+const main=document.getElementById('main');
+const dialog=document.getElementById('dialog');
+const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
+function blankState(){return {version:1,name:'',createdAt:null,rewards:{},equipped:'base',evolved:false};}
+function stateFromPet(p){
+  const clean=blankState();
+  clean.name=trimName(p&&p.name||'');
+  clean.createdAt=typeof (p&&p.createdAt)==='string'?p.createdAt:null;
+  const rewards=(p&&p.rewards)||{};
+  for(const spot of SPOTS){if(typeof rewards[spot.id]==='string')clean.rewards[spot.id]=rewards[spot.id];}
+  clean.evolved=Object.keys(clean.rewards).length===3&&p&&p.evolved===true;
+  const allowed=['base',...Object.keys(clean.rewards),...(clean.evolved?['evolved']:[])];
+  clean.equipped=allowed.includes(p&&p.equipped)?p.equipped:'base';
+  return clean;
+}
+function loadState(){
+  try{
+    const testKey=STORAGE_KEY+'.probe';localStorage.setItem(testKey,'1');localStorage.removeItem(testKey);
+    const raw=localStorage.getItem(STORAGE_KEY);if(!raw)return blankState();
+    const data=JSON.parse(raw);if(!data||data.version!==1||typeof data.name!=='string')return blankState();
+    const clean=blankState();clean.name=trimName(data.name);clean.createdAt=typeof data.createdAt==='string'?data.createdAt:null;
+    if(!clean.name)return clean;
+    for(const spot of SPOTS){if(data.rewards&&typeof data.rewards[spot.id]==='string')clean.rewards[spot.id]=data.rewards[spot.id];}
+    clean.evolved=Object.keys(clean.rewards).length===3&&data.evolved===true;
+    const allowed=['base',...Object.keys(clean.rewards),...(clean.evolved?['evolved']:[])];
+    clean.equipped=allowed.includes(data.equipped)?data.equipped:'base';return clean;
+  }catch(error){
+    try{const k=STORAGE_KEY+'.probe';localStorage.setItem(k,'1');localStorage.removeItem(k);}catch(e){storageOK=false;}
+    return blankState();
+  }
+}
+function save(){
+  if(mode==='api')return;
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}catch(e){storageOK=false;document.getElementById('storage-warning').hidden=false;}
+}
+function trimName(value){return [...String(value).trim()].slice(0,12).join('');}
+function esc(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function count(){return SPOTS.filter(s=>Boolean(state.rewards[s.id])).length;}
+function unlocked(id){return id==='base'||(id==='evolved'?state.evolved:Boolean(state.rewards[id]));}
+function lookFor(id){return LOOKS.find(l=>l.id===id)||LOOKS[0];}
+function eventKeyText(){return (eventData&&eventData.key?eventData.key:'WEEKEND.EXE').toUpperCase();}
+
+/* ---------- API layer ---------- */
+function identityId(){
+  let id='';
+  try{id=localStorage.getItem(IDENTITY_KEY)||'';}catch(e){storageOK=false;}
+  if(!id){
+    id=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'id-'+Date.now()+'-'+Math.random().toString(16).slice(2);
+    try{localStorage.setItem(IDENTITY_KEY,id);}catch(e){storageOK=false;}
+  }
+  return id;
+}
+function authHeaders(){return {'x-anonymous-id':identityId()};}
+function errText(error){return (error&&error.message)?error.message:'请求失败，请重试';}
+async function apiFetch(path,options={}){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),12000);
+  try{
+    const res=await fetch(API_BASE+path,{
+      ...options,
+      signal:controller.signal,
+      headers:{...authHeaders(),...(options.headers||{})}
+    });
+    let data={};
+    try{data=await res.json();}catch(e){}
+    if(!res.ok){
+      const error=new Error(data.error||('请求失败（HTTP '+res.status+'）'));
+      error.status=res.status;error.payload=data;throw error;
+    }
+    return data;
+  }finally{clearTimeout(timer);}
+}
+async function probeApi(){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),3500);
+  try{
+    const res=await fetch(API_BASE+'/outie/event/current',{signal:controller.signal,headers:authHeaders()});
+    clearTimeout(timer);
+    if(!res.ok)return null;
+    const data=await res.json();
+    if(!data||!data.event||!Array.isArray(data.event.spots)||!data.event.spots.length)return null;
+    return data;
+  }catch(error){
+    clearTimeout(timer);
+    return null;
+  }
+}
+function applyEvent(ev){
+  eventData=ev;
+  SPOTS=ev.spots.map((sp,i)=>({
+    id:sp.key,
+    number:String(i+1).padStart(2,'0'),
+    name:sp.name,
+    zone:sp.zone||'',
+    en:String(sp.lookId||'').toUpperCase(),
+    reward:sp.rewardName||'',
+    short:(sp.rewardName||sp.name||'').slice(-2),
+    line:sp.arrivalNote||'',
+    icon:ICON_BY_LOOK[sp.lookId]||'star',
+    lookId:sp.lookId,
+    lng:sp.lng,
+    lat:sp.lat,
+    radiusMeters:sp.radiusMeters||200
+  }));
+  rebuildLooks();
+}
+async function adoptApi(name){
+  const data=await apiFetch('/outie/pet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  pet=data.pet;state=stateFromPet(pet);
+}
+async function checkinApi(spotId){
+  const prevEvolved=state.evolved;
+  const doPost=coords=>apiFetch('/outie/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(coords?{spotKey:spotId,...coords}:{spotKey:spotId})});
+  const handle=data=>{
+    pet=data.pet;state=stateFromPet(pet);render();
+    if(data.alreadyOwned){showLook(spotId);toast('该站已领取过。');return;}
+    if(data.newlyEvolved&&!prevEvolved)pendingEvolution=true;
+    showReward(spotId);confetti();
+  };
+  if(devSkipGeo){
+    try{handle(await doPost(null));}catch(error){toast(errText(error));}
+    return;
+  }
+  if(!navigator.geolocation){toast('此浏览器不支持定位，无法打卡。');return;}
+  toast('正在获取定位…');
+  navigator.geolocation.getCurrentPosition(async position=>{
+    try{
+      handle(await doPost({userLng:position.coords.longitude,userLat:position.coords.latitude}));
+    }catch(error){toast(errText(error));}
+  },error=>{toast('获取定位失败：'+(error.message||'请检查定位权限'));},{enableHighAccuracy:true,timeout:9000,maximumAge:15000});
+}
+
+/* ---------- pixel font (variable width, 5 rows) ---------- */
+const FONT={
+A:'010,101,111,101,101',B:'110,101,110,101,110',C:'011,100,100,100,011',D:'110,101,101,101,110',
+E:'111,100,110,100,111',F:'111,100,110,100,100',G:'011,100,101,101,011',H:'101,101,111,101,101',
+I:'111,010,010,010,111',J:'011,001,001,101,010',K:'101,110,100,110,101',L:'100,100,100,100,111',
+M:'10001,11011,10101,10001,10001',N:'1001,1101,1011,1001,1001',O:'010,101,101,101,010',
+P:'110,101,110,100,100',Q:'0110,1001,1001,1010,0101',R:'110,101,110,101,101',
+S:'011,100,010,001,110',T:'111,010,010,010,010',U:'101,101,101,101,111',
+V:'101,101,101,010,010',W:'10001,10001,10101,10101,01010',X:'101,101,010,101,101',
+Y:'101,101,010,010,010',Z:'111,001,010,100,111',
+'0':'111,101,101,101,111','1':'010,110,010,010,111','2':'111,001,111,100,111','3':'111,001,011,001,111',
+'4':'101,101,111,001,001','5':'111,100,111,001,111','6':'111,100,111,101,111','7':'111,001,010,010,010',
+'8':'111,101,111,101,111','9':'111,101,111,001,111',
+'/':'001,001,010,100,100',':':'0,1,0,1,0','.':'0,0,0,0,1','!':'1,1,1,0,1','?':'110,001,010,000,010',
+'+':'000,010,111,010,000','-':'000,000,111,000,000'
+};
+function pixText(text,size=2,color='currentColor'){
+  const s=size;let x=0;const parts=[];
+  for(const ch of String(text)){
+    if(ch===' '){x+=2;continue;}
+    const g=FONT[ch.toUpperCase()];if(!g){x+=3;continue;}
+    const rows=g.split(','),w=rows[0].length;
+    rows.forEach((row,ry)=>{let rx=0;while(rx<w){if(row[rx]==='1'){let run=1;while(rx+run<w&&row[rx+run]==='1')run++;parts.push(`<rect x="${(x+rx)*s}" y="${ry*s}" width="${run*s}" height="${s}" fill="${color}"/>`);rx+=run;}else rx++;}});
+    x+=w+1;
+  }
+  const W=Math.max(1,(x-1)*s),H=5*s;
+  return `<svg class="pixtext" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true" style="image-rendering:pixelated">${parts.join('')}</svg>`;
+}
+
+/* ---------- pixel pet sprites (22 x 16) ---------- */
+const PET_BASE=[
+'......KK......KK......',
+'.....KSSK....KSSK.....',
+'.....KSSK....KSSK.....',
+'.....KSSK....KSSK.....',
+'...KKKKKKKKKKKKKKKK...',
+'..KFFFFFFFFFFFFFFFFK..',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFhhFFFFFFFFFFFFhhFK.',
+'.KFFFFFFFFKKFFFFFFFFK.',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'..KFFFFFFFFFFFFFFFFK..',
+'...KKFFFFFFFFFFFFKK...',
+'.....KKK......KKK.....'
+];
+const PET_OVER={
+music:['....AAAAAAAAAAAAAA....','....AAAAAAAAAAAAAA....','....AAAAAAAAAAAAAA....','AAAA..............AAAA','AAA................AAA','AAA................AAA','AAA................AAA','KKK................KKK'],
+art:['','','','','','','...KKKKK......KKKKK...','KK.KLLLK.KKKK.KLLLK.KK','KK.KLLLK.KKKK.KLLLK.KK','...KKKKK......KKKKK...'],
+market:['','','','','','..................AA..','...................AAA','...................AAA','...................ABA','...................AAA','...................AAA','...................KKK'],
+evolved:['........A.A.A.........','.......AAAAAAA........','..........BB..........','','','A.........BB.........A','AA..................AA','AA..................AA','A....................A']
+};
+function petSVG(variant='base'){
+  const id='px'+(++svgId);
+  const acc=ACC[variant]||ACC.base,acc2=ACC2[variant]||ACC2.base;
+  const over=PET_OVER[variant]||null;
+  const h=PET_BASE.length,w=PET_BASE[0].length;
+  const grid=PET_BASE.map((row,y)=>row.split('').map((c,x)=>{
+    const o=(over&&over[y]&&over[y][x])?over[y][x]:c;return o;
+  }));
+  const uses={S:false,h:false,L:false};
+  const rects=[];
+  for(let y=0;y<h;y++){
+    let x=0;
+    while(x<w){
+      const c=grid[y][x];
+      if(c==='.'){x++;continue;}
+      if(c==='S'||c==='h'||c==='L'){uses[c]=true;rects.push(`<rect x="${x}" y="${y}" width="1" height="1" fill="url(#${id}${c})"/>`);x++;continue;}
+      let run=1;while(x+run<w&&grid[y][x+run]===c)run++;
+      const fill=c==='F'?'#fcfaf0':(c==='A'?acc:(c==='B'?acc2:'#26241c'));
+      rects.push(`<rect x="${x}" y="${y}" width="${run}" height="1" fill="${fill}"/>`);
+      x+=run;
+    }
+  }
+  const defs=[];
+  const dither=(pid,color)=>`<pattern id="${pid}" width="2" height="2" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill="transparent"/><rect width="1" height="1" fill="${color}"/><rect x="1" y="1" width="1" height="1" fill="${color}"/></pattern>`;
+  if(uses.S)defs.push(dither(id+'S','#26241c59'));
+  if(uses.h)defs.push(dither(id+'h',acc+'66'));
+  if(uses.L)defs.push(dither(id+'L','#41597e4d'));
+  return `<svg class="pet-svg" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" aria-hidden="true">${defs.length?`<defs>${defs.join('')}</defs>`:''}${rects.join('')}</svg>`;
+}
+function petSVGForCanvas(variant){
+  const raw=petSVG(variant);
+  const match=raw.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+  const w=match?Math.round(parseFloat(match[1])*10):220;
+  const h=match?Math.round(parseFloat(match[2])*10):160;
+  return raw.replace('<svg ',`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" `);
+}
+
+/* ---------- pixel icons ---------- */
+const ICONS={
+check:['00001','00011','00110','11100','11000'],
+lock:['0011100','0010100','0010100','0111110','0111010','0111010','0111110'],
+star:['0001000','0011100','1111111','0111110','0011100','0110110','0100010'],
+headphones:['011111110','010000010','010000010','110000011','110000011','110000011','110000011','110000011'],
+glasses:['11110001111','10011111001','10011111001','11110001111'],
+bag:['0011100','0010100','1111111','1111111','1011101','1011101','1111111','0111110']
+};
+function pixIcon(name){
+  const g=ICONS[name]||ICONS.star,w=g[0].length,h=g.length,parts=[];
+  g.forEach((row,y)=>{let x=0;while(x<w){if(row[x]==='1'){let run=1;while(x+run<w&&row[x+run]==='1')run++;parts.push(`<rect x="${x}" y="${y}" width="${run}" height="1"/>`);x+=run;}else x++;}});
+  return `<svg class="icon" viewBox="0 0 ${w} ${h}" shape-rendering="crispEdges" fill="currentColor" aria-hidden="true">${parts.join('')}</svg>`;
+}
+function qrSVG(){
+  const n=13,parts=[];let seed=7;
+  const rnd=()=>{seed=(seed*1103515245+12345)>>>0;return seed/4294967296;};
+  const finder=(x,y)=>{
+    parts.push(`<rect x="${x}" y="${y}" width="5" height="1"/><rect x="${x}" y="${y+4}" width="5" height="1"/><rect x="${x}" y="${y}" width="1" height="5"/><rect x="${x+4}" y="${y}" width="1" height="5"/><rect x="${x+1}" y="${y+1}" width="3" height="3"/>`);
+  };
+  const inFinder=(x,y)=>(x<6&&y<6)||(x>n-7&&y<6)||(x<6&&y>n-7);
+  for(let y=0;y<n;y++)for(let x=0;x<n;x++){if(!inFinder(x,y)&&rnd()<0.44)parts.push(`<rect x="${x}" y="${y}" width="1" height="1"/>`);}
+  finder(0,0);finder(n-5,0);finder(0,n-5);
+  return `<svg class="qr" viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" fill="currentColor" aria-hidden="true">${parts.join('')}</svg>`;
+}
+
+/* ---------- photo composite (client-side, no AI) ---------- */
+function composePhoto(file,lookId){
+  return new Promise((resolve,reject)=>{
+    if(!file){reject(new Error('未选择照片'));return;}
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('照片读取失败'));
+    reader.onload=()=>{
+      const photo=new Image();
+      photo.onerror=()=>reject(new Error('照片无法解码，换一张试试'));
+      photo.onload=()=>{
+        const blob=new Blob([petSVGForCanvas(lookId)],{type:'image/svg+xml'});
+        const url=URL.createObjectURL(blob);
+        const sticker=new Image();
+        sticker.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('贴纸生成失败'));};
+        sticker.onload=()=>{
+          try{
+            const canvas=renderComposite(photo,sticker);
+            URL.revokeObjectURL(url);
+            resolve(canvas.toDataURL('image/jpeg',0.92));
+          }catch(error){URL.revokeObjectURL(url);reject(error);}
+        };
+        sticker.src=url;
+      };
+      photo.src=String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function renderComposite(photo,sticker){
+  const maxSide=1280;
+  const scale=Math.min(1,maxSide/Math.max(photo.naturalWidth,photo.naturalHeight));
+  const pw=Math.max(1,Math.round(photo.naturalWidth*scale));
+  const ph=Math.max(1,Math.round(photo.naturalHeight*scale));
+  const pad=26,top=76,border=2;
+  const W=pw+pad*2+border*2,H=ph+pad+top+border*2;
+  const canvas=document.createElement('canvas');
+  canvas.width=W;canvas.height=H;
+  const ctx=canvas.getContext('2d');
+  ctx.imageSmoothingEnabled=true;
+  ctx.fillStyle='#efecdf';
+  ctx.fillRect(0,0,W,H);
+  const px=pad+border,py=top+border;
+  ctx.drawImage(photo,px,py,pw,ph);
+  ctx.strokeStyle='#26241c';
+  ctx.lineWidth=2;
+  ctx.strokeRect(px-1,py-1,pw+2,ph+2);
+  ctx.strokeRect(1,1,W-2,H-2);
+  const now=new Date();
+  const dateLabel=`${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
+  ctx.fillStyle='#26241c';
+  ctx.textBaseline='middle';
+  ctx.font='700 24px Menlo,Consolas,monospace';
+  try{ctx.letterSpacing='6px';}catch(error){}
+  ctx.fillText(`${eventKeyText()} / ${dateLabel}`,pad+4,top/2+3);
+  try{ctx.letterSpacing='0px';}catch(error){}
+  const sh=Math.round(ph*0.3),sw=Math.round(sh*22/16);
+  const sx=px+pw-sw-18,sy=py+ph-sh-18;
+  ctx.fillStyle='#efecdf';
+  ctx.fillRect(sx-9,sy-9,sw+18,sh+18);
+  ctx.drawImage(sticker,sx,sy,sw,sh);
+  ctx.strokeStyle='#26241c';
+  ctx.strokeRect(sx-10,sy-10,sw+20,sh+20);
+  return canvas;
+}
+function showCompositePreview(dataUrl,spotId){
+  const s=SPOTS.find(sp=>sp.id===spotId);
+  const publishBtn=mode==='api'
+    ?`<button class="btn btn-primary" type="button" data-action="publish-live" data-spot="${esc(spotId||'')}"${publishing?' disabled':''}>发到现场</button>`
+    :'';
+  modal(`<p class="modal-eyebrow mono">PHOTO / 现场合成</p><h2 id="dialog-title">现场照片合成。</h2><p class="modal-copy">照片加上 ${esc(state.name)} 的像素贴纸${s?`，来自${esc(s.name)}`:''}。</p><div class="reward-stage base"><img class="composite-preview" src="${dataUrl}" alt="合成照片预览"></div><div class="modal-actions">${publishBtn}<a class="btn btn-dark" download="outie-${Date.now()}.jpg" href="${dataUrl}">保存图片</a><button class="text-btn" type="button" data-action="close">关闭</button></div>`,'composite');
+}
+async function publishLive(spotId){
+  if(publishing||mode!=='api')return;
+  const s=SPOTS.find(sp=>sp.id===spotId);
+  const btn=dialog.querySelector('[data-action="publish-live"]');
+  const dataUrl=dialog.querySelector('.composite-preview')?.getAttribute('src');
+  if(!dataUrl){toast('没有可发布的合成照。');return;}
+  publishing=true;
+  if(btn)btn.disabled=true;
+  toast('正在发布到现场…');
+  try{
+    const blob=await (await fetch(dataUrl)).blob();
+    const form=new FormData();
+    form.append('photo',blob,'outie-live.jpg');
+    form.append('caption',`${eventKeyText()} · ${s?s.name:'现场'}`);
+    form.append('userLat',String(s&&Number.isFinite(s.lat)?s.lat:LIVE_CENTER.lat));
+    form.append('userLng',String(s&&Number.isFinite(s.lng)?s.lng:LIVE_CENTER.lng));
+    form.append('locationSource','amap');
+    await apiFetch('/photos/anonymous',{method:'POST',body:form});
+    publishing=false;
+    livePhotos=null;liveStatus='idle';
+    toast('已发到现场。');
+    closeModal();
+    navigate('live');
+  }catch(error){
+    publishing=false;
+    if(btn)btn.disabled=false;
+    toast('发布失败：'+errText(error));
+  }
+}
+function pickCompositePhoto(spotId){
+  if(composeBusy)return;
+  const input=document.createElement('input');
+  input.type='file';
+  input.accept='image/*';
+  input.setAttribute('capture','environment');
+  input.style.display='none';
+  input.addEventListener('change',async ()=>{
+    const file=input.files&&input.files[0];
+    if(!file)return;
+    composeBusy=true;
+    toast('正在合成…');
+    try{
+      const dataUrl=await composePhoto(file,state.equipped||'base');
+      composeBusy=false;
+      showCompositePreview(dataUrl,spotId||null);
+    }catch(error){
+      composeBusy=false;
+      toast(errText(error));
+    }
+  });
+  document.body.appendChild(input);
+  input.click();
+  setTimeout(()=>input.remove(),60000);
+}
+
+/* ---------- render ---------- */
+const NAV_ITEMS=[['pet','我的宠物'],['explore','去哪儿'],['live','现场'],['set','SET']];
+function navMarkup(){
+  return NAV_ITEMS.map(([id,label])=>`<button type="button" class="nav-btn" data-action="nav" data-view="${id}" ${view===id?'aria-current="page"':''}>${label}</button>`).join('');
+}
+function offlineNote(){
+  return `<p class="offline-note mono">离线模式 · 连接后可用</p>`;
+}
+function render(){
+  document.body.classList.toggle('has-pet',Boolean(state.name));
+  document.getElementById('storage-warning').hidden=storageOK;
+  for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=!state.name;nav.innerHTML=state.name?navMarkup():'';}
+  document.getElementById('footer-local').textContent=eventKeyText();
+  main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='live'?renderLivePage():renderSetPage();
+  if(view==='explore')initRealMap();
+  else destroyRealMap();
+  if(flashNext){main.querySelector('.pet-card')?.classList.add('flash');flashNext=false;}
+}
+function hero(welcome=false){
+  const look=lookFor(welcome?'base':state.equipped);
+  const badge=look.id==='evolved'?'LIMITED':'GO OUT';
+  return `<div><section class="pet-card" aria-label="${welcome?'待领养的宠物':esc(state.name)+'，'+look.name}"><div class="pet-topline mono"><span>OUTIE PET DEVICE / ${look.label}</span><span class="pet-online"><span class="live-dot"></span>${welcome?'待领养':'已领养'}</span></div><div class="pet-canvas ${look.id}"><span class="canvas-id mono">${look.label}</span><span class="deco d1" aria-hidden="true">+</span><span class="deco d2" aria-hidden="true">+</span><div class="ground"></div><button class="pet-touch" type="button" data-action="pet" aria-label="${welcome?'宠物':esc(state.name)}">${petSVG(look.id)}</button><span class="screen-badge mono">${badge}</span></div><div class="pet-caption"><div class="pet-name">${welcome?'未命名':esc(state.name)}<span class="look-label">${welcome?'原生形态 · 待领养':look.name+' · 当前形态'}</span></div><span class="look-chip mono">${welcome?'0/3 已收集':count()+'/3 已收集'}</span></div></section></div>`;
+}
+function renderWelcome(){
+  const modeNote=mode==='api'?'':'<p class="form-foot">离线演示：进度只存在本机。</p>';
+  return `<div class="page-intro"><div><h1>到现场打卡，收集造型。</h1></div></div><div class="main-grid welcome-grid">${hero(true)}<div class="side-stack"><section class="panel adopt-panel"><h2>给它起个名字。</h2><form id="adopt-form"><label class="name-label" for="pet-name">宠物名字<span>最多 12 字</span></label><input id="pet-name" class="name-input" name="petName" value="" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="name-error" placeholder="例如：MOMO"><div class="input-error" id="name-error" role="alert"></div><button type="submit" class="btn btn-primary" id="adopt-button">领养</button></form>${modeNote}</section></div></div>`;
+}
+function progressMarkup(){
+  return `<div class="progress-row"><div class="stamp-track" aria-label="已收集 ${count()} 个地点，共 ${SPOTS.length} 个">${SPOTS.map((s,i)=>`${i?`<span class="track-line ${state.rewards[s.id]?'done':''}" aria-hidden="true"></span>`:''}<span class="stamp ${state.rewards[s.id]?'done':''}" title="${s.zone}${state.rewards[s.id]?'：已打卡':'：未打卡'}">${pixIcon(s.icon)}</span>`).join('')}</div><span class="count" role="img" aria-label="${count()} / 3">${pixText(count()+'/3',3)}</span></div>`;
+}
+function goalMarkup(){
+  const n=count(),complete=n===SPOTS.length;
+  const heading=state.evolved?'限定形态已解锁。':complete?'三个地点，全部集齐。':n===0?'今天有 3 个地点。':'已收集 '+n+' 个地点。';
+  const copy=state.evolved?'':complete?'可以解锁活动限定形态了。':'每站打卡得一套造型，集齐解锁限定形态。';
+  const action=complete&&!state.evolved?{act:'evolve-prompt',label:'解锁限定形态'}:{act:'nav',label:n===0?'去拿新造型':state.evolved?'去哪儿看看':'继续打卡'};
+  return `<section class="goal-panel panel"><h2>${heading}</h2>${copy?`<p class="goal-copy">${copy}</p>`:''}${progressMarkup()}<button class="btn ${complete&&!state.evolved?'btn-primary':'btn-dark'}" type="button" data-action="${action.act}" ${action.act==='nav'?'data-view="explore"':''}>${action.label}</button></section>`;
+}
+function collectionMarkup(){
+  return `<section class="panel collection"><div class="section-top"><h2>我的造型</h2><span class="small-meta mono">${LOOKS.filter(l=>unlocked(l.id)).length} / ${LOOKS.length} 已解锁</span></div><div class="looks-grid">${LOOKS.map(l=>`<button type="button" class="look-option ${!unlocked(l.id)?'locked':''} ${state.equipped===l.id?'active':''}" data-action="${unlocked(l.id)?'equip-inline':'look'}" data-look="${l.id}" aria-label="${l.name}，${state.equipped===l.id?'正在穿戴':unlocked(l.id)?'已解锁，点击换上':l.id==='evolved'&&count()===3?'可解锁':'未解锁'}" aria-pressed="${state.equipped===l.id}"><span class="look-thumb ${l.id}">${petSVG(l.id)}${state.equipped===l.id?`<span class="wear-pin">${pixIcon('check')}</span>`:!unlocked(l.id)?`<span class="lock-pin">${pixIcon(l.id==='evolved'&&count()===3?'star':'lock')}</span>`:''}</span><span class="look-name">${l.short}</span></button>`).join('')}</div><p class="collection-note">点击造型即可换上，可反复更换。</p></section>`;
+}
+function renderPetPage(){
+  return `<div class="page-intro"><div><h1>我的宠物。</h1></div><span class="intro-mark mono">${state.evolved?'FORM 5/5':'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/5'}</span></div><div class="main-grid">${hero()}<div class="side-stack">${goalMarkup()}${collectionMarkup()}</div></div>`;
+}
+/* ---------- pixel city map (去哪儿) ---------- */
+function mapProject(lng,lat){
+  const v=MAP_VIEW;
+  const x=14+(lng-v.minLng)/(v.maxLng-v.minLng)*(v.w-28);
+  const y=10+(v.maxLat-lat)/(v.maxLat-v.minLat)*(v.h-20);
+  return {x:Math.max(6,Math.min(v.w-6,x)),y:Math.max(6,Math.min(v.h-6,y))};
+}
+function ditherPattern(pid,color){
+  return `<pattern id="${pid}" width="2" height="2" patternUnits="userSpaceOnUse"><rect width="2" height="2" fill="transparent"/><rect width="1" height="1" fill="${color}"/><rect x="1" y="1" width="1" height="1" fill="${color}"/></pattern>`;
+}
+function cityMapSVG(){
+  const id='map'+(++svgId);
+  const v=MAP_VIEW,ink='#26241c';
+  const tints=[[3,3,28,27],[43,3,32,27],[87,3,42,27],[3,36,28,28],[43,36,32,28],[87,36,42,28],[3,70,28,14],[43,70,32,14],[87,70,42,14]];
+  const buildings=[
+    [47,7,8,6,ink],[58,7,10,6,ink],[47,17,6,8,ink],[56,16,12,4,ink],
+    [91,7,12,7,'#41597e'],[106,7,8,7,ink],[118,7,8,6,ink],[91,18,7,8,ink],[101,19,14,5,ink],
+    [7,40,9,7,ink],[19,40,8,7,ink],[7,51,12,5,ink],
+    [47,40,10,7,ink],[60,40,12,7,ink],[47,51,20,6,ink],
+    [91,40,14,7,ink],[108,40,10,7,'#a3463c'],[91,51,8,7,ink],[102,52,16,4,ink],
+    [5,73,10,8,ink],[19,73,8,8,ink],[47,73,8,8,ink],[58,73,12,8,ink],[89,73,10,8,ink],[102,73,8,8,ink],[113,73,10,8,ink]
+  ];
+  const dashes=[];
+  for(let x=6;x<v.w-6;x+=10)dashes.push(`<rect x="${x}" y="33" width="5" height="1" fill="${ink}" opacity=".3"/>`,`<rect x="${x+4}" y="67" width="5" height="1" fill="${ink}" opacity=".3"/>`);
+  for(let y=5;y<v.h-10;y+=10)dashes.push(`<rect x="37" y="${y}" width="1" height="5" fill="${ink}" opacity=".3"/>`,`<rect x="81" y="${y}" width="1" height="5" fill="${ink}" opacity=".3"/>`);
+  let out=`<svg class="city-svg" viewBox="0 0 ${v.w} ${v.h}" shape-rendering="crispEdges" aria-hidden="true"><defs>${ditherPattern(id+'w','#41597e')}${ditherPattern(id+'g','#4a6c46')}</defs>`;
+  out+=`<rect width="${v.w}" height="${v.h}" fill="#ece8d6"/>`;
+  for(const [x,y,w,h] of tints)out+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${ink}12"/>`;
+  out+=`<rect x="5" y="5" width="24" height="23" fill="url(#${id}g)"/><rect x="0" y="86" width="${v.w}" height="10" fill="url(#${id}w)"/><rect x="0" y="86" width="${v.w}" height="2" fill="${ink}"/>`;
+  for(const [x,y,w,h,c] of buildings)out+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/>`;
+  out+=`<rect x="43" y="36" width="32" height="28" fill="none" stroke="${ink}" stroke-width="1"/>`;
+  out+=dashes.join('');
+  out+='</svg>';
+  return out;
+}
+/* ---------- real map (高德 JS API · 纸感灰调底图 + 像素标记) ---------- */
+let mapView='range';      /* 'range' 活动范围 | 'spot' 单点 */
+let mapFocusSpot=null;    /* 单点档以最近点过的标记为中心 */
+let mapRealFailed=false;  /* JS API 加载/初始化失败 → 回退手绘示意图 */
+let mapToken=0;           /* 防过期异步回写 */
+let realMap=null;         /* 当前 AMap 实例 */
+let amapLoader=null;      /* JS API 加载 promise（失败后重置，允许下次重试） */
+function spotsWithCoords(){
+  return SPOTS.filter(s=>Number.isFinite(s.lng)&&Number.isFinite(s.lat));
+}
+function mapBBoxCenter(){
+  const pts=spotsWithCoords();
+  if(!pts.length)return null;
+  return {
+    lng:(Math.min(...pts.map(p=>p.lng))+Math.max(...pts.map(p=>p.lng)))/2,
+    lat:(Math.min(...pts.map(p=>p.lat))+Math.max(...pts.map(p=>p.lat)))/2
+  };
+}
+function loadAmap(){
+  if(window.AMap&&window.AMap.Map)return Promise.resolve(window.AMap);
+  if(amapLoader)return amapLoader;
+  amapLoader=apiFetch('/outie/amap-config').then(cfg=>{
+    if(!cfg||!cfg.jsKey)throw new Error('地图配置缺失');
+    window._AMapSecurityConfig={securityJsCode:cfg.securityCode||''};
+    return new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(String(cfg.jsKey));
+      script.async=true;
+      script.onload=()=>{window.AMap&&window.AMap.Map?resolve(window.AMap):reject(new Error('高德 JS API 加载异常'));};
+      script.onerror=()=>reject(new Error('高德 JS API 加载失败'));
+      document.head.appendChild(script);
+    });
+  }).catch(error=>{amapLoader=null;throw error;});
+  return amapLoader;
+}
+function mapMarkerButton(s){
+  const done=Boolean(state.rewards[s.id]);
+  const el=document.createElement('button');
+  el.type='button';
+  el.className='map-marker mono'+(done?' done':'');
+  el.dataset.action='checkin';
+  el.dataset.spot=s.id;
+  el.title=s.name;
+  el.setAttribute('aria-label',`${s.name}，${s.zone}，${done?'已打卡':'点击查看点位并打卡'}`);
+  el.innerHTML=(done?'':`<span class="marker-no mono" aria-hidden="true">SPOT ${s.number}</span>`)+pixIcon(s.icon);
+  return el;
+}
+function youDotElement(){
+  const el=document.createElement('span');
+  el.className='you-dot';
+  el.title='你在这里';
+  el.setAttribute('aria-hidden','true');
+  return el;
+}
+/* 档位取景：单点 = setZoomAndCenter(17, 焦点 spot 坐标/包围盒中心)；活动范围 = setFitView 三点留边距 */
+function applyMapFraming(map,spotMarkers){
+  if(mapView==='spot'){
+    const s=SPOTS.find(sp=>sp.id===mapFocusSpot);
+    const c=(s&&Number.isFinite(s.lng)&&Number.isFinite(s.lat))?{lng:s.lng,lat:s.lat}:mapBBoxCenter();
+    if(c){map.setZoomAndCenter(17,[c.lng,c.lat]);return;}
+  }
+  if(spotMarkers.length)map.setFitView(spotMarkers,false,[70,70,70,70],17);
+}
+function destroyRealMap(){
+  if(!realMap)return;
+  try{realMap.destroy();}catch(e){}
+  realMap=null;
+}
+function failRealMap(token){
+  if(token!==mapToken)return;
+  mapRealFailed=true;
+  destroyRealMap();
+  render();
+}
+function initRealMap(){
+  const holder=document.getElementById('map-holder'),container=document.getElementById('map-canvas');
+  if(!holder||!container||mode!=='api'||mapRealFailed)return;
+  const token=++mapToken;
+  destroyRealMap();
+  const myContainer=container;
+  loadAmap().then(AMap=>{
+    if(token!==mapToken||!document.contains(myContainer))return;
+    const map=new AMap.Map(myContainer,{
+      mapStyle:'amap://styles/whitesmoke',
+      features:['bg','road','building'],
+      viewMode:'2D',
+      zoom:15,
+      center:[121.44635,31.22465],
+      zooms:[10,19]
+    });
+    realMap=map;
+    const spotMarkers=[];
+    for(const s of spotsWithCoords()){
+      const marker=new AMap.Marker({position:[s.lng,s.lat],content:mapMarkerButton(s),anchor:'center',zIndex:120});
+      spotMarkers.push(marker);
+      map.add(marker);
+    }
+    if(devSkipGeo){
+      const c=mapBBoxCenter();
+      if(c)map.add(new AMap.Marker({position:[c.lng,c.lat],content:youDotElement(),anchor:'center',zIndex:110}));
+    }
+    applyMapFraming(map,spotMarkers);
+    let settled=false;
+    const settle=()=>{
+      if(settled||token!==mapToken)return;
+      settled=true;
+      const loading=holder.querySelector('.map-loading');
+      if(loading)loading.remove();
+    };
+    map.on('complete',settle);
+    map.on('error',settle);
+    setTimeout(()=>{if(token===mapToken)settle();},8000);
+  }).catch(()=>failRealMap(token));
+}
+function cityMapRealMarkup(){
+  return `<figure class="map-wrap"><div class="map-zoom" role="group" aria-label="地图缩放档位"><button type="button" class="map-zoom-btn" data-action="map-zoom" data-zoom="range" aria-pressed="${mapView==='range'}">活动范围</button><button type="button" class="map-zoom-btn" data-action="map-zoom" data-zoom="spot" aria-pressed="${mapView==='spot'}">单点</button></div><div class="map-holder" id="map-holder"><div class="map-canvas" id="map-canvas" aria-label="${esc(eventKeyText())} 活动点位地图"></div><span class="map-loading mono">加载中…</span><span class="map-credit mono">MAP © 高德地图</span></div><figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch"></span>未打卡</span><span class="legend-item"><span class="legend-swatch done"></span>已打卡</span>${devSkipGeo?'<span class="legend-item"><span class="legend-swatch here"></span>你在这里</span>':''}</figcaption></figure>`;
+}
+function cityMapMarkup(){
+  if(mode==='api'&&!mapRealFailed&&spotsWithCoords().length)return cityMapRealMarkup();
+  return cityMapSchematicMarkup();
+}
+function cityMapSchematicMarkup(){
+  const pos={};
+  for(const s of SPOTS)pos[s.id]=(Number.isFinite(s.lng)&&Number.isFinite(s.lat))?mapProject(s.lng,s.lat):null;
+  const markers=SPOTS.map(s=>{
+    const p=pos[s.id];if(!p)return '';
+    const left=(p.x/MAP_VIEW.w*100).toFixed(2),top=(p.y/MAP_VIEW.h*100).toFixed(2);
+    const done=Boolean(state.rewards[s.id]);
+    return `<button type="button" class="map-marker ${done?'done':''}" data-action="checkin" data-spot="${esc(s.id)}" style="left:${left}%;top:${top}%" aria-label="${esc(s.name)}，${esc(s.zone)}，${done?'已打卡':'点击查看点位并打卡'}" title="${esc(s.name)}">${done?'':`<span class="marker-no mono" aria-hidden="true">SPOT ${s.number}</span>`}${pixIcon(s.icon)}</button>`;
+  }).join('');
+  let here='';
+  if(devSkipGeo){
+    const pts=SPOTS.map(s=>pos[s.id]).filter(Boolean);
+    if(pts.length){
+      const x=pts.reduce((a,p)=>a+p.x,0)/pts.length,y=pts.reduce((a,p)=>a+p.y,0)/pts.length;
+      here=`<span class="you-dot" style="left:${(x/MAP_VIEW.w*100).toFixed(2)}%;top:${(y/MAP_VIEW.h*100).toFixed(2)}%" title="你在这里" aria-hidden="true"></span>`;
+    }
+  }
+  return `<figure class="map-wrap">${cityMapSVG()}<span class="map-fallback-tag mono">示意图</span>${markers}${here}<figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch"></span>未打卡</span><span class="legend-item"><span class="legend-swatch done"></span>已打卡</span>${devSkipGeo?'<span class="legend-item"><span class="legend-swatch here"></span>你在这里</span>':''}</figcaption></figure>`;
+}
+function renderExplore(){
+  return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}<section class="event-banner" aria-label="${esc(eventData&&eventData.name||'WEEKEND.EXE')}"><div class="event-banner-main"><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'限定形态已解锁。':`三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'集齐三个不同地点，解锁活动限定形态。'}</div>`;
+}
+function spotCard(s){
+  const done=Boolean(state.rewards[s.id]);
+  return `<article class="spot-card" id="spot-${s.id}"><div class="spot-art ${s.lookId||s.id}"><div class="dither-band" aria-hidden="true"></div><span class="spot-number mono">SPOT ${s.number}</span><div class="spot-word">${pixText(s.en,2,'#26241c')}</div>${petSVG(s.id)}${done?`<span class="claimed-flag">${pixIcon('check')}已打卡</span>`:''}</div><div class="spot-body"><div class="spot-headline"><h2>${s.name}</h2><span class="spot-zone mono">${s.zone}</span></div><p class="spot-reward"><span>${done?'已获得':'打卡可得'} / </span>${s.reward}<br><span>${s.line}</span></p><button type="button" class="btn ${done?'btn-quiet':'btn-primary'}" data-action="${done?'look':'checkin'}" ${done?`data-look="${s.id}"`:`data-spot="${s.id}"`}>${done?'查看已得造型':'到场打卡'}</button></div></article>`;
+}
+/* ---------- live photo feed (现场) ---------- */
+function photoAbsUrl(u){
+  u=String(u||'');
+  if(/^https?:\/\//i.test(u))return u;
+  return PHOTO_ORIGIN+(u.startsWith('/')?'':'/')+u;
+}
+function fmtClock(iso){
+  const d=new Date(iso);if(!iso||Number.isNaN(d.getTime()))return '--.-- --:--';
+  const p=n=>String(n).padStart(2,'0');
+  return `${p(d.getMonth()+1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function fmtDistance(m){
+  m=Number(m);
+  if(!Number.isFinite(m))return '—';
+  return m<1000?`${Math.round(m)}M`:`${(m/1000).toFixed(1)}KM`;
+}
+async function loadLivePhotos(force){
+  if(mode!=='api')return;
+  if(liveStatus==='loading')return;
+  if(livePhotos&&!force)return;
+  liveStatus='loading';
+  if(view==='live')renderLiveGrid();
+  try{
+    const data=await apiFetch(`/photos/nearby?lat=${LIVE_CENTER.lat}&lng=${LIVE_CENTER.lng}&radius=${LIVE_CENTER.radius}&page=1&limit=${LIVE_CENTER.limit}`);
+    livePhotos=Array.isArray(data&&data.photos)?data.photos:[];
+    liveStatus='ready';
+  }catch(error){
+    liveStatus='error';
+  }
+  if(view==='live')render();
+}
+function liveCell(p){
+  const url=esc(photoAbsUrl(p.url));
+  const cap=esc(String(p.caption||'').trim());
+  return `<figure class="live-frame"><img src="${url}" alt="${cap||'现场照片'}" title="${cap}" loading="lazy" decoding="async"><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)} / ${fmtDistance(p.distance)}</span></figcaption></figure>`;
+}
+function liveBody(){
+  if(liveStatus==='loading')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>正在加载现场照片…</p></div>`;
+  if(liveStatus==='error')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>现场照片加载失败。</p><button class="live-status-btn" type="button" data-action="live-refresh">重试</button></div>`;
+  if(!livePhotos||!livePhotos.length)return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>还没有现场照片。<br>打卡后拍一张合成照发到现场，这里就会有第一张。</p></div>`;
+  return livePhotos.map(liveCell).join('');
+}
+function renderLiveGrid(){
+  const grid=main.querySelector('#live-grid');
+  if(grid)grid.innerHTML=liveBody();
+}
+function renderLivePage(){
+  const n=liveStatus==='ready'&&livePhotos?livePhotos.length:0;
+  const body=mode==='api'
+    ?`<div class="live-grid" id="live-grid">${liveBody()}</div><div class="route-note">照片来自附近的人 · 预览定位取活动中心 · <button type="button" data-action="live-refresh">刷新</button></div>`
+    :`<div class="live-grid"><div class="live-cell-empty"><span class="live-dither" aria-hidden="true"></span><p>离线模式 · 连接后可用</p></div></div>`;
+  return `<div class="page-intro"><div><h1>现场。</h1></div></div>${body}`;
+}
+/* ---------- set page ---------- */
+function renderSetPage(){
+  const about=mode==='api'
+    ?`<p class="about-list">演示版本，活动与奖励均为虚构。</p>`
+    :`<p class="about-list">离线演示：活动与奖励均为虚构，进度只存在本机。</p>`;
+  return `<div class="page-intro"><div><h1>设置。</h1></div></div><div class="set-stack">${state.name?`<section class="panel set-panel"><h2>宠物名字。</h2><form id="rename-form"><label class="name-label" for="rename-input">宠物名字<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark">保存</button></div></form></section>`:''}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
+}
+function navigate(target,focusSpot=null){
+  if(!state.name){toast('先领养宠物。');document.getElementById('pet-name')?.focus();return;}
+  view=VIEWS.includes(target)?target:'pet';
+  try{history.replaceState(null,'','#/'+view);}catch(e){}
+  render();window.scrollTo(0,0);
+  if(view==='live')loadLivePhotos();
+  if(focusSpot){const card=document.getElementById('spot-'+focusSpot);card?.classList.add('focus-spot');card?.scrollIntoView({block:'center',behavior:reduceMotion.matches?'auto':'smooth'});setTimeout(()=>card?.classList.remove('focus-spot'),1800);}
+}
+function toast(message){const el=document.getElementById('toast');clearTimeout(toastTimer);el.textContent=message;el.classList.add('visible');toastTimer=setTimeout(()=>el.classList.remove('visible'),2600);}
+function modal(content,type){
+  const wasOpen=dialog.open;if(!wasOpen)lastFocused=document.activeElement;
+  currentModal=type;dialog.innerHTML=`<div class="modal-inner"><button class="modal-close" data-action="close" type="button" aria-label="关闭">×</button>${content}</div>`;
+  if(!wasOpen)dialog.showModal();
+  const focus=dialog.querySelector('input, .modal-actions .btn, .btn, .modal-close');focus?.focus({preventScroll:true});
+}
+function closeModal(){if(dialog.open)dialog.close();currentModal=null;if(lastFocused&&document.contains(lastFocused))lastFocused.focus({preventScroll:true});else main.focus({preventScroll:true});}
+function showCheckin(id){
+  const s=SPOTS.find(s=>s.id===id);if(!s||!state.name)return;
+  if(state.rewards[id]){showLook(id);return;}
+  const frame=mode==='api'
+    ?`<div class="checkin-frame"><span class="frame-note mono">${devSkipGeo?'DEV MODE<br>跳过定位校验':'GEO CHECK-IN<br>需靠近点位 '+s.radiusMeters+' 米内'}</span></div>`
+    :`<div class="checkin-frame">${qrSVG()}<span class="frame-note mono">SCAN AT VENUE<br>现场扫码处</span></div>`;
+  modal(`<p class="modal-eyebrow mono">CHECK-IN / SPOT ${s.number}</p><h2 id="dialog-title">到达${esc(s.name)}。</h2>${frame}<p class="modal-copy">${s.zone?`区域：${esc(s.zone)}<br>`:''}本站造型：<strong>${esc(s.reward)}</strong><br>到达：${esc(s.line)}</p><div class="modal-actions"><button class="btn btn-primary" data-action="redeem" data-spot="${id}" type="button">打卡领取</button></div>`,'checkin');
+}
+function redeemOffline(id){
+  const s=SPOTS.find(s=>s.id===id);if(!s||!state.name)return;
+  if(state.rewards[id]){showLook(id);toast('该站已领取过。');return;}
+  state.rewards[id]=new Date().toISOString();save();render();showReward(id);confetti();
+}
+function rewardStage(id,label='NEW LOOK',stamp='COLLECTED'){
+  return `<div class="reward-stage ${id}"><span class="stage-label mono">${label}</span>${petSVG(id)}<span class="reward-stamp mono">${stamp}</span></div>`;
+}
+function showReward(id){
+  const s=SPOTS.find(s=>s.id===id);const all=count()===SPOTS.length;
+  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="compose-photo" type="button">拍现场照片</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
+}
+function showLook(id){
+  const look=lookFor(id);if(id==='evolved'&&!state.evolved&&count()===3){showEvolutionPrompt();return;}
+  if(unlocked(id)){
+    modal(`<p class="modal-eyebrow mono">LOOK / ${look.label}</p><h2 id="dialog-title">${look.name}</h2><p class="modal-copy">${id==='base'?'领养时的初始形态。':id==='evolved'?'集齐三个地点解锁的活动限定形态。':'已获得的造型，可随时换上。'}</p>${rewardStage(id,'UNLOCKED',state.equipped===id?'WEARING':'OWNED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="${id}">${state.equipped===id?'正在穿戴':'换上'}</button></div>`,'look');
+  }else{
+    const s=SPOTS.find(s=>s.id===id);
+    modal(`<p class="modal-eyebrow mono">LOCKED</p><h2 id="dialog-title">${look.name}</h2><p class="modal-copy">${s?'到'+s.name+'（'+s.line+'）打卡获得。':'集齐三个地点后解锁。'}</p>${rewardStage(id,'LOCKED','未解锁')}<div class="modal-actions"><button class="btn btn-primary" data-action="goto-spot" data-spot="${s?s.id:''}" type="button">${s?'去'+s.zone:'去收集'}</button></div>`,'locked');
+  }
+}
+function wear(id){
+  if(!unlocked(id))return;
+  if(mode==='api'){
+    state.equipped=id;
+    apiFetch('/outie/pet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({equipped:id})})
+      .then(data=>{pet=data.pet;state=stateFromPet(pet);render();})
+      .catch(error=>toast('换装未保存：'+errText(error)));
+    closeModal();flashNext=true;navigate('pet');toast('已换上「'+lookFor(id).name+'」。');
+    return;
+  }
+  state.equipped=id;save();closeModal();flashNext=true;navigate('pet');toast('已换上「'+lookFor(id).name+'」。');
+}
+function showEvolutionPrompt(){
+  if(!state.name||count()!==SPOTS.length){toast('先集齐三个地点。');return;}
+  if(state.evolved){showLook('evolved');return;}
+  modal(`<p class="modal-eyebrow mono">EVENT COMPLETE</p><h2 id="dialog-title">三个地点，全部集齐。</h2><p class="modal-copy">${esc(state.name)} 可以解锁活动限定形态「出逃星人」。</p><div class="reward-stage evolved hidden-look"><span class="stage-label mono">A NEW FORM</span>${petSVG('evolved')}<span class="reward-stamp mono">READY</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="evolve" type="button">解锁</button><button class="text-btn" type="button" data-action="close">稍后</button></div>`,'evolution-ready');
+}
+function showEvolutionDone(){
+  modal(`<span class="success-chip">${pixIcon('check')}UNLOCKED</span><h2 id="dialog-title">解锁：出逃星人。</h2><p class="modal-copy">活动限定形态。五套造型全部收集完成，可随时更换。</p>${rewardStage('evolved','NO.005','LIMITED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="evolved">穿上</button></div>`,'evolution-done');
+  confetti();
+}
+function evolve(){
+  if(mode==='api'){showLook('evolved');return;}
+  if(count()!==SPOTS.length||!state.name)return;
+  state.evolved=true;save();render();
+  showEvolutionDone();
+}
+function confetti(){
+  if(reduceMotion.matches)return;
+  const layer=document.createElement('div');layer.className='confetti';layer.setAttribute('aria-hidden','true');
+  const colors=['#26241c','#41597e','#a3463c','#a8842e','#4a6c46'];
+  for(let i=0;i<18;i++){const p=document.createElement('i');p.style.cssText=`--x:${(i*41)%100}%;--c:${colors[i%5]};--d:${(i%6)*.07}s`;layer.appendChild(p);}
+  dialog.querySelector('.modal-inner')?.appendChild(layer);setTimeout(()=>layer.remove(),1900);
+}
+function resetPrompt(){modal(`<p class="modal-eyebrow mono">RESET</p><h2 id="dialog-title">清空全部进度？</h2><p class="modal-copy">清空后无法恢复。</p><div class="modal-actions"><button type="button" class="btn danger-btn" data-action="reset-confirm">清空</button><button type="button" class="btn btn-dark" data-action="close">取消</button></div>`,'reset-confirm');}
+function reset(){
+  if(mode==='api'){
+    try{localStorage.removeItem(IDENTITY_KEY);}catch(e){}
+    window.location.reload();
+    return;
+  }
+  state=blankState();save();closeModal();view='pet';try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}render();window.scrollTo(0,0);toast('进度已清空。');
+}
+function handleAction(button){
+  const action=button.dataset.action;
+  switch(action){
+    case 'home':if(state.name)navigate('pet');else window.scrollTo({top:0,behavior:'smooth'});break;
+    case 'nav':navigate(button.dataset.view);break;
+    case 'close':closeModal();break;
+    case 'dev-info':toast('DEV：服务端已开启 OUTIE_DEV_SKIP_GEO，打卡不校验定位。');break;
+    case 'map-zoom':{
+      const target=button.dataset.zoom==='spot'?'spot':'range';
+      if(mapView===target)break;
+      mapView=target;
+      render();
+      break;
+    }
+    case 'checkin':if(button.classList.contains('map-marker'))mapFocusSpot=button.dataset.spot;showCheckin(button.dataset.spot);break;
+    case 'redeem':mode==='api'?checkinApi(button.dataset.spot):redeemOffline(button.dataset.spot);break;
+    case 'look':showLook(button.dataset.look);break;
+    case 'equip-inline':wear(button.dataset.look);break;
+    case 'wear':wear(button.dataset.look);break;
+    case 'wear-reward':{
+      const id=button.dataset.look;if(!unlocked(id))break;
+      wear(id);
+      if(mode==='api'){
+        if(pendingEvolution){pendingEvolution=false;setTimeout(showEvolutionDone,60);}
+        break;
+      }
+      if(count()===SPOTS.length&&!state.evolved)showEvolutionPrompt();
+      break;
+    }
+    case 'compose-photo':pickCompositePhoto(button.dataset.spot);break;
+    case 'publish-live':publishLive(button.dataset.spot);break;
+    case 'live-refresh':loadLivePhotos(true);break;
+    case 'goto-spot':closeModal();navigate('explore',button.dataset.spot||null);break;
+    case 'evolve-prompt':showEvolutionPrompt();break;
+    case 'evolve':evolve();break;
+    case 'reset-prompt':resetPrompt();break;
+    case 'reset-confirm':reset();break;
+    case 'pet':{
+      button.classList.remove('hop');void button.offsetWidth;button.classList.add('hop');break;
+    }
+  }
+}
+document.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(button&&!button.disabled)handleAction(button);});
+document.addEventListener('submit',async event=>{
+  if(event.target.id==='adopt-form'){
+    event.preventDefault();const input=document.getElementById('pet-name');const name=trimName(input.value);
+    if(!name){document.getElementById('name-error').textContent='先起一个名字。';input.focus();return;}
+    const submitButton=document.getElementById('adopt-button');submitButton.disabled=true;
+    if(mode==='api'){
+      try{
+        await adoptApi(name);flashNext=true;navigate('pet');toast(name+' 已加入。');
+      }catch(error){
+        document.getElementById('name-error').textContent=errText(error);
+      }
+      submitButton.disabled=false;return;
+    }
+    state={...blankState(),name,createdAt:new Date().toISOString()};save();flashNext=true;navigate('pet');toast(name+' 已加入。');
+  }
+  if(event.target.id==='rename-form'){
+    event.preventDefault();const input=document.getElementById('rename-input');const name=trimName(input.value);
+    if(!name){document.getElementById('rename-error').textContent='名字不能为空。';input.focus();return;}
+    if(mode==='api'){
+      try{
+        const data=await apiFetch('/outie/pet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+        pet=data.pet;state=stateFromPet(pet);closeModal();render();toast('名字已保存。');
+      }catch(error){
+        document.getElementById('rename-error').textContent=errText(error);
+      }
+      return;
+    }
+    state.name=name;save();closeModal();render();toast('名字已保存。');
+  }
+});
+dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeModal();}});
+dialog.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
+window.addEventListener('hashchange',()=>{if(!state.name)return;closeModal();view=viewFromHash();render();if(view==='live')loadLivePhotos();});
+window.addEventListener('storage',event=>{if(mode==='offline'&&event.key===STORAGE_KEY){state=loadState();closeModal();render();}});
+async function boot(){
+  const probe=await probeApi();
+  if(probe){
+    mode='api';
+    devSkipGeo=Boolean(probe.devSkipGeo);
+    applyEvent(probe.event);
+    try{
+      const me=await apiFetch('/outie/me');
+      pet=me&&me.pet?me.pet:null;
+    }catch(error){pet=null;}
+    state=pet?stateFromPet(pet):blankState();
+  }else{
+    mode='offline';
+    SPOTS=OFFLINE_SPOTS;
+    rebuildLooks();
+    state=loadState();
+    document.getElementById('offline-badge').hidden=false;
+  }
+  document.getElementById('dev-badge').hidden=!devSkipGeo;
+  document.getElementById('storage-warning').hidden=storageOK;
+  render();
+  if(view==='live')loadLivePhotos();
+}
+document.getElementById('wordmark').innerHTML=pixText('OUTIE',4);
+boot();
+</script>
+</body>
+</html>

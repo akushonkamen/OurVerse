@@ -122,6 +122,9 @@ const config = {
   },
   flags: {
     isRailway: Boolean(process.env.RAILWAY)
+  },
+  outie: {
+    devSkipGeo: process.env.OUTIE_DEV_SKIP_GEO === 'true'
   }
 };
 
