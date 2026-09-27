@@ -12,6 +12,9 @@ backend/uploads/
 backend/storage/
 backend/.env
 
+# Local tool dirs
+.omc/
+
 # IDE and system files
 .DS_Store
 Thumbs.db

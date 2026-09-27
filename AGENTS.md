@@ -4,6 +4,9 @@
 - `backend/` hosts the Node/Express API (`src/app.js` entry chain) with config in `src/config`, request handling in `controllers`, `routes`, and persistence in `models`. Static files sit in `public/`, runtime logs in `logs/`, and user uploads in `uploads/`.
 - `ios/OurVerse/` contains the SwiftUI status app, split into `App/`, `ViewModels/`, `Services/`, and `Models/`, with reusable assets under `Resources/` and unit/UI suites in `Tests/`.
 - `infra/` provides deployment scaffolding: `docker-compose.yml` for MongoDB + API, `mongo-init/` seed scripts, and `nginx.conf` for edge routing. Root-level `ourverse.sh` automates restart tasks on production hosts.
+- `web/` hosts the OUTIE single-file web client (`index.html`, no build step). It is the product front end; keep it dependency-free and follow the ink/pixel design system (paper `#efecdf`, ink `#26241c`, accents blue/red/yellow/green, 2px borders, no rounded corners, `steps()` animations).
+- `docs/` holds the project map (`PROJECT-MAP.md`) and the OurVerse → OUTIE integration plan.
+- OUTIE backend module: `outie-controller.js` / `outie-routes.js` (`/api/outie/*`) with `outie-event.js` / `outie-pet.js` models and `scripts/seed-outie-demo.js`. The product is OUTIE; legacy OurVerse endpoints stay untouched and additive-only.
 
 ## Build, Test & Development Commands
 - `cd backend && npm install` installs backend dependencies (Node ≥16).
