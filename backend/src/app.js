@@ -109,10 +109,15 @@ if (fs.existsSync(websitePath)) {
   app.get('/website.html', (req, res) => {
     res.sendFile(websitePath);
   });
+}
 
+// OUTIE 网页前端作为站点首页（源文件在仓库 web/）；缺失时回退旧官网
+const outieWebPath = path.resolve(__dirname, '..', '..', 'web', 'index.html');
+const homePagePath = fs.existsSync(outieWebPath) ? outieWebPath : websitePath;
+if (fs.existsSync(homePagePath)) {
   // 在生产环境下也支持根路径访问
   app.get('/', (req, res) => {
-    res.sendFile(websitePath);
+    res.sendFile(homePagePath);
   });
 }
 

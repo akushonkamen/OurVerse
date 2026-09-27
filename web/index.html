@@ -323,7 +323,7 @@ a.btn{text-decoration:none}
 /* OUTIE LIVE — API 版。
    服务端（OurVerse）：http://127.0.0.1:8444/api/outie/*，身份用 x-anonymous-id 头。
    启动时探测 API；探测失败自动回退 localStorage 离线玩法（角落显示「离线」）。 */
-const API_ORIGIN=(function(){try{return localStorage.getItem('outie.api-base')||'http://127.0.0.1:8444';}catch(e){return 'http://127.0.0.1:8444';}})();
+const API_ORIGIN=(function(){try{var o=localStorage.getItem('outie.api-base');if(o)return o;}catch(e){}return (location.protocol.indexOf('http')===0&&location.port!=='8642')?location.origin:'http://127.0.0.1:8444';})();
 const API_BASE=API_ORIGIN+'/api';
 const IDENTITY_KEY='outie.identity.v1';
 const STORAGE_KEY='outie.singleplayer.v1';
