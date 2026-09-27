@@ -7,6 +7,8 @@ const outieSpotSchema = new mongoose.Schema({
   rewardName: { type: String, default: '' },
   lookId: { type: String, enum: ['music', 'art', 'market'], required: true },
   arrivalNote: { type: String, default: '' },
+  amapPoiId: { type: String, default: '' },
+  address: { type: String, default: '' },
   lng: { type: Number, required: true },
   lat: { type: Number, required: true },
   radiusMeters: { type: Number, default: 200 }

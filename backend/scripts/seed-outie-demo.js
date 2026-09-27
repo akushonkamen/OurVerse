@@ -24,6 +24,7 @@ const DEMO_EVENT = {
       rewardName: '夜游耳机',
       lookId: 'music',
       arrivalNote: '主舞台东侧入口',
+      address: '上海市静安区南京西路 1649 号',
       // 愚园路/常德路一带
       lng: 121.4426,
       lat: 31.224,
@@ -36,6 +37,7 @@ const DEMO_EVENT = {
       rewardName: '数码眼镜',
       lookId: 'art',
       arrivalNote: '画廊一层服务台',
+      address: '上海市静安区威海路 696 号',
       // 距 music 约 610 米
       lng: 121.4478,
       lat: 31.2272,
@@ -48,6 +50,7 @@ const DEMO_EVENT = {
       rewardName: '星星背包',
       lookId: 'market',
       arrivalNote: '中庭摊位区',
+      address: '上海市静安区延安中路 823 号',
       // 距 art 约 610 米，距 music 约 740 米
       lng: 121.4501,
       lat: 31.2221,

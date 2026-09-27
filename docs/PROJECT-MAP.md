@@ -8,7 +8,8 @@
 | 路径 | 是什么 | 状态 |
 | --- | --- | --- |
 | `backend/src/` | Node/Express + Mongoose 服务端 | **核心，活跃** |
-| `backend/src/controllers/outie-controller.js` | OUTIE 业务：活动/宠物/打卡/合成照/地图配置 | **核心，活跃** |
+| `backend/src/services/outie-service.js` | OUTIE 业务逻辑（活动/宠物/围栏打卡/合成照/地图） | **核心，活跃** |
+| `backend/src/controllers/outie-controller.js` | `/api/outie/*` 薄控制层（解析请求 → 调 service） | **核心，活跃** |
 | `backend/src/models/outie-*.js` | OutieEvent / OutiePet 数据模型 | **核心，活跃** |
 | `backend/src/routes/outie-routes.js` | `/api/outie/*` 路由 | **核心，活跃** |
 | `backend/scripts/seed-outie-demo.js` | 演示活动种子脚本（幂等） | 活跃 |
@@ -31,7 +32,7 @@
 | `GET /me` | 匿名/登录 | 宠物完整状态（造型/穿戴/进化） |
 | `POST /checkin` `{spotKey,userLng,userLat}` | 匿名/登录 | 打卡：围栏校验 → 发造型 → 集齐自动进化（幂等） |
 | `POST /composites` | 匿名/登录 | 上传宠物合成照 |
-| `GET /staticmap` | 公开 | 高德静态图代理（302，key 留服务端） |
+| `GET /staticmap` | 公开 | 高德静态图代理（服务端拉流直出图片字节，key 不出服务端） |
 | `GET /amap-config` | 公开 | 下发 JS key + securityCode |
 
 ### 引擎接口（原 OurVerse，前端「现场」页与未来 App 复用）
@@ -48,7 +49,7 @@
 
 | 模型 | 关键字段 | 关系 |
 | --- | --- | --- |
-| `OutieEvent` | key, name, active, spots[{key,zone,rewardName,lookId,lng,lat,radiusMeters}] | spot 是打卡目标 |
+| `OutieEvent` | key, name, active, spots[{key,zone,rewardName,lookId,amapPoiId,address,lng,lat,radiusMeters}] | spot 是打卡目标，可绑定高德真实地点 |
 | `OutiePet` | identityKey(唯一), name, eventKey, rewards{spotKey:Date}, equipped, evolved | identityKey = `a:<anonymousId>` 或 `u:<userId>` |
 | `Bar` | amapPoiId, name, lng/lat, checkins[]（内嵌） | 旧打卡数据，冷启动城市内容 |
 | `Photo` | url, lat/lng, caption, owner/anonymous | 「现场」照片流；合成照也走这里 |
@@ -71,17 +72,19 @@
 
 ## 六、重叠与遗留（技术债清单）
 
-1. **两套打卡并存**：`Bar.checkins`（旧酒吧打卡）与 `OutiePet.rewards`（活动打卡）。
+1. **controller 已瘦身**：outie 业务逻辑已抽入 `services/outie-service.js`（`ServiceError` 统一错误），controller 只做解析与响应，符合 AGENTS.md 约定。
+2. **两套打卡并存**：`Bar.checkins`（旧酒吧打卡）与 `OutiePet.rewards`（活动打卡）。
    处理策略：不动旧接口（iOS 与既有数据在用），产品层统一叫「地点」；
    未来 iOS 重做时全部切 `/api/outie`，届时再评估合并存储。
-2. **命名不一致**：代码里 `bar` vs 产品里「地点/spot」。同上，先文档统一、后代码统一。
-3. **`/website.html` 旧官网**：已从首页下线，保留可达；确认无流量后可删。
-4. **staticmap 302 会把 key 带进 Location 头**：浏览器网络面板可见（高德 key 本属公开用途），严格方案是服务端拉流转发，暂缓。
-5. **配额**：高德静态图/JS 有日配额；匿名照片上传 1 张/天（`ANONYMOUS_DAILY_UPLOAD_LIMIT`）。上线前按量调整。
-6. **高德域名白名单**：JS key 若绑域，需把生产域名加入控制台，否则地图退示意图。
-7. **iOS App 与新产品脱节**：SwiftUI 壳仍是旧 OurVerse，Phase 3 重做。
-8. **CORS 白名单手动维护**（`ALLOWED_ORIGINS`）：新增前端域记得同步。
-9. 根目录 `node_modules/`（为根 `server.js` 转发入口而装）历史遗留，可在确认部署方式后清理。
+3. **命名不一致**：代码里 `bar` vs 产品里「地点/spot」。同上，先文档统一、后代码统一。
+4. **`/website.html` 旧官网**：已从首页下线，保留可达；确认无流量后可删。
+4. ~~staticmap 302 会把 key 带进 Location 头~~ **已解决（2026-09-28）**：改为服务端拉流，直接返回图片字节，key 不出服务端。
+6. **配额**：高德静态图/JS 有日配额；匿名照片上传 1 张/天（`ANONYMOUS_DAILY_UPLOAD_LIMIT`）。上线前按量调整。
+7. **高德域名白名单**：JS key 若绑域，需把生产域名加入控制台，否则地图退示意图。
+8. **iOS App 与新产品脱节**：SwiftUI 壳仍是旧 OurVerse，Phase 3 重做。
+9. **CORS 白名单手动维护**（`ALLOWED_ORIGINS`）：新增前端域记得同步。
+10. 根目录 `node_modules/`（为根 `server.js` 转发入口而装）历史遗留，可在确认部署方式后清理。
+11. ~~`backend/server.log` 被误入版本库~~ **已清理（2026-09-28）**：移出追踪并加入 .gitignore。
 
 ## 七、演进路线
 
