@@ -386,7 +386,7 @@ const ACC2={base:'#a3463c',music:'#41597e',art:'#41597e',market:'#a3463c',evolve
 let mode='offline',eventData=null,devSkipGeo=false,pet=null,pendingEvolution=false,composeBusy=false;
 let svgId=0,storageOK=true,toastTimer=null,flashNext=false;
 let state=blankState();
-const VIEWS=['pet','explore','mine'];
+const VIEWS=['pet','explore','event','mine'];
 function viewFromHash(){
   const raw=(location.hash||'').replace(/^#\/?/,'');
   return VIEWS.includes(raw)?raw:'pet';
@@ -776,7 +776,7 @@ function pickCompositePhoto(spotId){
 }
 
 /* ---------- render ---------- */
-const NAV_ITEMS=[['pet','我的宠物'],['explore','去哪儿'],['mine','我的']];
+const NAV_ITEMS=[['pet','我的宠物'],['explore','去哪儿'],['event','活动'],['mine','我的']];
 function navMarkup(){
   return NAV_ITEMS.map(([id,label])=>`<button type="button" class="nav-btn" data-action="nav" data-view="${id}" ${view===id?'aria-current="page"':''}>${label}</button>`).join('');
 }
@@ -788,7 +788,7 @@ function render(){
   document.getElementById('storage-warning').hidden=storageOK;
   for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=!state.name;nav.innerHTML=state.name?navMarkup():'';}
   document.getElementById('footer-local').textContent=eventKeyText();
-  main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='mine'?renderMinePage():renderWelcome();
+  main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='event'?renderEventPage():view==='mine'?renderMinePage():renderWelcome();
   if(view==='mine'){updateAccountState();loadMinePhotos();}
   updateAccountHeader();
   if(view==='explore'){initExploreMap();}
@@ -1051,10 +1051,16 @@ function spotDistanceText(s){
 function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
-  const eventPart=eventData
-    ?`<section class="event-banner" aria-label="${esc(eventData.name||'WEEKEND.EXE')}"><div class="event-banner-main"><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'本活动限定形态已解锁。':`本活动三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'到活动点位打卡，收集限定造型。'}</div>`
-    :`<p class="geo-note mono">当前没有进行中的活动 · 地图和附近的照片照常可用。</p>`;
-  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}${eventPart}`;
+  const eventChip=eventData
+    ?`<section class="event-banner" aria-label="进行中的活动"><div class="event-banner-main" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="event-tags mono" style="margin:0 0 6px"><span class="event-tag">进行中 · ${esc(eventKeyText())}</span></div><p class="event-sub" style="margin:0">${count()+'/3 点位已打卡'}</p></div><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 16px" data-action="nav" data-view="event">去打卡</button></div></section>`
+    :`<p class="geo-note mono">当前没有进行中的活动 · 地图与附近照片照常可用。</p>`;
+  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
+}
+function renderEventPage(){
+  if(mode!=='api'||!eventData){
+    return `<div class="page-intro"><div><h1>活动</h1></div></div><p class="geo-note mono">当前没有进行中的活动。</p>`;
+  }
+  return `<div class="page-intro"><div><h1>活动</h1></div></div><section class="event-banner" aria-label="${esc(eventData.name)}"><div class="event-banner-main"><div class="event-tags mono"><span class="event-tag">3 SPOTS / 1 EVENT</span></div><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div><p class="event-sub">${esc(eventData.subtitle||'到场打卡收集')} · 点位顺序不限</p></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'本活动限定形态已解锁。':`本活动三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'到活动点位打卡，收集限定造型。'}</div>`;
 }
 function spotCard(s){
   const done=Boolean(state.rewards[s.id]);
@@ -1160,10 +1166,39 @@ async function loadPhotoComments(photoId){
 }
 async function openPhotoDetail(id){
   if(mode!=='api'||!id)return;
-  currentDetailId=id;
-  modal(`<p class="modal-eyebrow mono">PHOTO / 现场</p><h2 id="dialog-title">现场照片</h2><div id="photo-detail"><p class="modal-copy">加载中…</p></div>`,'photo-detail',true);
-  await renderPhotoDetail(id);
+  currentDetailId=String(id);
+  modal(
+    '<p class="modal-eyebrow mono">PHOTO / 现场</p>'
+    +'<h2 id="dialog-title">现场照片</h2>'
+    +'<div id="photo-detail"><p class="modal-copy">加载中…</p></div>',
+    'photo-detail',true
+  );
+  try{
+    const data=await apiFetch('/photos/'+id);
+    const ph=data.photo||data;
+    if(currentDetailId!==String(id))return;
+    if(ph.id!==undefined)currentDetailId=String(ph.id);
+    const comments=Array.isArray(ph.comments)?ph.comments:[];
+    const url=esc(photoAbsUrl(ph.url));
+    const cap=esc(String(ph.caption||'').trim());
+    const items=comments.length
+      ?comments.map(c=>'<div class="comment-item"><span class="comment-author mono">'+esc(c.username||'匿名旅人')+'</span><p class="comment-text">'+esc(String(c.text||''))+'</p></div>').join('')
+      :'<p class="about-list">还没有评论，说点什么。</p>';
+    const delBtn=ph.canDelete===true
+      ?'<button type="button" class="btn danger-btn" style="width:auto" data-action="photo-del" data-photo="'+esc(currentDetailId)+'" data-anon="'+(ph.userId?'0':'1')+'">删除</button>'
+      :'';
+    document.getElementById('photo-detail').innerHTML=
+      '<div class="detail-photo"><img src="'+url+'" alt="'+cap+'"></div>'
+      +'<p class="modal-copy">'+(cap||'现场照片')+'<br><span class="mono muted">'+fmtClock(ph.createdAt)+'</span></p>'
+      +delBtn
+      +'<div class="comment-block"><h3>评论</h3><div class="comment-list">'+items+'</div>'
+      +'<form id="comment-form" class="comment-form"><input id="comment-input" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="说点什么…" maxlength="140" autocomplete="off"><button class="btn btn-primary" type="submit" style="width:auto;min-height:0;padding:10px 14px">发送</button></form></div>';
+  }catch(error){
+    const box=document.getElementById('photo-detail');
+    if(box)box.innerHTML='<p class="modal-copy">'+errText(error)+'</p>';
+  }
 }
+
 function deletePhotoItem(ds){
   const id=ds.photo;if(!id)return;
   modal(`<p class="modal-eyebrow mono">DELETE</p><h2 id="dialog-title">删除这张照片？</h2><p class="modal-copy">删除后不可恢复。</p><div class="modal-actions"><button type="button" class="btn danger-btn" data-action="photo-del-confirm" data-photo="${esc(id)}" data-anon="${esc(ds.anon||'0')}">删除</button><button type="button" class="btn btn-dark" data-action="close">取消</button></div>`,'photo-del');
