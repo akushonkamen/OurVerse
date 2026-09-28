@@ -1140,6 +1140,16 @@ function spotDistanceText(s){
   const d=haversineMeters(geo.coords,{lng:s.lng,lat:s.lat});
   return `<span class="spot-dist mono">${fmtDistance(d)}</span>`;
 }
+function geoStatusMarkup(){
+  if(mode!=='api')return '';
+  if(geo.state==='locating')return '<p class="geo-note mono">正在定位…</p>';
+  if(geo.state==='denied')return '<p class="geo-note mono">未授权定位 · 地图显示活动一带 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="geo-retry">重新定位</button></p>';
+  if(geo.state==='ok'){
+    const near=nearestSpot(geo.coords);
+    return '<p class="geo-note mono">已定位 · 距最近点位 '+fmtDistance(near?near.distance:0)+(near&&near.distance<=(near.spot.radiusMeters||200)?' · 在打卡范围内':'')+'</p>';
+  }
+  return '';
+}
 function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
@@ -1147,7 +1157,7 @@ function renderExplore(){
   const eventChip=eventData
     ?`<section class="event-banner" aria-label="进行中的活动"><div class="event-banner-main" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="event-tags mono" style="margin:0 0 6px"><span class="event-tag">进行中 · ${esc(eventKeyText())}</span></div><p class="event-sub" style="margin:0">${count()+'/3 点位已打卡'}</p></div><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 16px" data-action="nav" data-view="event">去打卡</button></div></section>`
     :`<p class="geo-note mono">当前没有进行中的活动 · 地图与附近照片照常可用。</p>`;
-  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${devNote}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
+  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${geoStatusMarkup()}${devNote}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
 }
 function renderEventPage(){
   if(mode!=='api'||!eventData){
