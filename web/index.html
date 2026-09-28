@@ -865,30 +865,58 @@ const MapEngines={
   maplibre:{
     label:'MapLibre（海外通用）',
     loader:null,
+    loaderSources:[
+      '/vendor/maplibre/maplibre-gl',
+      'https://registry.npmmirror.com/maplibre-gl/4.7.1/files/dist/maplibre-gl',
+      'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl'
+    ],
     async load(){
       if(window.maplibregl)return window.maplibregl;
       if(this.loader)return this.loader;
-      this.loader=new Promise((resolve,reject)=>{
+      const sources=this.loaderSources;
+      this.loader=(async()=>{
         const css=document.createElement('link');
         css.rel='stylesheet';
-        css.href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css';
+        css.media='print';
+        css.onload=function(){css.media='all';};
+        css.href=sources[0]+'.css';
         document.head.appendChild(css);
-        const script=document.createElement('script');
-        script.src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
-        script.onload=()=>{window.maplibregl?resolve(window.maplibregl):reject(new Error('MapLibre 加载异常'));};
-        script.onerror=()=>reject(new Error('MapLibre 加载失败'));
-        document.head.appendChild(script);
-      }).catch(e=>{this.loader=null;throw e;});
+        for(const base of sources){
+          try{
+            await new Promise((resolve,reject)=>{
+              const script=document.createElement('script');
+              script.src=base+'.js';
+              script.onload=()=>{window.maplibregl?resolve():reject(new Error('加载异常'));};
+              script.onerror=()=>reject(new Error('加载失败: '+base));
+              document.head.appendChild(script);
+            });
+            if(window.maplibregl)return window.maplibregl;
+          }catch(e){/* 试下一个源 */}
+        }
+        throw new Error('MapLibre 所有来源均加载失败');
+      })().catch(e=>{this.loader=null;throw e;});
       return this.loader;
     },
     createMap(container,center,zoom){
       container.classList.add('maplibre-tone');
-      return new maplibregl.Map({
+      const cnTiles=[1,2,3,4].map(i=>`https://webrd0${i}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}`);
+      const osmTiles=['https://tile.openstreetmap.org/{z}/{x}/{y}.png'];
+      const map=new maplibregl.Map({
         container,
-        style:{version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},layers:[{id:'osm',type:'raster',source:'osm'}]},
+        style:{version:8,sources:{base:{type:'raster',tiles:cnTiles,tileSize:256,attribution:'© 高德地图'}},layers:[{id:'base',type:'raster',source:'base'}]},
         center:[center.lng,center.lat],
         zoom,interactive:false,attributionControl:false
       });
+      let tileErrors=0,tilesSwitched=false;
+      map.on('error',e=>{
+        if(tilesSwitched||!e||e.sourceId!=='base')return;
+        if(++tileErrors>=4){
+          tilesSwitched=true;
+          const src=map.getSource('base');
+          if(src&&src.setTiles)src.setTiles(osmTiles);
+        }
+      });
+      return map;
     },
     setCenter(map,lng,lat){map.setCenter([lng,lat]);},
     onReady(map,cb){map.on('load',cb);},
