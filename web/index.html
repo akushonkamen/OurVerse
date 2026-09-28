@@ -293,6 +293,26 @@ a.btn{text-decoration:none}
 }
 @media(max-width:359px){.shell{padding:0 12px}.pet-touch{width:224px;height:214px}.looks-grid{gap:4px}.look-name{font-size:8px}.spot-card{grid-template-columns:96px minmax(0,1fr)}.demo-badge{display:none}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}.confetti{display:none}}
+.photo-hit{display:block;padding:0;background:none;border:0;cursor:pointer}
+.photo-hit img{width:100%;height:auto;display:block}
+.near-section{margin:0 0 16px}
+.near-section .section-top{margin-bottom:10px}
+.near-section .small-meta button{font-weight:700}
+.detail-photo{border:2px solid var(--ink);background:var(--paper)}
+.detail-photo img{width:100%;height:auto;display:block}
+.comment-item{border-top:2px solid var(--faint);padding:10px 0}
+.comment-item:first-child{border-top:0}
+.comment-author{font-size:10px;color:var(--purple);letter-spacing:.06em;font-weight:700}
+.comment-text{font-size:12px;line-height:1.7;margin:4px 0 0}
+.comment-block h3{margin:14px 0 6px}
+.comment-form{display:flex;gap:8px;margin-top:10px}
+.comment-form .name-input{flex:1;min-width:0}
+.avatar-sq{width:36px;height:36px;display:inline-block;border:2px solid var(--ink);background:var(--faint);margin-right:10px;flex:none;object-fit:cover}
+.account-line{display:flex;align-items:center}
+.account-line .about-list{margin:0}
+.account-form .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.account-form .name-input{min-width:0;flex:1}
+.mine-del{width:auto;min-height:0;padding:6px 10px;font-size:10px;margin-top:6px}
 </style>
 </head>
 <body>
@@ -346,7 +366,7 @@ const ACC2={base:'#a3463c',music:'#41597e',art:'#41597e',market:'#a3463c',evolve
 let mode='offline',eventData=null,devSkipGeo=false,pet=null,pendingEvolution=false,composeBusy=false;
 let svgId=0,storageOK=true,toastTimer=null,flashNext=false;
 let state=blankState();
-const VIEWS=['pet','explore','live','set'];
+const VIEWS=['pet','explore','mine'];
 function viewFromHash(){
   const raw=(location.hash||'').replace(/^#\/?/,'');
   return VIEWS.includes(raw)?raw:'pet';
@@ -692,15 +712,16 @@ async function publishLive(spotId){
     const form=new FormData();
     form.append('photo',blob,'outie-live.jpg');
     form.append('caption',`${eventKeyText()} · ${s?s.name:'现场'}`);
-    form.append('userLat',String(s&&Number.isFinite(s.lat)?s.lat:LIVE_CENTER.lat));
-    form.append('userLng',String(s&&Number.isFinite(s.lng)?s.lng:LIVE_CENTER.lng));
+    const loc=(geo.state==='ok'&&geo.coords)?geo.coords:(s&&Number.isFinite(s.lat)?s:LIVE_CENTER);
+    form.append('userLat',String(loc.lat));
+    form.append('userLng',String(loc.lng));
     form.append('locationSource','amap');
     await apiFetch('/photos/anonymous',{method:'POST',body:form});
     publishing=false;
-    livePhotos=null;liveStatus='idle';
+    nearPhotos=null;nearStatus='idle';minePhotos=null;mineStatus='idle';
     toast('已发到现场。');
     closeModal();
-    navigate('live');
+    navigate('explore');
   }catch(error){
     publishing=false;
     if(btn)btn.disabled=false;
@@ -734,7 +755,7 @@ function pickCompositePhoto(spotId){
 }
 
 /* ---------- render ---------- */
-const NAV_ITEMS=[['pet','我的宠物'],['explore','去哪儿'],['live','现场'],['set','SET']];
+const NAV_ITEMS=[['pet','我的宠物'],['explore','去哪儿'],['mine','我的']];
 function navMarkup(){
   return NAV_ITEMS.map(([id,label])=>`<button type="button" class="nav-btn" data-action="nav" data-view="${id}" ${view===id?'aria-current="page"':''}>${label}</button>`).join('');
 }
@@ -746,8 +767,8 @@ function render(){
   document.getElementById('storage-warning').hidden=storageOK;
   for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=!state.name;nav.innerHTML=state.name?navMarkup():'';}
   document.getElementById('footer-local').textContent=eventKeyText();
-  main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='live'?renderLivePage():renderSetPage();
-  if(view==='set')updateAccountState();
+  main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='mine'?renderMinePage():renderWelcome();
+  if(view==='mine'){updateAccountState();loadMinePhotos();}
   if(view==='explore'){initNearMap();}
   else destroyRealMap();
   if(flashNext){main.querySelector('.pet-card')?.classList.add('flash');flashNext=false;}
@@ -978,10 +999,11 @@ function spotDistanceText(s){
   return `<span class="spot-dist mono">${fmtDistance(d)}</span>`;
 }
 function renderExplore(){
-  if(mode==='api'&&!eventData){
-    return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div><p class="geo-note mono">当前没有进行中的活动。</p>`;
-  }
-  return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}<section class="event-banner" aria-label="${esc(eventData&&eventData.name||'WEEKEND.EXE')}"><div class="event-banner-main"><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'限定形态已解锁。':`三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'集齐三个不同地点，解锁活动限定形态。'}</div>`;
+  if(mode==='api'&&geo.state==='idle')startLocate();
+  const eventPart=eventData
+    ?`<section class="event-banner" aria-label="${esc(eventData.name||'WEEKEND.EXE')}"><div class="event-banner-main"><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'本活动限定形态已解锁。':`本活动三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'到活动点位打卡，收集限定造型。'}</div>`
+    :`<p class="geo-note mono">当前没有进行中的活动 · 定位、地图与附近照片不受影响。</p>`;
+  return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}${eventPart}`;
 }
 function spotCard(s){
   const done=Boolean(state.rewards[s.id]);
@@ -1003,72 +1025,155 @@ function fmtDistance(m){
   if(!Number.isFinite(m))return '—';
   return m<1000?`${Math.round(m)}M`:`${(m/1000).toFixed(1)}KM`;
 }
-async function loadLivePhotos(force){
-  if(mode!=='api')return;
-  if(liveStatus==='loading')return;
-  if(livePhotos&&!force)return;
-  liveStatus='loading';
-  if(view==='live')renderLiveGrid();
-  try{
-    const data=await apiFetch(`/photos/nearby?lat=${LIVE_CENTER.lat}&lng=${LIVE_CENTER.lng}&radius=${LIVE_CENTER.radius}&page=1&limit=${LIVE_CENTER.limit}`);
-    livePhotos=Array.isArray(data&&data.photos)?data.photos:[];
-    liveStatus='ready';
-  }catch(error){
-    liveStatus='error';
+/* ---------- 去哪儿：附近照片流（定位驱动，含别人发布的） ---------- */
+let nearPhotos=null,nearStatus='idle';
+function streamCoords(){
+  if(geo.state==='ok'&&geo.coords)return geo.coords;
+  if(eventData&&Array.isArray(eventData.spots)&&eventData.spots.length){
+    const pts=eventData.spots;
+    return {lng:pts.reduce((a,s)=>a+s.lng,0)/pts.length,lat:pts.reduce((a,s)=>a+s.lat,0)/pts.length};
   }
-  if(view==='live')render();
+  return null;
 }
-function liveCell(p){
+async function loadNearStream(force){
+  if(mode!=='api')return;
+  if(nearStatus==='loading')return;
+  if(nearPhotos&&!force)return;
+  const c=streamCoords();
+  if(!c){nearStatus='nolocation';if(view==='explore')render();return;}
+  nearStatus='loading';
+  if(view==='explore')renderNearGrid();
+  try{
+    const data=await apiFetch(`/photos/nearby?lat=${c.lat}&lng=${c.lng}&radius=2000&page=1&limit=24`);
+    nearPhotos=Array.isArray(data&&data.photos)?data.photos:[];
+    nearStatus='ready';
+  }catch(error){nearStatus='error';}
+  if(view==='explore')renderNearGrid();
+}
+function nearCell(p){
   const url=esc(photoAbsUrl(p.url));
   const cap=esc(String(p.caption||'').trim());
-  return `<figure class="live-frame"><img src="${url}" alt="${cap||'现场照片'}" title="${cap}" loading="lazy" decoding="async"><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)} / ${fmtDistance(p.distance)}</span></figcaption></figure>`;
+  return `<figure class="live-frame"><button type="button" class="photo-hit" data-action="photo-open" data-photo="${esc(p.id)}" aria-label="查看照片与评论"><img src="${url}" alt="${cap||'现场照片'}" loading="lazy" decoding="async"></button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)} / ${fmtDistance(p.distance)}</span></figcaption></figure>`;
 }
-function liveBody(){
-  if(liveStatus==='loading')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>正在加载现场照片…</p></div>`;
-  if(liveStatus==='error')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>现场照片加载失败。</p><button class="live-status-btn" type="button" data-action="live-refresh">重试</button></div>`;
-  if(!livePhotos||!livePhotos.length)return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>还没有现场照片。<br>打卡后拍一张合成照发到现场，这里就会有第一张。</p></div>`;
-  return livePhotos.map(liveCell).join('');
+function nearBody(){
+  if(nearStatus==='loading')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>正在加载附近的照片…</p></div>`;
+  if(nearStatus==='error')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>附近照片加载失败。</p><button class="live-status-btn" type="button" data-action="near-refresh">重试</button></div>`;
+  if(nearStatus==='nolocation')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>开启定位后，这里会显示附近的照片。</p></div>`;
+  if(!nearPhotos||!nearPhotos.length)return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>附近还没有照片。<br>到现场拍一张合成照发出来，这里就会有第一张。</p></div>`;
+  return nearPhotos.map(nearCell).join('');
 }
-function renderLiveGrid(){
-  const grid=main.querySelector('#live-grid');
-  if(grid)grid.innerHTML=liveBody();
+function renderNearGrid(){
+  const grid=main.querySelector('#near-grid');
+  if(grid)grid.innerHTML=nearBody();
 }
-function renderLivePage(){
-  const n=liveStatus==='ready'&&livePhotos?livePhotos.length:0;
-  const body=mode==='api'
-    ?`<div class="live-grid" id="live-grid">${liveBody()}</div><div class="route-note">照片来自附近的人 · 预览定位取活动中心 · <button type="button" data-action="live-refresh">刷新</button></div>`
-    :`<div class="live-grid"><div class="live-cell-empty"><span class="live-dither" aria-hidden="true"></span><p>离线模式 · 连接后可用</p></div></div>`;
-  return `<div class="page-intro"><div><h1>现场。</h1></div></div>${body}`;
+function nearSectionMarkup(){
+  const n=nearStatus==='ready'&&nearPhotos?nearPhotos.length:0;
+  return `<section class="near-section"><div class="section-top"><h2>附近的照片。</h2><span class="small-meta mono">${n} 张 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="near-refresh">刷新</button></span></div><div class="live-grid" id="near-grid">${nearBody()}</div></section>`;
 }
-/* ---------- set page ---------- */
+/* ---------- 照片详情 + 评论 ---------- */
+let currentDetailId=null;
+async function openPhotoDetail(id){
+  if(mode!=='api'||!id)return;
+  currentDetailId=id;
+  modal(`<p class="modal-eyebrow mono">PHOTO / 现场</p><h2 id="dialog-title">现场照片。</h2><div id="photo-detail"><p class="modal-copy">加载中…</p></div>`,'photo-detail');
+  await renderPhotoDetail(id);
+}
+async function renderPhotoDetail(id){
+  const box=document.getElementById('photo-detail');
+  if(!box||currentDetailId!==id)return;
+  try{
+    const data=await apiFetch(`/photos/${id}`);
+    const ph=data.photo||data;
+    const comments=Array.isArray(data.comments)?data.comments:(Array.isArray(ph.comments)?ph.comments:[]);
+    currentDetailId=String(ph.id||id);
+    const url=esc(photoAbsUrl(ph.url));
+    const cap=esc(String(ph.caption||'').trim());
+    const items=comments.length?comments.map(c=>`<div class="comment-item"><span class="comment-author mono">${esc(c.username||'匿名旅人')}</span><p class="comment-text">${esc(String(c.text||''))}</p></div>`).join(''):'<p class="about-list">还没有评论，说点什么。</p>';
+    const canDel=ph.canDelete===true;
+    box.innerHTML=`<div class="detail-photo"><img src="${url}" alt="${cap||'现场照片'}"></div><p class="modal-copy">${cap||'现场照片'}<br><span class="mono muted">${fmtClock(ph.createdAt)}</span></p>${canDel?`<button type="button" class="btn danger-btn" style="width:auto" data-action="photo-del" data-photo="${esc(String(ph.id))}" data-anon="${ph.userId?'0':'1'}">删除</button>`:''}<div class="comment-block"><h3>评论。</h3><div class="comment-list">${items}</div><form id="comment-form" class="comment-form"><input id="comment-input" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="说点什么…" maxlength="140" autocomplete="off"><button class="btn btn-primary" type="submit" style="width:auto;min-height:0;padding:10px 14px">发送</button></form></div>`;
+  }catch(error){
+    box.innerHTML=`<p class="modal-copy">${errText(error)}</p>`;
+  }
+}
+function deletePhotoItem(ds){
+  const id=ds.photo;if(!id)return;
+  modal(`<p class="modal-eyebrow mono">DELETE</p><h2 id="dialog-title">删除这张照片？</h2><p class="modal-copy">删除后不可恢复。</p><div class="modal-actions"><button type="button" class="btn danger-btn" data-action="photo-del-confirm" data-photo="${esc(id)}" data-anon="${esc(ds.anon||'0')}">删除</button><button type="button" class="btn btn-dark" data-action="close">取消</button></div>`,'photo-del');
+}
+/* ---------- 我的：账号 + 我的所有照片 ---------- */
+let minePhotos=null,mineStatus='idle';
+let authUser=null;
+async function loadMinePhotos(force){
+  if(mode!=='api')return;
+  if(mineStatus==='loading')return;
+  if(minePhotos&&!force)return;
+  mineStatus='loading';
+  if(view==='mine')renderMineGrid();
+  try{
+    const data=authToken()
+      ?await apiFetch('/photos/my?page=1&limit=50')
+      :await apiFetch('/photos/anonymous/my?page=1&limit=50');
+    minePhotos=Array.isArray(data&&data.photos)?data.photos:[];
+    mineStatus='ready';
+  }catch(error){mineStatus='error';}
+  if(view==='mine')renderMineGrid();
+}
+function mineCell(p){
+  const url=esc(photoAbsUrl(p.url));
+  const cap=esc(String(p.caption||'').trim());
+  const anon=authToken()?'0':'1';
+  return `<figure class="live-frame"><button type="button" class="photo-hit" data-action="photo-open" data-photo="${esc(p.id)}" aria-label="查看照片与评论"><img src="${url}" alt="${cap||'现场照片'}" loading="lazy" decoding="async"></button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)}</span></figcaption><button type="button" class="btn danger-btn mine-del" data-action="photo-del" data-photo="${esc(p.id)}" data-anon="${anon}">删除</button></figure>`;
+}
+function mineBody(){
+  if(mineStatus==='loading')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>正在加载…</p></div>`;
+  if(mineStatus==='error')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>加载失败。</p><button class="live-status-btn" type="button" data-action="mine-refresh">重试</button></div>`;
+  if(!minePhotos||!minePhotos.length)return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>还没有发过照片。<br>打卡后拍一张合成照发到现场，就会出现在这里和附近照片流里。</p></div>`;
+  return minePhotos.map(mineCell).join('');
+}
+function renderMineGrid(){
+  const grid=main.querySelector('#mine-grid');
+  if(grid)grid.innerHTML=mineBody();
+}
 async function updateAccountState(){
-  const el=document.getElementById('account-state');
+  const el=document.getElementById('account-card');
   if(!el||mode!=='api')return;
   const t=authToken();
   if(!t){
-    el.innerHTML='<p class="about-list">未登录。进度以匿名身份保存在本机，登录后可跨设备找回。</p><button type="button" class="btn btn-dark" style="width:auto" data-action="github-login">用 GitHub 登录</button>';
+    el.innerHTML=`<form id="login-form" class="account-form"><div class="form-row"><input id="login-username" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="用户名" maxlength="40" autocomplete="off"><input id="login-password" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" type="password" placeholder="密码" maxlength="60"></div><div class="form-row"><input id="login-email" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="邮箱（仅注册时需要）" maxlength="60" autocomplete="off"><button type="submit" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 14px">登录</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:10px 14px" data-action="register-account">注册</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:10px 14px" data-action="github-login">GitHub</button></div><p class="input-error" id="login-error" role="alert"></p></form><p class="about-list">没有账号？填好用户名密码点「注册」；或用 GitHub 一键登录。登录后宠物与照片跟随账号走。</p>`;
     return;
   }
   try{
     const data=await apiFetch('/auth/verify');
-    el.innerHTML=`<p class="about-list">已登录：${esc(data.user.username)}（GitHub）</p><button type="button" class="btn btn-quiet" style="width:auto" data-action="logout">退出登录</button>`;
+    authUser=data.user||null;
+    const u=authUser;
+    const avatar=u.avatar?`<img class="avatar-sq" src="${esc(u.avatar)}" alt="">`:'<span class="avatar-sq" aria-hidden="true"></span>';
+    const boundPet=state.name?`宠物「${esc(state.name)}」已跟随账号`:'还没有宠物，去领养一只';
+    el.innerHTML=`<div class="account-line">${avatar}<div><strong>${esc(u.username||'已登录')}</strong><span class="about-list">${boundPet}</span></div></div><button type="button" class="btn btn-quiet" style="width:auto" data-action="logout">退出登录</button>`;
   }catch(error){
     if(error.status===401){try{localStorage.removeItem('outie.auth-token');}catch(e){}}
     el.innerHTML='<p class="about-list">登录已过期。</p><button type="button" class="btn btn-dark" style="width:auto" data-action="github-login">用 GitHub 登录</button>';
   }
 }
-function renderSetPage(){
+function renderMinePage(){
   const about=mode==='api'
     ?`<p class="about-list">演示版本，活动与奖励均为虚构。</p>`
     :`<p class="about-list">离线演示：活动与奖励均为虚构，进度只存在本机。</p>`;
-  return `<div class="page-intro"><div><h1>设置。</h1></div></div><div class="set-stack">${state.name?`<section class="panel set-panel"><h2>宠物名字。</h2><form id="rename-form"><label class="name-label" for="rename-input">宠物名字<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark">保存</button></div></form></section>`:''}<section class="panel set-panel">${mode==='api'?`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><div id="account-state"><p class="about-list">正在查询…</p></div></div>`:''}<div class="setting-section" style="${mode==='api'?'':'border-top:0;margin-top:0;padding-top:0'}"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
+  const accountCard=mode==='api'
+    ?`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><div id="account-card"><p class="about-list">正在查询…</p></div></div>`
+    :`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><p class="about-list">离线模式，登录暂不可用。</p></div>`;
+  const petCard=state.name
+    ?`<section class="panel set-panel"><h2>宠物。</h2><p class="about-list" style="margin:6px 0 12px">名字：${esc(state.name)} · 本活动已收集 ${count()} 个点位造型${pet&&pet.evolved?' · 限定形态已解锁':''}</p><form id="rename-form"><label class="name-label" for="rename-input">改名<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark" style="width:auto">保存</button></div></form></section>`
+    :`<section class="panel set-panel"><p class="about-list">还没有宠物。<button type="button" class="btn btn-dark" style="width:auto" data-action="nav" data-view="pet">去领养</button></p></section>`;
+  const mineCard=mode==='api'
+    ?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>我的照片</h3><span class="small-meta mono">我发过的所有现场照片</span></div><div class="live-grid" id="mine-grid">${mineBody()}</div></section>`
+    :`<section class="panel set-panel"><div class="live-grid"><div class="live-cell-empty"><span class="live-dither" aria-hidden="true"></span><p>离线模式 · 连接后可用</p></div></div></section>`;
+  return `<div class="page-intro"><div><h1>我的。</h1></div></div><div class="set-stack"><section class="panel set-panel">${accountCard}</section>${petCard}${mineCard}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
 }
 function navigate(target,focusSpot=null){
   if(!state.name){toast('先领养宠物。');document.getElementById('pet-name')?.focus();return;}
   view=VIEWS.includes(target)?target:'pet';
   try{history.replaceState(null,'','#/'+view);}catch(e){}
   render();window.scrollTo(0,0);
-  if(view==='live')loadLivePhotos();
+  if(view==='mine'){updateAccountState();loadMinePhotos();}
   if(focusSpot){const card=document.getElementById('spot-'+focusSpot);card?.classList.add('focus-spot');card?.scrollIntoView({block:'center',behavior:reduceMotion.matches?'auto':'smooth'});setTimeout(()=>card?.classList.remove('focus-spot'),1800);}
 }
 function toast(message){const el=document.getElementById('toast');clearTimeout(toastTimer);el.textContent=message;el.classList.add('visible');toastTimer=setTimeout(()=>el.classList.remove('visible'),2600);}
@@ -1166,7 +1271,7 @@ function handleAction(button){
     case 'logout':try{localStorage.removeItem('outie.auth-token');}catch(e){}(async()=>{
       try{const me=await apiFetch('/outie/me');pet=me&&me.pet?me.pet:null;}catch(e){pet=null;}
       state=pet?stateFromPet(pet):blankState();closeModal();render();
-      if(view==='set')updateAccountState();toast('已退出登录。');
+      if(view==='mine'){updateAccountState();loadMinePhotos();}toast('已退出登录。');
     })();break;
     case 'look':showLook(button.dataset.look);break;
     case 'equip-inline':wear(button.dataset.look);break;
@@ -1183,7 +1288,11 @@ function handleAction(button){
     }
     case 'compose-photo':pickCompositePhoto(button.dataset.spot);break;
     case 'publish-live':publishLive(button.dataset.spot);break;
-    case 'live-refresh':loadLivePhotos(true);break;
+    case 'near-refresh':nearPhotos=null;nearStatus='idle';loadNearStream(true);break;
+    case 'photo-open':openPhotoDetail(button.dataset.photo);break;
+    case 'photo-del':deletePhotoItem(button.dataset);break;
+    case 'mine-refresh':minePhotos=null;mineStatus='idle';loadMinePhotos(true);break;
+    case 'github-login':location.href=API_BASE+'/auth/github';break;
     case 'goto-spot':closeModal();navigate('explore',button.dataset.spot||null);break;
     case 'evolve-prompt':showEvolutionPrompt();break;
     case 'evolve':evolve();break;
@@ -1210,6 +1319,32 @@ document.addEventListener('submit',async event=>{
     }
     state={...blankState(),name,createdAt:new Date().toISOString()};save();flashNext=true;navigate('pet');toast(name+' 已加入。');
   }
+  if(event.target.id==='login-form'){
+    event.preventDefault();
+    const username=document.getElementById('login-username').value.trim();
+    const password=document.getElementById('login-password').value;
+    const email=document.getElementById('login-email').value.trim();
+    const errEl=document.getElementById('login-error');
+    if(!username||!password){errEl.textContent='用户名和密码都要填。';return;}
+    errEl.textContent='';try{
+      const data=await apiFetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json','X-Device-Id':identityId()},body:JSON.stringify({username,password,deviceId:identityId()})});
+      try{localStorage.setItem('outie.auth-token',data.token);}catch(e){}
+      authUser=data.user||null;
+      try{const me=await apiFetch('/outie/me');pet=me&&me.pet?me.pet:null;}catch(e){pet=null;}
+      state=pet?stateFromPet(pet):blankState();render();toast('登录成功，进度已同步。');
+    }catch(error){errEl.textContent=errText(error);}
+  }
+  if(event.target.id==='comment-form'){
+    event.preventDefault();
+    const input=document.getElementById('comment-input');
+    const text=(input.value||'').trim();
+    if(!text||!currentDetailId)return;
+    try{
+      await apiFetch(`/photos/${currentDetailId}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment:text})});
+      input.value='';await renderPhotoDetail(currentDetailId);
+    }catch(error){toast(errText(error));}
+    return;
+  }
   if(event.target.id==='rename-form'){
     event.preventDefault();const input=document.getElementById('rename-input');const name=trimName(input.value);
     if(!name){document.getElementById('rename-error').textContent='名字不能为空。';input.focus();return;}
@@ -1227,7 +1362,7 @@ document.addEventListener('submit',async event=>{
 });
 dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeModal();}});
 dialog.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
-window.addEventListener('hashchange',()=>{if(!state.name)return;closeModal();view=viewFromHash();render();if(view==='live')loadLivePhotos();});
+window.addEventListener('hashchange',()=>{if(!state.name)return;closeModal();view=viewFromHash();render();});
 window.addEventListener('storage',event=>{if(mode==='offline'&&event.key===STORAGE_KEY){state=loadState();closeModal();render();}});
 function captureAuthFromUrl(){
   try{
@@ -1267,7 +1402,6 @@ async function boot(){
   document.getElementById('offline-badge').hidden=(mode!=='offline');
   document.getElementById('storage-warning').hidden=storageOK;
   render();
-  if(view==='live')loadLivePhotos();
 }
 let reconnectTimer=null;
 function scheduleReconnect(){
