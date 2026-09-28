@@ -869,9 +869,8 @@ const MapEngines={
     label:'MapLibre（海外通用）',
     loader:null,
     loaderSources:[
-      '/vendor/maplibre/maplibre-gl',
-      'https://registry.npmmirror.com/maplibre-gl/4.7.1/files/dist/maplibre-gl',
-      'https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl'
+      '/vendor/maplibre/maplibre-gl.js?v=4.7.1',
+      'https://registry.npmmirror.com/maplibre-gl/4.7.1/files/dist/maplibre-gl'
     ],
     async load(){
       if(window.maplibregl)return window.maplibregl;
@@ -882,13 +881,13 @@ const MapEngines={
         css.rel='stylesheet';
         css.media='print';
         css.onload=function(){css.media='all';};
-        css.href=sources[0]+'.css';
+        css.href=sources[0]+'.css?v=4.7.1';
         document.head.appendChild(css);
         for(const base of sources){
           try{
             await new Promise((resolve,reject)=>{
               const script=document.createElement('script');
-              script.src=base+'.js';
+              script.src=base;
               script.onload=()=>{window.maplibregl?resolve():reject(new Error('加载异常'));};
               script.onerror=()=>reject(new Error('加载失败: '+base));
               document.head.appendChild(script);
@@ -904,7 +903,7 @@ const MapEngines={
       container.classList.add('maplibre-tone');
       return new maplibregl.Map({
         container,
-        style:{version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},layers:[{id:'osm',type:'raster',source:'osm'}]},
+        style:{version:8,sources:{base:{type:'raster',tiles:[API_BASE+'/outie/tiles/{z}/{x}/{y}'],tileSize:256,attribution:'© 高德地图'}},layers:[{id:'base',type:'raster',source:'base'}]},
         center:[center.lng,center.lat],
         zoom,interactive:false,attributionControl:false
       });
@@ -997,6 +996,8 @@ function startLocate(){
     const s=spotsWithCoords()[0];
     if(s){
       geo.coords={lng:s.lng,lat:s.lat};
+      geo.accuracy=150;
+      geo.via='gps';
       geo.state='ok';
       updateExploreDynamic();
     }
@@ -1008,11 +1009,20 @@ function startLocate(){
     new Promise((_,rej)=>setTimeout(()=>rej(new Error('定位超时')),12000))
   ]).then(coords=>{
     if(mode!=='api')return;
-    geo.coords=coords;
-    geo.accuracy=Math.max(Number(coords.accuracy)||0,50);
-    geo.state='ok';
-    updateExploreDynamic();
-  }).catch(()=>{geo.state='failed';render();});
+    finish(coords,'gps',Math.max(Number(coords.accuracy)||50,50));
+  }).catch(async()=>{
+    // GPS 失败：退回 IP 定位（OurVerse 老逻辑），城市级精度
+    if(mode!=='api')return;
+    try{
+      const data=await apiFetch('/location/ip');
+      const loc=data&&data.location;
+      if(loc&&Number.isFinite(loc.lat)&&Number.isFinite(loc.lng)){
+        finish({lng:loc.lng,lat:loc.lat},'ip',Number(loc.accuracyRadiusMeters)>0?Number(loc.accuracyRadiusMeters):2000);
+        return;
+      }
+    }catch(e){/* IP 定位也失败 */}
+    geo.state='failed';render();
+  });
 }
 /* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
 let mapMarkers=[];
@@ -1142,11 +1152,10 @@ function geoStatusMarkup(){
 }
 function renderExplore(){
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
-  const devNote=devSkipGeo?'<p class="geo-note mono">开发模式 · 定位模拟在静安点位 · 公网部署为真实定位</p>':'';
   const eventChip=eventData
     ?`<section class="event-banner" aria-label="进行中的活动"><div class="event-banner-main" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="event-tags mono" style="margin:0 0 6px"><span class="event-tag">进行中 · ${esc(eventKeyText())}</span></div><p class="event-sub" style="margin:0">${count()+'/3 点位已打卡'}</p></div><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 16px" data-action="nav" data-view="event">去打卡</button></div></section>`
     :`<p class="geo-note mono">当前没有进行中的活动 · 地图与附近照片照常可用。</p>`;
-  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${geoStatusMarkup()}${devNote}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
+  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${geoStatusMarkup()}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
 }
 function renderEventPage(){
   if(mode!=='api'||!eventData){
