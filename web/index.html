@@ -1151,6 +1151,7 @@ function geoStatusMarkup(){
   return '<p class="geo-note mono"><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:8px 12px" data-action="geo-start">开启定位</button><span style="margin-left:10px">开启后，地图以你的真实位置为中心。</span></p>';
 }
 function renderExplore(){
+  if(mode==='api'&&geo.state==='idle')startLocate();
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
   const eventChip=eventData
     ?`<section class="event-banner" aria-label="进行中的活动"><div class="event-banner-main" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="event-tags mono" style="margin:0 0 6px"><span class="event-tag">进行中 · ${esc(eventKeyText())}</span></div><p class="event-sub" style="margin:0">${count()+'/3 点位已打卡'}</p></div><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 16px" data-action="nav" data-view="event">去打卡</button></div></section>`
