@@ -920,7 +920,10 @@ const MapEngines={
       if(!navigator.geolocation)return reject(new Error('浏览器不支持定位'));
       navigator.geolocation.getCurrentPosition(
         pos=>{const gcj=wgs84togcj02(pos.coords.longitude,pos.coords.latitude);resolve(gcj);},
-        err=>reject(new Error('定位失败')),
+        err=>{
+          const reason=err&&err.code===1?'PERMISSION_DENIED':String((err&&err.message)||'定位失败');
+          reject(new Error(reason));
+        },
         {enableHighAccuracy:true,timeout:10000}
       );
     });}
@@ -1003,7 +1006,13 @@ function startLocate(){
     geo.accuracy=Math.max(Number(coords.accuracy)||0,50);
     geo.state='ok';
     updateExploreDynamic();
-  }).catch(()=>{geo.state='failed';render();});
+    const near=nearestSpot(geo.coords);
+    toast('已定位，距最近点位 '+fmtDistance(near?near.distance:0));
+  }).catch(err=>{
+    if(mode!=='api')return;
+    geo.state='failed';render();
+    toast(err&&String(err.message).includes('PERMISSION_DENIED')?'定位权限已被拒绝：请在浏览器设置中允许位置权限，再点地图右上角刷新':'定位失败：点地图右上角刷新重试');
+  });
 }
 /* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
 let mapMarkers=[];
@@ -1134,7 +1143,7 @@ function geoStatusMarkup(){
 function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
-  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${geoStatusMarkup()}${cityMapMarkup()}${nearSectionMarkup()}`;
+  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}`;
 }
 function renderEventPage(){
   if(mode!=='api'||!eventData){
@@ -1542,7 +1551,7 @@ function handleAction(button){
     case 'compose-photo':pickCompositePhoto(button.dataset.spot);break;
     case 'publish-live':publishLive(button.dataset.spot);break;
     case 'near-refresh':nearPhotos=null;nearStatus='idle';loadNearStream(true);break;
-    case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';render();break;
+    case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';render();startLocate();break;
     case 'photo-new':startPhotoPost();break;
     case 'photo-open':openPhotoDetail(button.dataset.photo);break;
     case 'cluster-open':openClusterModal(button.dataset.cluster);break;
