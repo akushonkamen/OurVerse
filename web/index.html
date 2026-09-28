@@ -245,7 +245,10 @@ a.btn{text-decoration:none}
 .reward-stage.evolved .stage-label{color:#b9b4a0}
 .reward-stamp{position:absolute;bottom:12px;right:12px;border:2px solid var(--ink);background:var(--ink);color:var(--paper);padding:6px 8px;font-size:9px;letter-spacing:.14em;font-weight:700}
 .reward-stage.evolved .reward-stamp{background:var(--paper);color:var(--ink)}
-.reward-stage .composite-preview{width:100%;height:100%;object-fit:cover;display:block}
+.near-actions{display:flex;gap:8px;align-items:center}
+.photo-new-btn{display:inline-flex;gap:6px;align-items:center;width:auto;min-height:0;padding:8px 12px;font-size:11px}
+.photo-new-btn svg{width:13px;height:13px}
+.photo-new-btn:hover{transform:translateY(-1px)}
 .reward-progress{font-size:12px;line-height:1.8;border:2px solid var(--ink);background:var(--paper);padding:11px 13px;margin:14px 0}
 .reward-progress strong{letter-spacing:.04em}
 .modal-actions{display:flex;flex-direction:column;gap:9px;margin-top:16px}
@@ -386,7 +389,7 @@ function rebuildLooks(){
 rebuildLooks();
 const ACC={base:'#a3463c',music:'#41597e',art:'#a3463c',market:'#a8842e',evolved:'#4a6c46'};
 const ACC2={base:'#a3463c',music:'#41597e',art:'#41597e',market:'#a3463c',evolved:'#a8842e'};
-let mode='offline',eventData=null,devSkipGeo=false,pet=null,pendingEvolution=false,composeBusy=false;
+let mode='offline',eventData=null,devSkipGeo=false,pet=null,pendingEvolution=false;
 let svgId=0,storageOK=true,toastTimer=null,flashNext=false;
 let state=blankState();
 const VIEWS=['pet','explore','event','mine'];
@@ -396,7 +399,6 @@ function viewFromHash(){
 }
 let view=viewFromHash();
 let currentModal=null,lastFocused=null;
-let livePhotos=null,liveStatus='idle',publishing=false;
 const LIVE_CENTER={lat:31.2240,lng:121.4426,radius:5000,limit:30};
 const PHOTO_ORIGIN=API_ORIGIN;
 const main=document.getElementById('main');
@@ -631,7 +633,8 @@ lock:['0011100','0010100','0010100','0111110','0111010','0111010','0111110'],
 star:['0001000','0011100','1111111','0111110','0011100','0110110','0100010'],
 headphones:['011111110','010000010','010000010','110000011','110000011','110000011','110000011','110000011'],
 glasses:['11110001111','10011111001','10011111001','11110001111'],
-bag:['0011100','0010100','1111111','1111111','1011101','1011101','1111111','0111110']
+bag:['0011100','0010100','1111111','1111111','1011101','1011101','1111111','0111110'],
+camera:['01111110','10000001','10111101','10100101','10111101','10000001','01111110']
 };
 function pixIcon(name){
   const g=ICONS[name]||ICONS.star,w=g[0].length,h=g.length,parts=[];
@@ -651,109 +654,22 @@ function qrSVG(){
 }
 
 /* ---------- photo composite (client-side, no AI) ---------- */
-function composePhoto(file,lookId){
+/* ---------- 拍一张：拍照/选图 + 一句描述 + 发到现场 ---------- */
+let postingPhoto=false;
+function fileToDataUrl(file){
   return new Promise((resolve,reject)=>{
-    if(!file){reject(new Error('未选择照片'));return;}
     const reader=new FileReader();
     reader.onerror=()=>reject(new Error('照片读取失败'));
-    reader.onload=()=>{
-      const photo=new Image();
-      photo.onerror=()=>reject(new Error('照片无法解码，换一张试试'));
-      photo.onload=()=>{
-        const blob=new Blob([petSVGForCanvas(lookId)],{type:'image/svg+xml'});
-        const url=URL.createObjectURL(blob);
-        const sticker=new Image();
-        sticker.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('贴纸生成失败'));};
-        sticker.onload=()=>{
-          try{
-            const canvas=renderComposite(photo,sticker);
-            URL.revokeObjectURL(url);
-            resolve(canvas.toDataURL('image/jpeg',0.92));
-          }catch(error){URL.revokeObjectURL(url);reject(error);}
-        };
-        sticker.src=url;
-      };
-      photo.src=String(reader.result);
-    };
+    reader.onload=()=>resolve(String(reader.result));
     reader.readAsDataURL(file);
   });
 }
-function renderComposite(photo,sticker){
-  const maxSide=1280;
-  const scale=Math.min(1,maxSide/Math.max(photo.naturalWidth,photo.naturalHeight));
-  const pw=Math.max(1,Math.round(photo.naturalWidth*scale));
-  const ph=Math.max(1,Math.round(photo.naturalHeight*scale));
-  const pad=26,top=76,border=2;
-  const W=pw+pad*2+border*2,H=ph+pad+top+border*2;
-  const canvas=document.createElement('canvas');
-  canvas.width=W;canvas.height=H;
-  const ctx=canvas.getContext('2d');
-  ctx.imageSmoothingEnabled=true;
-  ctx.fillStyle='#efecdf';
-  ctx.fillRect(0,0,W,H);
-  const px=pad+border,py=top+border;
-  ctx.drawImage(photo,px,py,pw,ph);
-  ctx.strokeStyle='#26241c';
-  ctx.lineWidth=2;
-  ctx.strokeRect(px-1,py-1,pw+2,ph+2);
-  ctx.strokeRect(1,1,W-2,H-2);
-  const now=new Date();
-  const dateLabel=`${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}.${String(now.getDate()).padStart(2,'0')}`;
-  ctx.fillStyle='#26241c';
-  ctx.textBaseline='middle';
-  ctx.font='700 24px Menlo,Consolas,monospace';
-  try{ctx.letterSpacing='6px';}catch(error){}
-  ctx.fillText(`${eventKeyText()} / ${dateLabel}`,pad+4,top/2+3);
-  try{ctx.letterSpacing='0px';}catch(error){}
-  const sh=Math.round(ph*0.3),sw=Math.round(sh*22/16);
-  const sx=px+pw-sw-18,sy=py+ph-sh-18;
-  ctx.fillStyle='#efecdf';
-  ctx.fillRect(sx-9,sy-9,sw+18,sh+18);
-  ctx.drawImage(sticker,sx,sy,sw,sh);
-  ctx.strokeStyle='#26241c';
-  ctx.strokeRect(sx-10,sy-10,sw+20,sh+20);
-  return canvas;
+function postCoords(){
+  if(geo.state==='ok'&&geo.coords)return geo.coords;
+  return streamCoords()||LIVE_CENTER;
 }
-function showCompositePreview(dataUrl,spotId){
-  const s=SPOTS.find(sp=>sp.id===spotId);
-  const locNote=(geo.state==='ok'&&geo.coords)?'将带上你当前的定位。':(s?'':'未开启定位，将不带坐标发布。');
-  const publishBtn=mode==='api'
-    ?`<button class="btn btn-primary" type="button" data-action="publish-live" data-spot="${esc(spotId||'')}"${publishing?' disabled':''}>发到现场</button>`
-    :'';
-  modal(`<p class="modal-eyebrow mono">PHOTO / 现场合成</p><h2 id="dialog-title">现场照片合成</h2><p class="modal-copy">照片加上 ${esc(state.name)} 的像素贴纸${s?`，来自${esc(s.name)}`:''}。<br><span class="mono muted">${locNote}</span></p><div class="reward-stage base"><img class="composite-preview" src="${dataUrl}" alt="合成照片预览"></div><div class="modal-actions">${publishBtn}<a class="btn btn-dark" download="outie-${Date.now()}.jpg" href="${dataUrl}">保存图片</a><button class="text-btn" type="button" data-action="close">关闭</button></div>`,'composite');
-}
-async function publishLive(spotId){
-  if(publishing||mode!=='api')return;
-  const s=SPOTS.find(sp=>sp.id===spotId);
-  const btn=dialog.querySelector('[data-action="publish-live"]');
-  const dataUrl=dialog.querySelector('.composite-preview')?.getAttribute('src');
-  if(!dataUrl){toast('没有可发布的合成照。');return;}
-  publishing=true;
-  if(btn)btn.disabled=true;
-  toast('正在发布到现场…');
-  try{
-    const blob=await (await fetch(dataUrl)).blob();
-    const form=new FormData();
-    form.append('photo',blob,'outie-live.jpg');
-    form.append('caption',`${eventKeyText()} · ${s?s.name:'现场'}`);
-    const loc=(geo.state==='ok'&&geo.coords)?geo.coords:(s&&Number.isFinite(s.lat)?s:LIVE_CENTER);
-    form.append('userLat',String(loc.lat));
-    form.append('userLng',String(loc.lng));
-    form.append('locationSource','amap');
-    await apiFetch('/photos/anonymous',{method:'POST',body:form});
-    publishing=false;
-    nearPhotos=null;nearStatus='idle';minePhotos=null;mineStatus='idle';
-    toast('已发到现场。');
-    closeModal();
-    navigate('explore');
-  }catch(error){
-    publishing=false;
-    if(btn)btn.disabled=false;
-    toast('发布失败：'+errText(error));
-  }
-}
-function pickCompositePhoto(spotId){
-  if(composeBusy)return;
+function startPhotoPost(){
+  if(mode!=='api'){toast('离线模式，连上后可发照片。');return;}
   const input=document.createElement('input');
   input.type='file';
   input.accept='image/*';
@@ -762,22 +678,56 @@ function pickCompositePhoto(spotId){
   input.addEventListener('change',async ()=>{
     const file=input.files&&input.files[0];
     if(!file)return;
-    composeBusy=true;
-    toast('正在合成…');
     try{
-      const dataUrl=await composePhoto(file,state.equipped||'base');
-      composeBusy=false;
-      showCompositePreview(dataUrl,spotId||null);
-    }catch(error){
-      composeBusy=false;
-      toast(errText(error));
-    }
+      const dataUrl=await fileToDataUrl(file);
+      openPhotoPostModal(dataUrl);
+    }catch(e){toast('照片读取失败。');}
   });
   document.body.appendChild(input);
   input.click();
   setTimeout(()=>input.remove(),60000);
 }
-
+function openPhotoPostModal(dataUrl){
+  const c=postCoords();
+  modal(
+    '<p class="modal-eyebrow mono">NEW PHOTO / 拍一张</p>'
+    +'<h2 id="dialog-title">发到现场</h2>'
+    +'<div class="detail-photo"><img id="post-preview" src="'+dataUrl+'" alt="要发布的照片"></div>'
+    +'<form id="photo-post-form" class="account-form">'
+    +'<textarea id="post-caption" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;line-height:1.6;resize:none" rows="2" maxlength="140" placeholder="你想留下什么诗句"></textarea>'
+    +'<p class="about-list mono">定位：'+(geo.state==='ok'&&geo.coords?'你当前的位置':'活动一带')+'</p>'
+    +'<div class="modal-actions"><button class="btn btn-primary" type="submit">发到现场</button><button type="button" class="text-btn" data-action="close">取消</button></div>'
+    +'</form>',
+    'photo-post',true
+  );
+}
+async function publishPhotoPost(){
+  if(postingPhoto)return;
+  const dataUrl=document.getElementById('post-preview')?.getAttribute('src');
+  const caption=document.getElementById('post-caption').value.trim();
+  if(!dataUrl)return;
+  postingPhoto=true;
+  const submitBtn=document.querySelector('#photo-post-form button[type="submit"]');
+  if(submitBtn)submitBtn.disabled=true;
+  try{
+    const blob=await (await fetch(dataUrl)).blob();
+    const c=postCoords();
+    const form=new FormData();
+    form.append('photo',blob,'outie-photo.jpg');
+    if(caption)form.append('caption',caption);
+    form.append('userLat',String(c.lat));
+    form.append('userLng',String(c.lng));
+    form.append('locationSource','amap');
+    await apiFetch('/photos/anonymous',{method:'POST',body:form});
+    postingPhoto=false;
+    nearPhotos=null;nearStatus='idle';minePhotos=null;mineStatus='idle';
+    closeModal();navigate('explore');loadNearStream(true);toast('已发到现场。');
+  }catch(error){
+    postingPhoto=false;
+    if(submitBtn)submitBtn.disabled=false;
+    toast('发布失败：'+errText(error));
+  }
+}
 /* ---------- render ---------- */
 const NAV_ITEMS=[['pet','我的宠物'],['explore','去哪儿'],['event','活动'],['mine','我的']];
 function navMarkup(){
@@ -1129,7 +1079,7 @@ function renderNearGrid(){
 }
 function nearSectionMarkup(){
   const n=nearStatus==='ready'&&nearPhotos?nearPhotos.length:0;
-  return `<section class="near-section"><div class="section-top"><h2>附近的照片</h2><span class="small-meta mono">${n} 张 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="photo-new">拍一张</button> · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="near-refresh">刷新</button></span></div><div class="live-grid" id="near-grid">${nearBody()}</div></section>`;
+  return `<section class="near-section"><div class="section-top"><h2>附近的照片</h2><div class="near-actions"><button type="button" class="btn btn-dark photo-new-btn" data-action="photo-new">${pixIcon('camera')}<span>拍一张</span></button><button type="button" class="live-status-btn" data-action="near-refresh">刷新</button></div></div><p class="small-meta mono" style="margin:0 0 10px">${n} 张</p><div class="live-grid" id="near-grid">${nearBody()}</div></section>`;
 }
 /* ---------- 照片详情 + 评论 ---------- */
 let currentDetailId=null;
@@ -1327,7 +1277,7 @@ function renderMinePage(){
     ?`<section class="panel set-panel"><h2>宠物</h2><p class="about-list" style="margin:6px 0 12px">名字：${esc(state.name)} · 本活动已收集 ${count()} 个点位造型${pet&&pet.evolved?' · 限定形态已解锁':''}</p><form id="rename-form"><label class="name-label" for="rename-input">改名<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark" style="width:auto">保存</button></div></form></section>`
     :`<section class="panel set-panel"><p class="about-list">还没有宠物。<button type="button" class="btn btn-dark" style="width:auto" data-action="nav" data-view="pet">去领养</button></p></section>`;
   const mineCard=mode==='api'
-    ?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>我的照片</h3><span class="small-meta mono">我发过的所有现场照片 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="photo-new">拍一张</button></span></div><div class="live-grid" id="mine-grid">${mineBody()}</div></section>`
+    ?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0;display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 style="margin:0">我的照片</h3><button type="button" class="btn btn-dark photo-new-btn" style="width:auto;min-height:0;padding:8px 12px;font-size:11px" data-action="photo-new">${pixIcon('camera')}<span style="margin-left:6px">拍一张</span></button></div><div class="live-grid" id="mine-grid">${mineBody()}</div></section>`
     :`<section class="panel set-panel"><div class="live-grid"><div class="live-cell-empty"><span class="live-dither" aria-hidden="true"></span><p>离线模式 · 连接后可用</p></div></div></section>`;
   return `<div class="page-intro"><div><h1>我的</h1></div></div><div class="set-stack"><section class="panel set-panel">${accountCard}</section>${petCard}${mineCard}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
 }
@@ -1366,7 +1316,7 @@ function rewardStage(id,label='NEW LOOK',stamp='COLLECTED'){
 }
 function showReward(id){
   const s=SPOTS.find(s=>s.id===id);const all=count()===SPOTS.length;
-  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="compose-photo" type="button">拍现场照片</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
+  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="photo-new" type="button">拍一张，发到现场</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
 }
 function showLook(id){
   const look=lookFor(id);if(id==='evolved'&&!state.evolved&&count()===3){showEvolutionPrompt();return;}
@@ -1455,7 +1405,7 @@ function handleAction(button){
     case 'publish-live':publishLive(button.dataset.spot);break;
     case 'near-refresh':nearPhotos=null;nearStatus='idle';loadNearStream(true);break;
     case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';render();break;
-    case 'photo-new':if(mode!=='api'){toast('离线模式，连上后可发照片。');break;}pickCompositePhoto(null);break;
+    case 'photo-new':startPhotoPost();break;
     case 'photo-open':openPhotoDetail(button.dataset.photo);break;
     case 'cluster-open':openClusterModal(button.dataset.cluster);break;
     case 'cluster-photo':openClusterPhoto(button.dataset.cluster,button.dataset.photo);break;
