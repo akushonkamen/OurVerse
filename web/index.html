@@ -881,6 +881,7 @@ const MapEngines={
       });
     },
     setCenter(map,lng,lat){map.setCenter([lng,lat]);},
+    setZoom(map,z){try{map.setZoom(z);}catch(e){}},
     onReady(map,cb){map.on('complete',cb);},
     resize(map){try{map.resize();}catch(e){}},
     getCanvas(map){try{return map.getCanvas();}catch(e){return null;}},
@@ -941,6 +942,7 @@ const MapEngines={
       });
     },
     setCenter(map,lng,lat){map.setCenter([lng,lat]);},
+    setZoom(map,z){try{map.setZoom(z);}catch(e){}},
     onReady(map,cb){map.on('load',cb);},
     resize(map){try{map.resize();}catch(e){}},
     getCanvas(map){try{return map.getCanvas();}catch(e){return null;}},
@@ -953,6 +955,13 @@ const MapEngines={
 };
 let mapRealFailed=false,mapToken=0,realMap=null,amapLoader=null;
 function spotsWithCoords(){return SPOTS.filter(s=>Number.isFinite(s.lng)&&Number.isFinite(s.lat));}
+function fitZoomKm(container,lat,radiusMeters){
+  const rect=container.getBoundingClientRect();
+  const px=Math.max(200,Math.min(rect.width||340,rect.height||340));
+  const mpp=156543.03392*Math.cos((lat||31)*Math.PI/180)/Math.pow(2,16);
+  let z=16+Math.log2((mpp*px)/(radiusMeters*2));
+  return Math.min(18,Math.max(10,Number.isFinite(z)?z:15));
+}
 function haversineMeters(a,b){
   const R=6371000,toRad=d=>d*Math.PI/180;
   const dLat=toRad(b.lat-a.lat),dLng=toRad(b.lng-a.lng);
@@ -1088,7 +1097,7 @@ function initExploreMap(){
   const boot=(engine)=>{
     engine.load().then(()=>{
       if(token!==mapToken||!document.contains(myContainer))return;
-      realMap=engine.createMap(myContainer,c,16);
+      realMap=engine.createMap(myContainer,c,fitZoomKm(myContainer,c.lat,1000));
       renderMapMarkers();
       engine.resize(realMap);
       watchMapSize(realMap,myContainer,3000);
@@ -1129,7 +1138,10 @@ function clusterNearPhotos(){
 }
 function updateExploreDynamic(){
   if(realMap){
-    if(geo.coords)realMap.setCenter([geo.coords.lng,geo.coords.lat]);
+    if(geo.coords){
+      realMap.setCenter([geo.coords.lng,geo.coords.lat]);
+      mapEngine().setZoom(realMap,fitZoomKm(realMap.getContainer?realMap.getContainer():document.getElementById('map-canvas'),geo.coords.lat,1000));
+    }
     renderMapMarkers();
   }
   const gridEl=main.querySelector('.spots-grid');
