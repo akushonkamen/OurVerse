@@ -304,6 +304,36 @@ const createCompositeRecord = async req => {
   return { success: true, url };
 };
 
+const TILE_SOURCES = [
+  sub => `https://webrd0${sub}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8`
+];
+
+// 高德瓦片代理：浏览器直连高德会被 CORS 拦，由服务端代取
+const fetchMapTile = async (z, x, y) => {
+  const max = 1 << z;
+  const sub = (x + y) % 4 + 1;
+  const url = `https://webrd0${sub}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=${x}&y=${y}&z=${z}`;
+  const upstream = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!upstream.ok) {
+    throw new ServiceError(502, '瓦片拉取失败');
+  }
+  return { buffer: Buffer.from(await upstream.arrayBuffer()), contentType: upstream.headers.get('content-type') || 'image/png' };
+};
+
+const getMapTile = async (z, x, y) => {
+  const max = 1 << Math.min(Math.max(z, 10), 19);
+  if (x < 0 || x >= max || y < 0 || y >= max) {
+    throw new ServiceError(400, 'tile 参数无效');
+  }
+  const sub = (x + y) % 4 + 1;
+  const url = `https://webrd0${sub}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x=${x}&y=${y}&z=${z}`;
+  const upstream = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!upstream.ok) {
+    throw new ServiceError(502, '瓦片拉取失败');
+  }
+  return { buffer: Buffer.from(await upstream.arrayBuffer()), contentType: upstream.headers.get('content-type') || 'image/png' };
+};
+
 const buildStaticMapUrl = query => {
   const key = config.amap.restApiKey;
   if (!key) {
@@ -347,6 +377,7 @@ const buildStaticMapUrl = query => {
 module.exports = {
   ServiceError,
   LOOK_IDS,
+  getMapTile,
   resolveIdentityKey,
   serializeEvent,
   serializePet,

@@ -49,6 +49,25 @@ const createComposite = async (req, res) => {
   }
 };
 
+const getMapTile = async (req, res) => {
+  try {
+    const z = Number.parseInt(req.params.z, 10);
+    const x = Number.parseInt(req.params.x, 10);
+    const y = Number.parseInt(req.params.y, 10);
+    const { buffer, contentType } = await outieService.getMapTile(z, x, y);
+    res.set('Content-Type', contentType);
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.send(buffer);
+  } catch (error) {
+    if (error && error instanceof outieService.ServiceError) {
+      return res.status(error.status).json({ error: error.message });
+    }
+    console.warn('Outie map tile error:', error.message);
+    return res.status(502).json({ error: '瓦片拉取失败' });
+  }
+};
+
 const staticMap = async (req, res) => {
   let upstream;
   try {
@@ -88,5 +107,6 @@ module.exports = {
   checkin,
   createComposite,
   staticMap,
+  getMapTile,
   amapConfig
 };

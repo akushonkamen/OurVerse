@@ -8,6 +8,7 @@ const {
   checkin,
   createComposite,
   staticMap,
+  getMapTile,
   amapConfig
 } = require('../controllers/outie-controller');
 
@@ -16,6 +17,7 @@ const router = express.Router();
 router.get('/event/current', getCurrentEvent);
 router.get('/staticmap', staticMap);
 router.get('/amap-config', amapConfig);
+router.get('/tiles/:z/:x/:y', getMapTile);
 router.post('/pet', optionalAuth, upsertPet);
 router.get('/me', optionalAuth, getMe);
 router.post('/checkin', optionalAuth, checkin);

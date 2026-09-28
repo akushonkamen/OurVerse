@@ -151,7 +151,8 @@ const buildPhotoLocationInfo = async (lat, lng) => {
 };
 
 const deriveLocationFromIpData = async data => {
-  const rectangleInfo = parseAmapRectangle(data.rectangle);
+  // AMap 某些响应会把 rectangle 回成非字符串，容错后再解析
+  const rectangleInfo = parseAmapRectangle(typeof data.rectangle === 'string' ? data.rectangle : undefined);
 
   let derivedLat = rectangleInfo?.centerLat;
   let derivedLng = rectangleInfo?.centerLng;

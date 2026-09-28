@@ -10,7 +10,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
 };
 
 const parseAmapRectangle = rectangle => {
-  if (!rectangle) {
+  if (!rectangle || typeof rectangle !== 'string') {
     return null;
   }
 
