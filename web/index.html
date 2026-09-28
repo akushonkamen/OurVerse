@@ -1225,7 +1225,7 @@ async function loadNearStream(force){
   if(view==='explore')renderNearGrid();
   try{
     const c=geo.coords;
-    const data=await apiFetch(`/photos/nearby?lat=${c.lat}&lng=${c.lng}&radius=2000&page=1&limit=24`);
+    const data=await apiFetch(`/photos/nearby?lat=${c.lat}&lng=${c.lng}&radius=5000&page=1&limit=50`);
     nearPhotos=Array.isArray(data&&data.photos)?data.photos:[];
     nearStatus='ready';
   }catch(error){nearStatus='error';}
