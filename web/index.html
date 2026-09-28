@@ -321,6 +321,9 @@ a.btn{text-decoration:none}
 .account-form .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .account-form .name-input{min-width:0;flex:1}
 .mine-del{width:auto;min-height:0;padding:6px 10px;font-size:10px;margin-top:6px}
+.photo-pin{display:block;width:26px;height:26px;border:2px solid var(--ink);background:var(--paper);padding:1px;cursor:pointer}
+.photo-pin img{width:100%;height:100%;object-fit:cover;display:block}
+.map-marker-btn{display:block}
 </style>
 </head>
 <body>
@@ -778,7 +781,7 @@ function render(){
   main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='mine'?renderMinePage():renderWelcome();
   if(view==='mine'){updateAccountState();loadMinePhotos();}
   updateAccountHeader();
-  if(view==='explore'){initNearMap();}
+  if(view==='explore'){initExploreMap();}
   else destroyRealMap();
   if(flashNext){main.querySelector('.pet-card')?.classList.add('flash');flashNext=false;}
 }
@@ -914,11 +917,9 @@ function startLocate(){
     const s=spotsWithCoords()[0];
     if(s){
       geo.coords={lng:s.lng,lat:s.lat};
-      const near=nearestSpot(geo.coords);
-      const radius=near&&near.spot.radiusMeters||200;
-      geo.nearSpotId=near&&near.distance<=radius?near.spot.id:null;
-      geo.nearDistance=near?near.distance:0;
-      geo.state='ok';render();
+      geo.state='ok';
+      if(realMap){realMap.setCenter([s.lng,s.lat]);}
+      render();
     }
     return;
   }
@@ -935,23 +936,22 @@ function startLocate(){
           if(!Number.isFinite(lng)||!Number.isFinite(lat)){geo.state='denied';render();return;}
           geo.coords={lng,lat};
           geo.accuracy=Math.max(Number(result.accuracy)||0,50);
-          const near=nearestSpot(geo.coords);
-          const radius=near&&near.spot.radiusMeters||200;
-          geo.nearSpotId=near&&near.distance<=radius?near.spot.id:null;
-          geo.nearDistance=near?near.distance:0;
-          geo.state='ok';render();
+          geo.state='ok';
+          if(realMap){realMap.setCenter([lng,lat]);}
+          render();
         }else{geo.state='denied';render();}
       });
     });
   }).catch(()=>{geo.state='denied';render();});
 }
-function initNearMap(){
+/* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
+let mapMarkers=[];
+function initExploreMap(){
   const holder=document.getElementById('map-holder'),container=document.getElementById('map-canvas');
-  if(!holder||!container||mode!=='api'||mapRealFailed||geo.state!=='ok'||!geo.nearSpotId||!geo.coords)return;
-  const near=SPOTS.find(s=>s.id===geo.nearSpotId);
-  if(!near)return;
+  if(!holder||!container||mode!=='api'||mapRealFailed)return;
+  if(realMap){renderMapMarkers();return;}
   const token=++mapToken;
-  destroyRealMap();
+  const c=streamCoords()||{lng:121.44635,lat:31.22465};
   const myContainer=container;
   loadAmap().then(AMap=>{
     if(token!==mapToken||!document.contains(myContainer))return;
@@ -959,48 +959,54 @@ function initNearMap(){
       mapStyle:'amap://styles/whitesmoke',
       features:['bg','road','building'],
       viewMode:'2D',
-      zoom:17,
-      center:[geo.coords.lng,geo.coords.lat],
+      zoom:16,
+      center:[c.lng,c.lat],
       dragEnable:false,zoomEnable:false,doubleClickZoom:false,scrollWheel:false,touchEnable:false
     });
     realMap=map;
-    map.add(new AMap.Marker({position:[near.lng,near.lat],content:mapMarkerButton(near),anchor:'center',zIndex:120}));
-    map.add(new AMap.Marker({position:[geo.coords.lng,geo.coords.lat],content:youDotElement(),anchor:'center',zIndex:110}));
     const settle=()=>{const l=holder.querySelector('.map-loading');if(l)l.remove();};
-    map.on('complete',settle);
+    map.on('complete',()=>{settle();renderMapMarkers();});
     map.on('error',settle);
     setTimeout(()=>{if(token===mapToken)settle();},8000);
   }).catch(()=>failRealMap(token));
 }
-function nearMapMarkup(near){
-  const s=near.spot,done=Boolean(state.rewards[s.id]);
-  return `<figure class="map-wrap"><div class="map-tag mono">NEARBY / ${esc(s.name)}</div><div class="map-holder" id="map-holder"><div class="map-canvas" id="map-canvas" aria-label="附近地图：${esc(s.name)}"></div><span class="map-loading mono">加载中…</span><span class="map-credit mono">MAP © 高德地图</span></div><figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch here"></span>你在这里</span><span class="legend-item">${done?'<span class="legend-swatch done"></span>已打卡':`<span class="legend-swatch"></span>${esc(s.zone)}`}</span></figcaption></figure>`;
-}
-function cityMapSchematicMarkup(){
-  const pos={};
-  for(const s of SPOTS)pos[s.id]=(Number.isFinite(s.lng)&&Number.isFinite(s.lat))?mapProject(s.lng,s.lat):null;
-  const markers=SPOTS.map(s=>{
-    const p=pos[s.id];if(!p)return '';
-    const left=(p.x/MAP_VIEW.w*100).toFixed(2),top=(p.y/MAP_VIEW.h*100).toFixed(2);
-    const done=Boolean(state.rewards[s.id]);
-    return `<button type="button" class="map-marker ${done?'done':''}" data-action="checkin" data-spot="${esc(s.id)}" style="left:${left}%;top:${top}%" aria-label="${esc(s.name)}，${esc(s.zone)}，${done?'已打卡':'点击查看点位并打卡'}" title="${esc(s.name)}">${done?'':`<span class="marker-no mono" aria-hidden="true">SPOT ${s.number}</span>`}${pixIcon(s.icon)}</button>`;
-  }).join('');
-  return `<figure class="map-wrap">${cityMapSVG()}<span class="map-fallback-tag mono">示意图</span>${markers}<figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch"></span>未打卡</span><span class="legend-item"><span class="legend-swatch done"></span>已打卡</span></figcaption></figure>`;
+function renderMapMarkers(){
+  if(!realMap)return;
+  for(const m of mapMarkers){try{m.setMap(null);}catch(e){}}
+  mapMarkers=[];
+  const addMarker=(position,el,anchor,zIndex)=>{
+    const mk=new AMap.Marker({position,content:el,anchor,zIndex});
+    mk.setMap(realMap);
+    mapMarkers.push(mk);
+  };
+  if(eventData){
+    for(const s of SPOTS){
+      if(!Number.isFinite(s.lng)||!Number.isFinite(s.lat))continue;
+      addMarker([s.lng,s.lat],mapMarkerButton(s),'center',120);
+    }
+  }
+  if(Array.isArray(nearPhotos)){
+    for(const ph of nearPhotos){
+      if(!Number.isFinite(ph.lat)||!Number.isFinite(ph.lng))continue;
+      const pin=document.createElement('button');
+      pin.type='button';
+      pin.className='photo-pin';
+      pin.dataset.action='photo-open';
+      pin.dataset.photo=String(ph.id||'');
+      pin.title=String(ph.caption||'现场照片');
+      pin.innerHTML=`<img src="${esc(photoAbsUrl(ph.url))}" alt="">`;
+      addMarker([ph.lng,ph.lat],pin,'bottom-center',110);
+    }
+  }
+  if(geo.state==='ok'&&geo.coords){
+    addMarker([geo.coords.lng,geo.coords.lat],youDotElement(),'center',130);
+  }
 }
 function cityMapMarkup(){
   if(mode!=='api')return cityMapSchematicMarkup();
   if(mapRealFailed)return cityMapSchematicMarkup();
   if(geo.state==='idle')startLocate();
-  if(geo.state==='ok'&&geo.nearSpotId){
-    const near=SPOTS.find(s=>s.id===geo.nearSpotId);
-    if(near)return nearMapMarkup({spot:near});
-  }
-  return geoNoteMarkup();
-}
-function geoNoteMarkup(){
-  if(geo.state==='locating')return `<p class="geo-note mono">正在定位…</p>`;
-  if(geo.state==='denied')return `<p class="geo-note mono">需要定位权限，才能显示附近的地图。<button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:6px 10px;display:inline-flex;margin-left:10px" data-action="geo-retry">重新定位</button></p>`;
-  return `<p class="geo-note mono">不在活动点位附近 · 到场后这里会出现地图</p>`;
+  return `<figure class="map-wrap"><div class="map-tag mono">${eventData?'CITY MAP / '+esc(eventKeyText()):'CITY MAP'}</div><div class="map-holder" id="map-holder"><div class="map-canvas" id="map-canvas" aria-label="附近地图"></div><span class="map-loading mono">加载中…</span><span class="map-credit mono">MAP © 高德地图</span></div><figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch here"></span>你在这里</span><span class="legend-item"><span class="legend-swatch"></span>活动点位</span><span class="legend-item"><span class="legend-swatch done"></span>附近照片</span></figcaption></figure>`;
 }
 function spotDistanceText(s){
   if(mode!=='api'||geo.state!=='ok'||!geo.coords||!Number.isFinite(s.lng))return '';
@@ -1011,7 +1017,7 @@ function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
   const eventPart=eventData
     ?`<section class="event-banner" aria-label="${esc(eventData.name||'WEEKEND.EXE')}"><div class="event-banner-main"><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'本活动限定形态已解锁。':`本活动三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'到活动点位打卡，收集限定造型。'}</div>`
-    :`<p class="geo-note mono">当前没有进行中的活动 · 定位、地图与附近照片不受影响。</p>`;
+    :`<p class="geo-note mono">当前没有进行中的活动 · 地图和附近的照片照常可用。</p>`;
   return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}${eventPart}`;
 }
 function spotCard(s){
@@ -1058,6 +1064,7 @@ async function loadNearStream(force){
     nearStatus='ready';
   }catch(error){nearStatus='error';}
   if(view==='explore')renderNearGrid();
+  renderMapMarkers();
 }
 function nearCell(p){
   const url=esc(photoAbsUrl(p.url));
