@@ -895,33 +895,40 @@ const MapEngines={
     loader:null,
     loaderSources:[
       '/vendor/maplibre/maplibre-gl.js?v=4.7.1',
-      'https://registry.npmmirror.com/maplibre-gl/4.7.1/files/dist/maplibre-gl'
+      'https://registry.npmmirror.com/maplibre-gl/4.7.1/files/dist/maplibre-gl.js'
     ],
+    cssSources:[
+      '/vendor/maplibre/maplibre-gl.css?v=4.7.1',
+      'https://registry.npmmirror.com/maplibre-gl/4.7.1/files/dist/maplibre-gl.css'
+    ],
+    loadScript(base){
+      return new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.src=base;
+        script.onload=()=>{setTimeout(()=>{window.maplibregl?resolve():reject(new Error('global missing'));},0);};
+        script.onerror=()=>reject(new Error('load error '+base));
+        document.head.appendChild(script);
+      });
+    },
     async load(){
       if(window.maplibregl)return window.maplibregl;
       if(this.loader)return this.loader;
-      const sources=this.loaderSources;
-      this.loader=(async()=>{
+      const tryOnce=async()=>{
         const css=document.createElement('link');
         css.rel='stylesheet';
-        css.media='print';
-        css.onload=function(){css.media='all';};
-        css.href=sources[0]+'.css?v=4.7.1';
+        css.href=this.cssSources[0];
         document.head.appendChild(css);
-        for(const base of sources){
-          try{
-            await new Promise((resolve,reject)=>{
-              const script=document.createElement('script');
-              script.src=base;
-              script.onload=()=>{window.maplibregl?resolve():reject(new Error('加载异常'));};
-              script.onerror=()=>reject(new Error('加载失败: '+base));
-              document.head.appendChild(script);
-            });
-            if(window.maplibregl)return window.maplibregl;
-          }catch(e){/* 试下一个源 */}
+        for(const base of this.loaderSources){
+          for(let attempt=0;attempt<2;attempt++){
+            try{
+              await this.loadScript(base+(attempt?'&retry='+Date.now():''));
+              if(window.maplibregl)return window.maplibregl;
+            }catch(e){/* 换下一个来源 */}
+          }
         }
         throw new Error('MapLibre 所有来源均加载失败');
-      })().catch(e=>{this.loader=null;throw e;});
+      };
+      this.loader=tryOnce().catch(e=>{this.loader=null;throw e;});
       return this.loader;
     },
     createMap(container,center,zoom){
@@ -1096,6 +1103,9 @@ function initExploreMap(){
       if(mapProviderName==='amap'){
         mapProviderName='maplibre';
         boot(mapEngine());
+      }else if(!boot._retried){
+        boot._retried=true;
+        setTimeout(()=>{if(token===mapToken)boot(mapEngine());},2000);
       }else{
         failRealMap(token);
       }
