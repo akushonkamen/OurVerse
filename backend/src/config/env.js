@@ -124,7 +124,8 @@ const config = {
     isRailway: Boolean(process.env.RAILWAY)
   },
   outie: {
-    devSkipGeo: process.env.OUTIE_DEV_SKIP_GEO === 'true'
+    devSkipGeo: process.env.OUTIE_DEV_SKIP_GEO === 'true',
+    autoSeed: process.env.OUTIE_AUTOSEED === 'true'
   }
 };
 

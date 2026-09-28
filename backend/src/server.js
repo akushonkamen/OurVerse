@@ -2,6 +2,7 @@ const app = require('./app');
 const config = require('./config/env');
 const { connectDatabase } = require('./config/database');
 const { normaliseAllPhotoAssets } = require('./services/photo-storage-service');
+const { ensureDemoEvent } = require('./services/outie-seed-service');
 
 const startServer = async () => {
   try {
@@ -29,6 +30,16 @@ const startServer = async () => {
         });
     } else {
       console.log('Skipping photo asset normalisation on startup (set MIGRATE_PHOTO_ASSETS=1 to enable)');
+    }
+
+    if (config.outie.autoSeed) {
+      ensureDemoEvent()
+        .then(event => {
+          console.log(`OUTIE demo event ready: ${event.key} (${event.name})`);
+        })
+        .catch(seedError => {
+          console.warn('OUTIE demo event seed failed:', seedError.message);
+        });
     }
   } catch (error) {
     console.error('MongoDB connection error:', error);
