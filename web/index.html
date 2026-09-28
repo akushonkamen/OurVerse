@@ -1099,7 +1099,7 @@ function initExploreMap(){
   const boot=(engine)=>{
     engine.load().then(()=>{
       if(token!==mapToken||!document.contains(myContainer))return;
-      realMap=engine.createMap(myContainer,c,fitZoomKm(myContainer,c.lat,1000));
+      realMap=engine.createMap(myContainer,c,fitZoomKm(myContainer,c.lat,500));
       renderMapMarkers();
       engine.resize(realMap);
       watchMapSize(realMap,myContainer,3000);
@@ -1142,7 +1142,7 @@ function updateExploreDynamic(){
   if(realMap){
     if(geo.coords){
       realMap.setCenter([geo.coords.lng,geo.coords.lat]);
-      mapEngine().setZoom(realMap,fitZoomKm(realMap.getContainer?realMap.getContainer():document.getElementById('map-canvas'),geo.coords.lat,1000));
+      mapEngine().setZoom(realMap,fitZoomKm(realMap.getContainer?realMap.getContainer():document.getElementById('map-canvas'),geo.coords.lat,500));
     }
     renderMapMarkers();
   }
@@ -1254,7 +1254,7 @@ async function loadNearStream(force){
   if(view==='explore')renderNearGrid();
   try{
     const c=geo.coords;
-    const data=await apiFetch(`/photos/nearby?lat=${c.lat}&lng=${c.lng}&radius=1000&page=1&limit=50`);
+    const data=await apiFetch(`/photos/nearby?lat=${c.lat}&lng=${c.lng}&radius=500&page=1&limit=50`);
     nearPhotos=Array.isArray(data&&data.photos)?data.photos:[];
     nearStatus='ready';
   }catch(error){nearStatus='error';}
