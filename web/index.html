@@ -212,7 +212,9 @@ a.btn{text-decoration:none}
 .live-frame{border:2px solid var(--ink);background:var(--paper);padding:6px;min-width:0}
 .live-frame img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block;background:var(--faint)}
 .live-meta{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 1px 1px;font-size:9px;letter-spacing:.08em;color:var(--muted);font-weight:700}
-.live-meta .live-cap{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.live-meta{display:block}
+.live-meta .live-cap{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal;color:var(--ink);line-height:1.5}
+.live-meta>span:last-child{display:block;margin-top:3px;text-align:right}
 .live-cell-empty{border:2px dashed var(--line);background:var(--paper);padding:34px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;min-height:220px}
 .live-dither{width:104px;height:70px;border:2px solid var(--ink);background:repeating-conic-gradient(#26241c1f 0% 25%,transparent 0% 50%) 0 0/8px 8px}
 .live-cell-empty p{font-size:11px;color:var(--muted);line-height:1.8;letter-spacing:.06em;font-weight:700}
@@ -321,8 +323,13 @@ a.btn{text-decoration:none}
 .account-form .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .account-form .name-input{min-width:0;flex:1}
 .mine-del{width:auto;min-height:0;padding:6px 10px;font-size:10px;margin-top:6px}
-.photo-pin{display:block;width:26px;height:26px;border:2px solid var(--ink);background:var(--paper);padding:1px;cursor:pointer}
+.photo-pin{position:relative;display:block;width:30px;height:30px;border:2px solid var(--ink);background:var(--paper);padding:1px;cursor:pointer}
 .photo-pin img{width:100%;height:100%;object-fit:cover;display:block}
+.photo-pin .pin-count{position:absolute;right:-7px;top:-9px;border:2px solid var(--ink);background:var(--yellow);color:var(--ink);font-size:9px;font-weight:700;line-height:1;padding:2px 3px}
+.dialog.wide{width:min(760px,calc(100% - 24px))}
+.dialog.wide .detail-photo img{max-height:66vh;width:100%;object-fit:contain;background:var(--faint)}
+.cluster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cluster-grid .live-meta{font-size:8px}
 .map-marker-btn{display:block}
 </style>
 </head>
@@ -970,6 +977,20 @@ function initExploreMap(){
     setTimeout(()=>{if(token===mapToken)settle();},8000);
   }).catch(()=>failRealMap(token));
 }
+const CLUSTER_RADIUS_METERS = 45;
+function clusterNearPhotos(){
+  const clusters=[];
+  for(const ph of (Array.isArray(nearPhotos)?nearPhotos:[])){
+    if(!Number.isFinite(ph.lat)||!Number.isFinite(ph.lng))continue;
+    let target=null;
+    for(const c of clusters){
+      if(haversineMeters({lat:c.lat,lng:c.lng},{lat:ph.lat,lng:ph.lng})<=CLUSTER_RADIUS_METERS){target=c;break;}
+    }
+    if(target)target.items.push(ph);
+    else clusters.push({lat:ph.lat,lng:ph.lng,items:[ph]});
+  }
+  return clusters;
+}
 function renderMapMarkers(){
   if(!realMap)return;
   for(const m of mapMarkers){try{m.setMap(null);}catch(e){}}
@@ -985,19 +1006,18 @@ function renderMapMarkers(){
       addMarker([s.lng,s.lat],mapMarkerButton(s),'center',120);
     }
   }
-  if(Array.isArray(nearPhotos)){
-    for(const ph of nearPhotos){
-      if(!Number.isFinite(ph.lat)||!Number.isFinite(ph.lng))continue;
-      const pin=document.createElement('button');
-      pin.type='button';
-      pin.className='photo-pin';
-      pin.dataset.action='photo-open';
-      pin.dataset.photo=String(ph.id||'');
-      pin.title=String(ph.caption||'现场照片');
-      pin.innerHTML=`<img src="${esc(photoAbsUrl(ph.url))}" alt="">`;
-      addMarker([ph.lng,ph.lat],pin,'bottom-center',110);
-    }
-  }
+  const clusters=clusterNearPhotos();
+  clusters.forEach((c,ci)=>{
+    const first=c.items[0];
+    const pin=document.createElement('button');
+    pin.type='button';
+    pin.className='photo-pin';
+    pin.dataset.action='cluster-open';
+    pin.dataset.cluster=String(ci);
+    pin.title=(c.items.length>1?c.items.length+' 张照片 · ':'')+(first.caption||'现场照片');
+    pin.innerHTML=`<img src="${esc(photoAbsUrl(first.url))}" alt="">${c.items.length>1?`<span class="pin-count mono">${c.items.length}</span>`:''}`;
+    addMarker([c.lng,c.lat],pin,'bottom-center',110);
+  });
   if(geo.state==='ok'&&geo.coords){
     addMarker([geo.coords.lng,geo.coords.lat],youDotElement(),'center',130);
   }
@@ -1088,28 +1108,45 @@ function nearSectionMarkup(){
 }
 /* ---------- 照片详情 + 评论 ---------- */
 let currentDetailId=null;
+function openClusterModal(clusterIdx){
+  const clusters=clusterNearPhotos();
+  const c=clusters[Number(clusterIdx)];
+  if(!c)return;
+  const cells=c.items.map(ph=>{
+    const url=esc(photoAbsUrl(ph.url));
+    const cap=esc(String(ph.caption||'').trim());
+    return `<figure class="live-frame cluster-cell"><button type="button" class="photo-hit" data-action="cluster-photo" data-cluster="${Number(clusterIdx)}" data-photo="${esc(ph.id||'')}"><img src="${url}" alt="${cap||'现场照片'}"></button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(ph.createdAt)}</span></figcaption></figure>`;
+  }).join('');
+  modal(`<p class="modal-eyebrow mono">SPOT PHOTOS / 这个地点</p><h2 id="dialog-title">这里的 ${c.items.length} 张照片。</h2><div class="live-grid cluster-grid">${cells}</div><p class="modal-note mono">点开一张可以看大图和评论。</p>`,'cluster',true);
+}
+function openClusterPhoto(clusterIdx,photoId){
+  const clusters=clusterNearPhotos();
+  const c=clusters[Number(clusterIdx)];
+  const ph=c&&c.items.find(x=>String(x.id||'')===String(photoId));
+  if(!ph)return;
+  currentDetailId=String(photoId);
+  const url=esc(photoAbsUrl(ph.url));
+  const cap=esc(String(ph.caption||'').trim());
+  modal(`<p class="modal-eyebrow mono">PHOTO / 现场</p><h2 id="dialog-title">${cap||'现场照片'}</h2><div class="detail-photo"><img src="${url}" alt="${cap||'现场照片'}"></div><p class="modal-copy mono">${fmtClock(ph.createdAt)}</p><div class="comment-block"><h3>评论。</h3><div class="comment-list" id="comment-list"><p class="about-list">加载中…</p></div><form id="comment-form" class="comment-form"><input id="comment-input" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="说点什么…" maxlength="140" autocomplete="off"><button class="btn btn-primary" type="submit" style="width:auto;min-height:0;padding:10px 14px">发送</button></form></div><div class="modal-actions"><button type="button" class="btn btn-dark" style="width:auto" data-action="cluster-back" data-cluster="${Number(clusterIdx)}">返回这组照片</button><button type="button" class="text-btn" style="width:auto" data-action="close">关闭</button></div>`,'photo-detail',true);
+  loadPhotoComments(photoId);
+}
+async function loadPhotoComments(photoId){
+  const list=document.getElementById('comment-list');
+  if(!list||currentDetailId!==String(photoId))return;
+  try{
+    const data=await apiFetch(`/photos/${photoId}`);
+    const comments=Array.isArray(data.comments)?data.comments:(Array.isArray(data.photo&&data.photo.comments)?data.photo.comments:[]);
+    if(currentDetailId!==String(photoId))return;
+    list.innerHTML=comments.length
+      ?comments.map(c=>`<div class="comment-item"><span class="comment-author mono">${esc(c.username||'匿名旅人')}</span><p class="comment-text">${esc(String(c.text||''))}</p></div>`).join('')
+      :'<p class="about-list">还没有评论，说点什么。</p>';
+  }catch(error){list.innerHTML='<p class="about-list">评论加载失败。</p>';}
+}
 async function openPhotoDetail(id){
   if(mode!=='api'||!id)return;
   currentDetailId=id;
-  modal(`<p class="modal-eyebrow mono">PHOTO / 现场</p><h2 id="dialog-title">现场照片。</h2><div id="photo-detail"><p class="modal-copy">加载中…</p></div>`,'photo-detail');
+  modal(`<p class="modal-eyebrow mono">PHOTO / 现场</p><h2 id="dialog-title">现场照片。</h2><div id="photo-detail"><p class="modal-copy">加载中…</p></div>`,'photo-detail',true);
   await renderPhotoDetail(id);
-}
-async function renderPhotoDetail(id){
-  const box=document.getElementById('photo-detail');
-  if(!box||currentDetailId!==id)return;
-  try{
-    const data=await apiFetch(`/photos/${id}`);
-    const ph=data.photo||data;
-    const comments=Array.isArray(data.comments)?data.comments:(Array.isArray(ph.comments)?ph.comments:[]);
-    currentDetailId=String(ph.id||id);
-    const url=esc(photoAbsUrl(ph.url));
-    const cap=esc(String(ph.caption||'').trim());
-    const items=comments.length?comments.map(c=>`<div class="comment-item"><span class="comment-author mono">${esc(c.username||'匿名旅人')}</span><p class="comment-text">${esc(String(c.text||''))}</p></div>`).join(''):'<p class="about-list">还没有评论，说点什么。</p>';
-    const canDel=ph.canDelete===true;
-    box.innerHTML=`<div class="detail-photo"><img src="${url}" alt="${cap||'现场照片'}"></div><p class="modal-copy">${cap||'现场照片'}<br><span class="mono muted">${fmtClock(ph.createdAt)}</span></p>${canDel?`<button type="button" class="btn danger-btn" style="width:auto" data-action="photo-del" data-photo="${esc(String(ph.id))}" data-anon="${ph.userId?'0':'1'}">删除</button>`:''}<div class="comment-block"><h3>评论。</h3><div class="comment-list">${items}</div><form id="comment-form" class="comment-form"><input id="comment-input" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="说点什么…" maxlength="140" autocomplete="off"><button class="btn btn-primary" type="submit" style="width:auto;min-height:0;padding:10px 14px">发送</button></form></div>`;
-  }catch(error){
-    box.innerHTML=`<p class="modal-copy">${errText(error)}</p>`;
-  }
 }
 function deletePhotoItem(ds){
   const id=ds.photo;if(!id)return;
@@ -1249,13 +1286,14 @@ function navigate(target,focusSpot=null){
   if(focusSpot){const card=document.getElementById('spot-'+focusSpot);card?.classList.add('focus-spot');card?.scrollIntoView({block:'center',behavior:reduceMotion.matches?'auto':'smooth'});setTimeout(()=>card?.classList.remove('focus-spot'),1800);}
 }
 function toast(message){const el=document.getElementById('toast');clearTimeout(toastTimer);el.textContent=message;el.classList.add('visible');toastTimer=setTimeout(()=>el.classList.remove('visible'),2600);}
-function modal(content,type){
+function modal(content,type,wide){
   const wasOpen=dialog.open;if(!wasOpen)lastFocused=document.activeElement;
-  currentModal=type;dialog.innerHTML=`<div class="modal-inner"><button class="modal-close" data-action="close" type="button" aria-label="关闭">×</button>${content}</div>`;
+  currentModal=type;dialog.classList.toggle('wide',Boolean(wide));
+  dialog.innerHTML=`<div class="modal-inner"><button class="modal-close" data-action="close" type="button" aria-label="关闭">×</button>${content}</div>`;
   if(!wasOpen)dialog.showModal();
   const focus=dialog.querySelector('input, .modal-actions .btn, .btn, .modal-close');focus?.focus({preventScroll:true});
 }
-function closeModal(){if(dialog.open)dialog.close();currentModal=null;if(lastFocused&&document.contains(lastFocused))lastFocused.focus({preventScroll:true});else main.focus({preventScroll:true});}
+function closeModal(){if(dialog.open)dialog.close();dialog.classList.remove('wide');currentModal=null;if(lastFocused&&document.contains(lastFocused))lastFocused.focus({preventScroll:true});else main.focus({preventScroll:true});}
 function showCheckin(id){
   const s=SPOTS.find(s=>s.id===id);if(!s||!state.name)return;
   if(state.rewards[id]){showLook(id);return;}
@@ -1363,6 +1401,9 @@ function handleAction(button){
     case 'publish-live':publishLive(button.dataset.spot);break;
     case 'near-refresh':nearPhotos=null;nearStatus='idle';loadNearStream(true);break;
     case 'photo-open':openPhotoDetail(button.dataset.photo);break;
+    case 'cluster-open':openClusterModal(button.dataset.cluster);break;
+    case 'cluster-photo':openClusterPhoto(button.dataset.cluster,button.dataset.photo);break;
+    case 'cluster-back':openClusterModal(button.dataset.cluster);break;
     case 'photo-del':deletePhotoItem(button.dataset);break;
     case 'mine-refresh':minePhotos=null;mineStatus='idle';loadMinePhotos(true);break;
     case 'github-login':location.href=API_BASE+'/auth/github';break;
@@ -1399,7 +1440,9 @@ document.addEventListener('submit',async event=>{
     if(!text||!currentDetailId)return;
     try{
       await apiFetch(`/photos/${currentDetailId}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment:text})});
-      input.value='';await renderPhotoDetail(currentDetailId);
+      await loadPhotoComments(currentDetailId);
+      const list=document.getElementById('comment-list');
+      if(list)list.scrollTop=list.scrollHeight;
     }catch(error){toast(errText(error));}
     return;
   }
