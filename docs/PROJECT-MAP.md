@@ -12,7 +12,7 @@
 | `backend/src/controllers/outie-controller.js` | `/api/outie/*` 薄控制层（解析请求 → 调 service） | **核心，活跃** |
 | `backend/src/models/outie-*.js` | OutieEvent / OutiePet 数据模型 | **核心，活跃** |
 | `backend/src/routes/outie-routes.js` | `/api/outie/*` 路由 | **核心，活跃** |
-| `backend/scripts/seed-outie-demo.js` | 演示活动种子脚本（幂等） | 活跃 |
+| `backend/scripts/seed-outie-demo.js` | 演示活动种子脚本（幂等；`npm` 环境下手动跑） | 活跃。另：后端启动时若 `outie_events` 为空会自动补种演示活动；`OUTIE_AUTOSEED=true` 可强制刷新 | 活跃 |
 | `web/index.html` | OUTIE 网页前端（单文件，无构建） | **核心，活跃** |
 | `backend/src/{auth,photo,bar,location}-*` | 原 OurVerse 能力：账号、照片流、酒吧、定位 | 活跃（作为引擎能力） |
 | `backend/public/website.html` | 旧 OurVerse 官网 | **遗留**，仅 `/website.html` 可达 |

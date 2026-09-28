@@ -104,6 +104,12 @@ if (!fs.existsSync(uploadsPath)) {
 }
 app.use(`/${config.uploadsDir}`, express.static(uploadsPath));
 
+// 自托管的前端静态资源（maplibre 等），生产与本地同源可用
+app.use('/vendor', express.static(path.resolve(__dirname, '..', 'public', 'vendor'), {
+  maxAge: '7d',
+  immutable: true
+}));
+
 const websitePath = path.resolve(__dirname, '..', 'public', 'website.html');
 if (fs.existsSync(websitePath)) {
   app.get('/website.html', (req, res) => {
