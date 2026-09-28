@@ -992,37 +992,18 @@ function failRealMap(token){
 }
 function startLocate(){
   if(mode!=='api'||geo.state==='locating')return;
-  if(devSkipGeo){
-    const s=spotsWithCoords()[0];
-    if(s){
-      geo.coords={lng:s.lng,lat:s.lat};
-      geo.accuracy=150;
-      geo.via='gps';
-      geo.state='ok';
-      updateExploreDynamic();
-    }
-    return;
-  }
   geo.state='locating';render();
   Promise.race([
     mapEngine().locate(),
     new Promise((_,rej)=>setTimeout(()=>rej(new Error('定位超时')),12000))
   ]).then(coords=>{
     if(mode!=='api')return;
-    finish(coords,'gps',Math.max(Number(coords.accuracy)||50,50));
-  }).catch(async()=>{
-    // GPS 失败：退回 IP 定位（OurVerse 老逻辑），城市级精度
-    if(mode!=='api')return;
-    try{
-      const data=await apiFetch('/location/ip');
-      const loc=data&&data.location;
-      if(loc&&Number.isFinite(loc.lat)&&Number.isFinite(loc.lng)){
-        finish({lng:loc.lng,lat:loc.lat},'ip',Number(loc.accuracyRadiusMeters)>0?Number(loc.accuracyRadiusMeters):2000);
-        return;
-      }
-    }catch(e){/* IP 定位也失败 */}
-    geo.state='failed';render();
-  });
+    geo.coords=coords;
+    geo.via='gps';
+    geo.accuracy=Math.max(Number(coords.accuracy)||0,50);
+    geo.state='ok';
+    updateExploreDynamic();
+  }).catch(()=>{geo.state='failed';render();});
 }
 /* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
 let mapMarkers=[];
@@ -1153,10 +1134,7 @@ function geoStatusMarkup(){
 function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
-  const eventChip=eventData
-    ?`<section class="event-banner" aria-label="进行中的活动"><div class="event-banner-main" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="event-tags mono" style="margin:0 0 6px"><span class="event-tag">进行中 · ${esc(eventKeyText())}</span></div><p class="event-sub" style="margin:0">${count()+'/3 点位已打卡'}</p></div><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 16px" data-action="nav" data-view="event">去打卡</button></div></section>`
-    :`<p class="geo-note mono">当前没有进行中的活动 · 地图与附近照片照常可用。</p>`;
-  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${geoStatusMarkup()}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
+  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${geoStatusMarkup()}${cityMapMarkup()}${nearSectionMarkup()}`;
 }
 function renderEventPage(){
   if(mode!=='api'||!eventData){
