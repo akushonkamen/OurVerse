@@ -32,15 +32,15 @@ const startServer = async () => {
       console.log('Skipping photo asset normalisation on startup (set MIGRATE_PHOTO_ASSETS=1 to enable)');
     }
 
-    if (config.outie.autoSeed) {
-      ensureDemoEvent()
-        .then(event => {
-          console.log(`OUTIE demo event ready: ${event.key} (${event.name})`);
-        })
-        .catch(seedError => {
-          console.warn('OUTIE demo event seed failed:', seedError.message);
-        });
-    }
+    ensureDemoEvent()
+      .then(event => {
+        console.log(event
+          ? `OUTIE demo event ready: ${event.key} (${event.name})`
+          : 'OUTIE events already present, skip demo seed');
+      })
+      .catch(seedError => {
+        console.warn('OUTIE demo event seed failed:', seedError.message);
+      });
   } catch (error) {
     console.error('MongoDB connection error:', error);
     process.exit(1);

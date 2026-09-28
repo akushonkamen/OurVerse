@@ -48,8 +48,12 @@ const DEMO_EVENT = {
   ]
 };
 
-// 幂等 upsert：存在则刷新内容，不存在则创建。只在服务生命周期内操作，不管理连接。
-const ensureDemoEvent = async () => {
+// 幂等写入：force=true 强制刷新内容；默认仅在库里没有任何活动时才写入（生产安全）
+const ensureDemoEvent = async ({ force = false } = {}) => {
+  if (!force) {
+    const total = await OutieEvent.countDocuments({});
+    if (total > 0) return null;
+  }
   const result = await OutieEvent.findOneAndUpdate(
     { key: DEMO_EVENT.key },
     {

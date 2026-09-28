@@ -13,7 +13,7 @@ const { ensureDemoEvent } = require('../src/services/outie-seed-service');
 
 const main = async () => {
   await connectDatabase();
-  const result = await ensureDemoEvent();
+  const result = await ensureDemoEvent({ force: true });
   console.log(`Seeded OUTIE demo event: ${result.key} (${result.name}), spots: ${result.spots.length}`);
   await mongoose.disconnect();
   console.log('Done.');
