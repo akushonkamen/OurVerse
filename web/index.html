@@ -1227,7 +1227,7 @@ function mineCell(p){
   const url=esc(photoAbsUrl(p.url));
   const cap=esc(String(p.caption||'').trim());
   const anon=authToken()?'0':'1';
-  return `<figure class="live-frame"><button type="button" class="photo-hit" data-action="photo-open" data-photo="${esc(p.id)}" aria-label="查看照片与评论"><img src="${url}" alt="${cap||'现场照片'}" loading="lazy" decoding="async"></button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)}</span></figcaption><button type="button" class="btn danger-btn mine-del" data-action="photo-del" data-photo="${esc(p.id)}" data-anon="${anon}">删除</button></figure>`;
+  return `<figure class="live-frame"><button type="button" class="photo-hit" data-action="photo-open" data-photo="${esc(p.id)}" aria-label="查看照片与评论"><img src="${url}" alt="${cap||'现场照片'}" loading="lazy" decoding="async"></button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)}</span></figcaption></figure>`;
 }
 function mineBody(){
   if(mineStatus==='loading')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>正在加载…</p></div>`;
