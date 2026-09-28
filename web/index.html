@@ -36,8 +36,16 @@ a{color:inherit}svg{display:block}h1,h2,h3,p{margin:0}::selection{background:var
 .icon-btn{min-width:42px;height:42px;border:2px solid var(--ink);background:var(--panel);font-size:10px;font-weight:700;letter-spacing:.1em;padding:0 10px}
 .icon-btn:hover{background:var(--ink);color:var(--paper)}
 .corner-badge{position:fixed;z-index:30;border:2px solid var(--ink);background:var(--paper);color:var(--ink);font-size:9px;font-weight:700;letter-spacing:.14em;padding:6px 8px;font-family:inherit}
-.corner-badge.dev{top:12px;right:12px}
-.corner-badge.dev:hover{background:var(--ink);color:var(--paper)}
+.corner-badge.dev{position:static;cursor:pointer}
+.header-end{display:flex;align-items:center;gap:8px}
+.account-chip{display:flex;align-items:center;gap:7px;border:2px solid var(--ink);background:var(--panel);padding:3px 10px 3px 4px;font-weight:700;font-size:12px;letter-spacing:.02em}
+.account-chip:hover{background:var(--ink);color:var(--paper)}
+.account-chip img,.account-chip .avatar-fallback{width:26px;height:26px;border:2px solid var(--ink);object-fit:cover;display:block;background:var(--faint)}
+.account-chip:hover img,.account-chip:hover .avatar-fallback{border-color:var(--paper)}
+.btn-login-chip{border:2px solid var(--ink);background:var(--panel);font-weight:700;font-size:12px;padding:8px 14px;letter-spacing:.08em}
+.btn-login-chip:hover{background:var(--ink);color:var(--paper)}
+.auth-divider{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:10px;margin:14px 0}
+.auth-divider:before,.auth-divider:after{content:"";flex:1;border-top:2px solid var(--faint)}
 .corner-badge.offline{left:12px;bottom:12px;cursor:default}
 .page-intro{display:flex;align-items:end;justify-content:space-between;gap:24px;margin:30px 0 22px}
 .page-intro h1{font-size:27px;line-height:1.4;letter-spacing:-.01em;font-weight:700}
@@ -317,7 +325,6 @@ a.btn{text-decoration:none}
 </head>
 <body>
 <a class="skip-link" href="#main">跳至主要内容</a>
-<button class="corner-badge dev mono" id="dev-badge" data-action="dev-info" type="button" hidden>DEV</button>
 <span class="corner-badge offline mono" id="offline-badge" hidden>离线</span>
 <div class="shell">
   <header class="site-header">
@@ -326,6 +333,7 @@ a.btn{text-decoration:none}
       <span class="brand-caption mono">GO OUT. COLLECT.<br>EVOLVE. / 线下打卡收集</span>
     </button>
     <nav class="desktop-nav" id="desktop-nav" aria-label="主导航" hidden></nav>
+    <div class="header-end"><button class="corner-badge dev mono" id="dev-badge" data-action="dev-info" type="button" hidden>DEV</button><span id="header-account"></span></div>
   </header>
   <div class="storage-warning" id="storage-warning" role="status" hidden>浏览器不允许保存进度。你仍可以体验，但关闭页面后进度不会保留。</div>
   <main id="main" tabindex="-1"></main>
@@ -769,6 +777,7 @@ function render(){
   document.getElementById('footer-local').textContent=eventKeyText();
   main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='mine'?renderMinePage():renderWelcome();
   if(view==='mine'){updateAccountState();loadMinePhotos();}
+  updateAccountHeader();
   if(view==='explore'){initNearMap();}
   else destroyRealMap();
   if(flashNext){main.querySelector('.pet-card')?.classList.add('flash');flashNext=false;}
@@ -1101,7 +1110,6 @@ function deletePhotoItem(ds){
 }
 /* ---------- 我的：账号 + 我的所有照片 ---------- */
 let minePhotos=null,mineStatus='idle';
-let authUser=null;
 async function loadMinePhotos(force){
   if(mode!=='api')return;
   if(mineStatus==='loading')return;
@@ -1133,26 +1141,83 @@ function renderMineGrid(){
   const grid=main.querySelector('#mine-grid');
   if(grid)grid.innerHTML=mineBody();
 }
+let authUser=null;
+let authMode='login';
+function updateAccountHeader(){
+  const el=document.getElementById('header-account');
+  if(!el)return;
+  if(authUser){
+    const name=authUser.username||'已登录';
+    const avatar=authUser.avatar
+      ?'<img src="'+esc(authUser.avatar)+'" alt="">'
+      :'<span class="avatar-fallback mono" aria-hidden="true">'+esc(name.slice(0,1).toUpperCase())+'</span>';
+    el.innerHTML='<button type="button" class="account-chip" data-action="nav" data-view="mine" aria-label="我的账号：'+esc(name)+'">'+avatar+'<span class="acct-name">'+esc(name)+'</span></button>';
+  }else{
+    el.innerHTML='<button type="button" class="btn-login-chip" data-action="login-open">登录</button>';
+  }
+}
+function openLoginModal(mode){
+  authMode=mode==='register'?'register':'login';
+  const emailField=authMode==='register'
+    ?'<div class="form-row"><input id="login-email" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="邮箱（可选）" maxlength="60" autocomplete="off"></div>'
+    :'';
+  const toggleText=authMode==='login'?'还没有账号？注册':'已有账号？登录';
+  const submitLabel=authMode==='login'?'登录':'注册';
+  modal(
+    '<p class="modal-eyebrow mono">ACCOUNT / 账号</p>'
+    +'<h2 id="dialog-title">登录 OUTIE。</h2>'
+    +'<p class="modal-copy">登录后，宠物、造型和照片跟随账号，换设备也不丢。</p>'
+    +'<button type="button" class="btn btn-dark" style="width:100%" data-action="github-login">用 GitHub 登录</button>'
+    +'<div class="auth-divider mono">或</div>'
+    +'<form id="login-form" class="account-form">'
+    +'<div class="form-row"><input id="login-username" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="用户名" maxlength="40" autocomplete="off"></div>'
+    +emailField
+    +'<div class="form-row"><input id="login-password" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" type="password" placeholder="密码'+(authMode==='register'?'（至少 6 位）':'')+'" maxlength="60"></div>'
+    +'<p class="input-error" id="login-error" role="alert"></p>'
+    +'<button type="submit" class="btn btn-primary" style="width:100%">'+submitLabel+'</button>'
+    +'</form>'
+    +'<div class="auth-toggle"><button type="button" data-action="auth-toggle">'+toggleText+'</button></div>',
+    'auth'
+  );
+}
+async function refreshAuthState(){
+  authUser=null;
+  if(authToken()){
+    try{
+      const data=await apiFetch('/auth/verify');
+      authUser=data.user||null;
+    }catch(error){
+      if(error.status===401){try{localStorage.removeItem('outie.auth-token');}catch(e){}}
+    }
+  }
+  try{
+    const me=await apiFetch('/outie/me');
+    pet=me&&me.pet?me.pet:null;
+  }catch(e){pet=null;}
+  state=pet?stateFromPet(pet):blankState();
+}
 async function updateAccountState(){
   const el=document.getElementById('account-card');
   if(!el||mode!=='api')return;
-  const t=authToken();
-  if(!t){
-    el.innerHTML=`<form id="login-form" class="account-form"><div class="form-row"><input id="login-username" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="用户名" maxlength="40" autocomplete="off"><input id="login-password" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" type="password" placeholder="密码" maxlength="60"></div><div class="form-row"><input id="login-email" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="邮箱（仅注册时需要）" maxlength="60" autocomplete="off"><button type="submit" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 14px">登录</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:10px 14px" data-action="register-account">注册</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:10px 14px" data-action="github-login">GitHub</button></div><p class="input-error" id="login-error" role="alert"></p></form><p class="about-list">没有账号？填好用户名密码点「注册」；或用 GitHub 一键登录。登录后宠物与照片跟随账号走。</p>`;
+  if(!authToken()){
+    el.innerHTML='<p class="about-list">未登录。进度以匿名身份保存在本机，登录后宠物与照片跟随账号。</p><button type="button" class="btn btn-dark" style="width:auto" data-action="login-open">登录 / 注册</button>';
     return;
   }
-  try{
-    const data=await apiFetch('/auth/verify');
-    authUser=data.user||null;
+  if(authUser){
     const u=authUser;
-    const avatar=u.avatar?`<img class="avatar-sq" src="${esc(u.avatar)}" alt="">`:'<span class="avatar-sq" aria-hidden="true"></span>';
-    const boundPet=state.name?`宠物「${esc(state.name)}」已跟随账号`:'还没有宠物，去领养一只';
-    el.innerHTML=`<div class="account-line">${avatar}<div><strong>${esc(u.username||'已登录')}</strong><span class="about-list">${boundPet}</span></div></div><button type="button" class="btn btn-quiet" style="width:auto" data-action="logout">退出登录</button>`;
-  }catch(error){
-    if(error.status===401){try{localStorage.removeItem('outie.auth-token');}catch(e){}}
-    el.innerHTML='<p class="about-list">登录已过期。</p><button type="button" class="btn btn-dark" style="width:auto" data-action="github-login">用 GitHub 登录</button>';
+    const avatar=u.avatar?'<img class="avatar-sq" src="'+esc(u.avatar)+'" alt="">':'<span class="avatar-sq" aria-hidden="true"></span>';
+    el.innerHTML='<div class="account-line">'+avatar+'<div><strong>'+esc(u.username||'已登录')+'</strong><span class="about-list">宠物与照片已跟随账号</span></div></div><button type="button" class="btn btn-quiet" style="width:auto" data-action="logout">退出登录</button>';
+    return;
+  }
+  el.innerHTML='<p class="about-list">正在确认登录状态…</p>';
+  await refreshAuthState();
+  if(authUser){
+    el.innerHTML='<div class="account-line"><span class="avatar-sq" aria-hidden="true"></span><div><strong>'+esc(authUser.username||'已登录')+'</strong><span class="about-list">宠物与照片已跟随账号</span></div></div><button type="button" class="btn btn-quiet" style="width:auto" data-action="logout">退出登录</button>';
+  }else{
+    el.innerHTML='<p class="about-list">登录已过期，请重新登录。</p><button type="button" class="btn btn-dark" style="width:auto" data-action="login-open">登录 / 注册</button>';
   }
 }
+
 function renderMinePage(){
   const about=mode==='api'
     ?`<p class="about-list">演示版本，活动与奖励均为虚构。</p>`
@@ -1268,10 +1333,11 @@ function handleAction(button){
     case 'reconnect':tryReconnect();break;
     case 'geo-retry':geo.state='idle';startLocate();render();break;
     case 'github-login':location.href=API_BASE+'/auth/github';break;
-    case 'logout':try{localStorage.removeItem('outie.auth-token');}catch(e){}(async()=>{
-      try{const me=await apiFetch('/outie/me');pet=me&&me.pet?me.pet:null;}catch(e){pet=null;}
-      state=pet?stateFromPet(pet):blankState();closeModal();render();
-      if(view==='mine'){updateAccountState();loadMinePhotos();}toast('已退出登录。');
+    case 'login-open':openLoginModal('login');break;
+    case 'auth-toggle':openLoginModal(authMode==='login'?'register':'login');break;
+    case 'logout':try{localStorage.removeItem('outie.auth-token');}catch(e){}authUser=null;(async()=>{
+      await refreshAuthState();closeModal();render();
+      if(view==='mine'){updateAccountState();}toast('已退出登录。');
     })();break;
     case 'look':showLook(button.dataset.look);break;
     case 'equip-inline':wear(button.dataset.look);break;
@@ -1319,21 +1385,6 @@ document.addEventListener('submit',async event=>{
     }
     state={...blankState(),name,createdAt:new Date().toISOString()};save();flashNext=true;navigate('pet');toast(name+' 已加入。');
   }
-  if(event.target.id==='login-form'){
-    event.preventDefault();
-    const username=document.getElementById('login-username').value.trim();
-    const password=document.getElementById('login-password').value;
-    const email=document.getElementById('login-email').value.trim();
-    const errEl=document.getElementById('login-error');
-    if(!username||!password){errEl.textContent='用户名和密码都要填。';return;}
-    errEl.textContent='';try{
-      const data=await apiFetch('/auth/login',{method:'POST',headers:{'Content-Type':'application/json','X-Device-Id':identityId()},body:JSON.stringify({username,password,deviceId:identityId()})});
-      try{localStorage.setItem('outie.auth-token',data.token);}catch(e){}
-      authUser=data.user||null;
-      try{const me=await apiFetch('/outie/me');pet=me&&me.pet?me.pet:null;}catch(e){pet=null;}
-      state=pet?stateFromPet(pet):blankState();render();toast('登录成功，进度已同步。');
-    }catch(error){errEl.textContent=errText(error);}
-  }
   if(event.target.id==='comment-form'){
     event.preventDefault();
     const input=document.getElementById('comment-input');
@@ -1343,6 +1394,27 @@ document.addEventListener('submit',async event=>{
       await apiFetch(`/photos/${currentDetailId}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment:text})});
       input.value='';await renderPhotoDetail(currentDetailId);
     }catch(error){toast(errText(error));}
+    return;
+  }
+  if(event.target.id==='login-form'){
+    event.preventDefault();
+    const username=document.getElementById('login-username').value.trim();
+    const password=document.getElementById('login-password').value;
+    const emailEl=document.getElementById('login-email');
+    const email=emailEl?emailEl.value.trim():'';
+    const errEl=document.getElementById('login-error');
+    if(!username||!password){errEl.textContent='用户名和密码都要填。';return;}
+    if(authMode==='register'&&password.length<6){errEl.textContent='密码至少 6 位。';return;}
+    errEl.textContent='';
+    try{
+      const payload=authMode==='register'
+        ?{username,password,email:email||undefined}
+        :{username,password,deviceId:identityId()};
+      const data=await apiFetch('/auth/'+authMode,{method:'POST',headers:{'Content-Type':'application/json','X-Device-Id':identityId()},body:JSON.stringify(payload)});
+      try{localStorage.setItem('outie.auth-token',data.token);}catch(e){}
+      authUser=data.user||null;
+      await refreshAuthState();closeModal();render();toast(authMode==='register'?'注册成功，已登录。':'登录成功，进度已同步。');
+    }catch(error){errEl.textContent=errText(error);}
     return;
   }
   if(event.target.id==='rename-form'){
@@ -1385,11 +1457,7 @@ async function boot(){
     devSkipGeo=Boolean(probe.devSkipGeo);
     if(probe.event){applyEvent(probe.event);}
     else{eventData=null;SPOTS=[];rebuildLooks();}
-    try{
-      const me=await apiFetch('/outie/me');
-      pet=me&&me.pet?me.pet:null;
-    }catch(error){pet=null;}
-    state=pet?stateFromPet(pet):blankState();
+    await refreshAuthState();
   }else{
     mode='offline';
     SPOTS=OFFLINE_SPOTS;
