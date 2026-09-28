@@ -1159,7 +1159,7 @@ function renderMapMarkers(){
     pin.dataset.cluster=String(ci);
     pin.title=(c.items.length>1?c.items.length+' 张照片 · ':'')+(first.caption||'现场照片');
     pin.innerHTML=`<img src="${esc(photoAbsUrl(first.url))}" alt="">${c.items.length>1?`<span class="pin-count mono">${c.items.length}</span>`:''}`;
-    addMarker([c.lng,c.lat],pin,'bottom-center',110);
+    addMarker([c.lng,c.lat],pin,'bottom-center',140);
   });
   if(geo.state==='ok'&&geo.coords){
     addMarker([geo.coords.lng,geo.coords.lat],youDotElement(),'center',130);
