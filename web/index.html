@@ -330,7 +330,10 @@ a.btn{text-decoration:none}
 .photo-pin .pin-count{position:absolute;right:-7px;top:-9px;border:2px solid var(--ink);background:var(--yellow);color:var(--ink);font-size:9px;font-weight:700;line-height:1;padding:2px 3px}
 .dialog.wide{width:min(760px,calc(100% - 24px))}
 .dialog.wide .detail-photo img{max-height:66vh;width:100%;object-fit:contain;background:var(--faint)}
-.cluster-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cluster-grid{display:flex;flex-wrap:wrap;gap:10px}
+.cluster-cell{width:calc(33.33% - 7px);flex:none;margin:0}
+.cluster-cell .photo-hit{display:block;width:100%;padding:0;background:none;border:0;cursor:pointer}
+.cluster-cell .photo-hit img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
 .cluster-grid .live-meta{font-size:8px}
 .map-marker-btn{display:block}
 </style>
