@@ -40,6 +40,20 @@ const requireIdentity = req => {
 
 const findActiveEvent = () => OutieEvent.findOne({ active: true }).sort({ createdAt: -1 });
 
+// 登录后若账号名下没有宠物，把当前匿名身份的宠物过户到账号，进度无缝衔接
+const maybeMigrateAnonymousPet = async req => {
+  if (!req.userId || !req.anonymousId) return;
+  const userKey = `u:${req.userId}`;
+  const anonKey = `a:${req.anonymousId}`;
+  if (userKey === anonKey) return;
+  const existingUserPet = await OutiePet.findOne({ identityKey: userKey }).sort({ createdAt: -1 });
+  if (existingUserPet) return;
+  const anonPet = await OutiePet.findOne({ identityKey: anonKey }).sort({ createdAt: -1 });
+  if (!anonPet) return;
+  anonPet.identityKey = userKey;
+  await anonPet.save();
+};
+
 const findPet = (identityKey, eventKey) => OutiePet.findOne({ identityKey, eventKey });
 
 const serializeSpot = spot => ({
@@ -85,6 +99,7 @@ const getCurrentEventData = async () => {
 
 const upsertPetForIdentity = async req => {
   const identityKey = requireIdentity(req);
+  await maybeMigrateAnonymousPet(req);
 
   const event = await findActiveEvent();
   if (!event) {
@@ -130,6 +145,7 @@ const upsertPetForIdentity = async req => {
 
 const getPetState = async req => {
   const identityKey = requireIdentity(req);
+  await maybeMigrateAnonymousPet(req);
   const pet = await OutiePet.findOne({ identityKey }).sort({ createdAt: -1 });
   return { pet: pet ? serializePet(pet) : null };
 };

@@ -408,7 +408,8 @@ function identityId(){
   }
   return id;
 }
-function authHeaders(){return {'x-anonymous-id':identityId()};}
+function authToken(){try{return localStorage.getItem('outie.auth-token')||'';}catch(e){return '';}}
+function authHeaders(){const h={'x-anonymous-id':identityId()};const t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
 function errText(error){return (error&&error.message)?error.message:'请求失败，请重试';}
 async function apiFetch(path,options={}){
   const controller=new AbortController();
@@ -436,8 +437,9 @@ async function probeApi(){
     clearTimeout(timer);
     if(!res.ok)return null;
     const data=await res.json();
-    if(!data||!data.event||!Array.isArray(data.event.spots)||!data.event.spots.length)return null;
-    return data;
+    if(!data)return null;
+    const event=(data.event&&Array.isArray(data.event.spots)&&data.event.spots.length)?data.event:null;
+    return {event,devSkipGeo:Boolean(data.devSkipGeo)};
   }catch(error){
     clearTimeout(timer);
     return null;
@@ -745,6 +747,7 @@ function render(){
   for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=!state.name;nav.innerHTML=state.name?navMarkup():'';}
   document.getElementById('footer-local').textContent=eventKeyText();
   main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='live'?renderLivePage():renderSetPage();
+  if(view==='set')updateAccountState();
   if(view==='explore'){initNearMap();}
   else destroyRealMap();
   if(flashNext){main.querySelector('.pet-card')?.classList.add('flash');flashNext=false;}
@@ -772,7 +775,7 @@ function collectionMarkup(){
   return `<section class="panel collection"><div class="section-top"><h2>我的造型</h2><span class="small-meta mono">${LOOKS.filter(l=>unlocked(l.id)).length} / ${LOOKS.length} 已解锁</span></div><div class="looks-grid">${LOOKS.map(l=>`<button type="button" class="look-option ${!unlocked(l.id)?'locked':''} ${state.equipped===l.id?'active':''}" data-action="${unlocked(l.id)?'equip-inline':'look'}" data-look="${l.id}" aria-label="${l.name}，${state.equipped===l.id?'正在穿戴':unlocked(l.id)?'已解锁，点击换上':l.id==='evolved'&&count()===3?'可解锁':'未解锁'}" aria-pressed="${state.equipped===l.id}"><span class="look-thumb ${l.id}">${petSVG(l.id)}${state.equipped===l.id?`<span class="wear-pin">${pixIcon('check')}</span>`:!unlocked(l.id)?`<span class="lock-pin">${pixIcon(l.id==='evolved'&&count()===3?'star':'lock')}</span>`:''}</span><span class="look-name">${l.short}</span></button>`).join('')}</div><p class="collection-note">点击造型即可换上，可反复更换。</p></section>`;
 }
 function renderPetPage(){
-  return `<div class="page-intro"><div><h1>我的宠物。</h1></div><span class="intro-mark mono">${state.evolved?'FORM 5/5':'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/5'}</span></div><div class="main-grid">${hero()}<div class="side-stack">${goalMarkup()}${collectionMarkup()}</div></div>`;
+  return `<div class="page-intro"><div><h1>我的宠物。</h1></div><span class="intro-mark mono">${state.evolved?'FORM 5/5':'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/5'}</span></div><div class="main-grid">${hero()}<div class="side-stack">${mode==='api'&&!eventData?`<section class="panel goal-panel"><h2>当前没有进行中的活动。</h2><p class="goal-copy">新的活动上线后，这里会自动出现。</p></section>`:goalMarkup()}${collectionMarkup()}</div></div>`;
 }
 /* ---------- pixel city map (去哪儿) ---------- */
 function mapProject(lng,lat){
@@ -975,6 +978,9 @@ function spotDistanceText(s){
   return `<span class="spot-dist mono">${fmtDistance(d)}</span>`;
 }
 function renderExplore(){
+  if(mode==='api'&&!eventData){
+    return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div><p class="geo-note mono">当前没有进行中的活动。</p>`;
+  }
   return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}<section class="event-banner" aria-label="${esc(eventData&&eventData.name||'WEEKEND.EXE')}"><div class="event-banner-main"><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'限定形态已解锁。':`三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'集齐三个不同地点，解锁活动限定形态。'}</div>`;
 }
 function spotCard(s){
@@ -1035,11 +1041,27 @@ function renderLivePage(){
   return `<div class="page-intro"><div><h1>现场。</h1></div></div>${body}`;
 }
 /* ---------- set page ---------- */
+async function updateAccountState(){
+  const el=document.getElementById('account-state');
+  if(!el||mode!=='api')return;
+  const t=authToken();
+  if(!t){
+    el.innerHTML='<p class="about-list">未登录。进度以匿名身份保存在本机，登录后可跨设备找回。</p><button type="button" class="btn btn-dark" style="width:auto" data-action="github-login">用 GitHub 登录</button>';
+    return;
+  }
+  try{
+    const data=await apiFetch('/auth/verify');
+    el.innerHTML=`<p class="about-list">已登录：${esc(data.user.username)}（GitHub）</p><button type="button" class="btn btn-quiet" style="width:auto" data-action="logout">退出登录</button>`;
+  }catch(error){
+    if(error.status===401){try{localStorage.removeItem('outie.auth-token');}catch(e){}}
+    el.innerHTML='<p class="about-list">登录已过期。</p><button type="button" class="btn btn-dark" style="width:auto" data-action="github-login">用 GitHub 登录</button>';
+  }
+}
 function renderSetPage(){
   const about=mode==='api'
     ?`<p class="about-list">演示版本，活动与奖励均为虚构。</p>`
     :`<p class="about-list">离线演示：活动与奖励均为虚构，进度只存在本机。</p>`;
-  return `<div class="page-intro"><div><h1>设置。</h1></div></div><div class="set-stack">${state.name?`<section class="panel set-panel"><h2>宠物名字。</h2><form id="rename-form"><label class="name-label" for="rename-input">宠物名字<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark">保存</button></div></form></section>`:''}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
+  return `<div class="page-intro"><div><h1>设置。</h1></div></div><div class="set-stack">${state.name?`<section class="panel set-panel"><h2>宠物名字。</h2><form id="rename-form"><label class="name-label" for="rename-input">宠物名字<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark">保存</button></div></form></section>`:''}<section class="panel set-panel">${mode==='api'?`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><div id="account-state"><p class="about-list">正在查询…</p></div></div>`:''}<div class="setting-section" style="${mode==='api'?'':'border-top:0;margin-top:0;padding-top:0'}"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
 }
 function navigate(target,focusSpot=null){
   if(!state.name){toast('先领养宠物。');document.getElementById('pet-name')?.focus();return;}
@@ -1140,6 +1162,12 @@ function handleAction(button){
     case 'redeem':mode==='api'?checkinApi(button.dataset.spot):redeemOffline(button.dataset.spot);break;
     case 'reconnect':tryReconnect();break;
     case 'geo-retry':geo.state='idle';startLocate();render();break;
+    case 'github-login':location.href=API_BASE+'/auth/github';break;
+    case 'logout':try{localStorage.removeItem('outie.auth-token');}catch(e){}(async()=>{
+      try{const me=await apiFetch('/outie/me');pet=me&&me.pet?me.pet:null;}catch(e){pet=null;}
+      state=pet?stateFromPet(pet):blankState();closeModal();render();
+      if(view==='set')updateAccountState();toast('已退出登录。');
+    })();break;
     case 'look':showLook(button.dataset.look);break;
     case 'equip-inline':wear(button.dataset.look);break;
     case 'wear':wear(button.dataset.look);break;
@@ -1201,12 +1229,27 @@ dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog
 dialog.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
 window.addEventListener('hashchange',()=>{if(!state.name)return;closeModal();view=viewFromHash();render();if(view==='live')loadLivePhotos();});
 window.addEventListener('storage',event=>{if(mode==='offline'&&event.key===STORAGE_KEY){state=loadState();closeModal();render();}});
+function captureAuthFromUrl(){
+  try{
+    const url=new URL(location.href);
+    const token=url.searchParams.get('token');
+    const error=url.searchParams.get('error');
+    if(!token&&error===null)return;
+    if(token)localStorage.setItem('outie.auth-token',token);
+    url.searchParams.delete('token');url.searchParams.delete('error');
+    history.replaceState(null,'',url.pathname+(url.searchParams.toString()?'?'+url.searchParams:'')+url.hash);
+    if(token)toast('GitHub 登录成功。');
+    if(error)toast('登录没有完成，请重试。');
+  }catch(e){}
+}
 async function boot(){
+  captureAuthFromUrl();
   const probe=await probeApi();
   if(probe){
     mode='api';
     devSkipGeo=Boolean(probe.devSkipGeo);
-    applyEvent(probe.event);
+    if(probe.event){applyEvent(probe.event);}
+    else{eventData=null;SPOTS=[];rebuildLooks();}
     try{
       const me=await apiFetch('/outie/me');
       pet=me&&me.pet?me.pet:null;

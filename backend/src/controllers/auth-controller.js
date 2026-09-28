@@ -226,7 +226,7 @@ const handleGitHubCallback = async (req, res, next) => {
       });
       delete req.session.oauthState;
       const frontendBaseUrl = config.getFrontendBaseUrl(req);
-      const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=invalid_state`;
+      const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/?error=invalid_state`;
       return res.redirect(redirectUrl);
     }
 
@@ -236,7 +236,7 @@ const handleGitHubCallback = async (req, res, next) => {
       if (err || !user) {
         console.error('GitHub OAuth error:', err || info);
         const frontendBaseUrl = config.getFrontendBaseUrl(req);
-        const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=github_auth_failed`;
+        const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/?error=github_auth_failed`;
         return res.redirect(redirectUrl);
       }
 
@@ -244,19 +244,19 @@ const handleGitHubCallback = async (req, res, next) => {
         const token = jwt.sign({ userId: user._id }, config.jwtSecret, { expiresIn: '7d' });
         console.log('GitHub login successful for user:', user.username);
         const frontendBaseUrl = config.getFrontendBaseUrl(req);
-        const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?token=${token}`;
+        const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/?token=${token}`;
         return res.redirect(redirectUrl);
       } catch (tokenError) {
         console.error('Token generation error:', tokenError);
         const frontendBaseUrl = config.getFrontendBaseUrl(req);
-        const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=token_generation_failed`;
+        const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/?error=token_generation_failed`;
         return res.redirect(redirectUrl);
       }
     })(req, res, next);
   } catch (error) {
     console.error('GitHub OAuth callback error:', error);
     const frontendBaseUrl = config.getFrontendBaseUrl(req);
-    const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/website.html?error=auth_callback_error`;
+    const redirectUrl = `${frontendBaseUrl.replace(/\/$/, '')}/?error=auth_callback_error`;
     return res.redirect(redirectUrl);
   }
 };
