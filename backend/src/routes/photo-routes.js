@@ -23,7 +23,7 @@ router.post('/anonymous', optionalAuth, uploadSinglePhoto, uploadAnonymousPhoto)
 router.delete('/anonymous/:id', optionalAuth, deleteAnonymousPhoto);
 router.get('/anonymous/my', optionalAuth, getAnonymousMyPhotos);
 router.delete('/:id', authenticate, deletePhoto);
-router.get('/:id', getPhotoDetails);
+router.get('/:id', optionalAuth, getPhotoDetails);
 router.post('/:id/comments', optionalAuth, addPhotoComment);
 
 module.exports = router;

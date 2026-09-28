@@ -328,6 +328,7 @@ a.btn{text-decoration:none}
 .account-form .form-row{display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .account-form .name-input{min-width:0;flex:1}
 .mine-del{width:auto;min-height:0;padding:6px 10px;font-size:10px;margin-top:6px}
+.map-canvas.maplibre-tone .maplibregl-canvas,.map-canvas.maplibre-tone canvas{filter:grayscale(.7) sepia(.14) brightness(1.04)}
 .photo-pin{position:relative;display:block;width:30px;height:30px;border:2px solid var(--ink);background:var(--paper);padding:1px;cursor:pointer}
 .photo-pin img{width:100%;height:100%;object-fit:cover;display:block}
 .photo-pin .pin-count{position:absolute;right:-7px;top:-9px;border:2px solid var(--ink);background:var(--yellow);color:var(--ink);font-size:9px;font-weight:700;line-height:1;padding:2px 3px}
@@ -810,6 +811,101 @@ function cityMapSVG(){
 }
 /* ---------- 去哪儿（OurVerse 式：定位成功才显示附近的固定地图，不可拖动） ---------- */
 const geo={state:'idle',coords:null,nearSpotId:null,nearDistance:0,accuracy:0};
+
+/* ---------- 地图 Provider 抽象层：amap=国内 / maplibre=海外通用 ---------- */
+let mapProviderName=(function(){try{return localStorage.getItem('outie.map-provider')||'maplibre';}catch(e){return 'maplibre';}})();
+function mapEngine(){return MapEngines[mapProviderName]||MapEngines.amap;}
+function wgs84togcj02(lng,lat){
+  if(lng<72.004||lng>137.8347||lat<0.8293||lat>55.8271)return {lng,lat};
+  const a=6378245,ee=0.00669342162296594323;
+  const tLat=x=>-100+2*x+3*y+0.2*y*y+0.1*x*y+0.2*Math.sqrt(Math.abs(x))+(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3+(20*Math.sin(y*Math.PI)+40*Math.sin(y/3*Math.PI))*2/3+(160*Math.sin(y/12*Math.PI)+320*Math.sin(y*Math.PI/30))*2/3;
+  const tLng=x=>300+x+2*y+0.1*x*x+0.1*x*y+0.1*Math.sqrt(Math.abs(x))+(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3+(20*Math.sin(x*Math.PI)+40*Math.sin(x/3*Math.PI))*2/3+(150*Math.sin(x/12*Math.PI)+300*Math.sin(x/30*Math.PI))*2/3;
+  let dLat=tLat(lng-105,lat-35),dLng=tLng(lng-105,lat-35);
+  const radLat=lat/180*Math.PI;let magic=Math.sin(radLat);magic=1-ee*magic*magic;
+  const sqrtMagic=Math.sqrt(magic);
+  dLat=(dLat*180)/((a*(1-ee))/(magic*sqrtMagic)*Math.PI);
+  dLng=(dLng*180)/(a/sqrtMagic*Math.cos(radLat)*Math.PI);
+  return {lng:lng+dLng,lat:lat+dLat};
+}
+const MapEngines={
+  amap:{
+    label:'高德（国内）',
+    async load(){return loadAmap();},
+    createMap(container,center,zoom){
+      const AMap=window.AMap;
+      return new AMap.Map(container,{
+        mapStyle:'amap://styles/whitesmoke',
+        features:['bg','road','building'],
+        viewMode:'2D',
+        zoom,center:[center.lng,center.lat],
+        dragEnable:false,zoomEnable:false,doubleClickZoom:false,scrollWheel:false,touchEnable:false
+      });
+    },
+    setCenter(map,lng,lat){map.setCenter([lng,lat]);},
+    onReady(map,cb){map.on('complete',cb);},
+    addEl(map,lng,lat,el,anchor,zIndex){const mk=new AMap.Marker({position:[lng,lat],content:el,anchor,zIndex});mk.setMap(map);return mk;},
+    removeEl(mk){try{mk.setMap(null);}catch(e){}},
+    destroy(map){try{map.destroy();}catch(e){}},
+    hasContainer(map){const c=(typeof map.getContainer==='function')?map.getContainer():null;return Boolean(c&&document.contains(c));},
+    locate(){return new Promise((resolve,reject)=>{
+      if(!window.AMap)return reject(new Error('AMap 未加载'));
+      AMap.plugin('AMap.Geolocation',()=>{
+        const geolocation=new AMap.Geolocation({enableHighAccuracy:true,timeout:10000,convert:true,showCircle:false,showButton:false});
+        geolocation.getCurrentPosition((status,result)=>{
+          if(status==='complete'&&result&&result.position){
+            const lng=typeof result.position.getLng==='function'?result.position.getLng():result.position.lng;
+            const lat=typeof result.position.getLat==='function'?result.position.getLat():result.position.lat;
+            if(!Number.isFinite(lng)||!Number.isFinite(lat))return reject(new Error('定位坐标无效'));
+            resolve({lng,lat});
+          }else reject(new Error('定位失败'));
+        });
+      });
+    });}
+  },
+  maplibre:{
+    label:'MapLibre（海外通用）',
+    loader:null,
+    async load(){
+      if(window.maplibregl)return window.maplibregl;
+      if(this.loader)return this.loader;
+      this.loader=new Promise((resolve,reject)=>{
+        const css=document.createElement('link');
+        css.rel='stylesheet';
+        css.href='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css';
+        document.head.appendChild(css);
+        const script=document.createElement('script');
+        script.src='https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+        script.onload=()=>{window.maplibregl?resolve(window.maplibregl):reject(new Error('MapLibre 加载异常'));};
+        script.onerror=()=>reject(new Error('MapLibre 加载失败'));
+        document.head.appendChild(script);
+      }).catch(e=>{this.loader=null;throw e;});
+      return this.loader;
+    },
+    createMap(container,center,zoom){
+      container.classList.add('maplibre-tone');
+      return new maplibregl.Map({
+        container,
+        style:{version:8,sources:{osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap contributors'}},layers:[{id:'osm',type:'raster',source:'osm'}]},
+        center:[center.lng,center.lat],
+        zoom,interactive:false,attributionControl:false
+      });
+    },
+    setCenter(map,lng,lat){map.setCenter([lng,lat]);},
+    onReady(map,cb){map.on('load',cb);},
+    addEl(map,lng,lat,el,anchor,zIndex){const mk=new maplibregl.Marker({element:el,anchor}).setLngLat([lng,lat]).addTo(map);return mk;},
+    removeEl(mk){try{mk.remove();}catch(e){}},
+    destroy(map){try{map.remove();}catch(e){}},
+    hasContainer(map){const c=map.getContainer?map.getContainer():null;return Boolean(c&&document.contains(c));},
+    locate(){return new Promise((resolve,reject)=>{
+      if(!navigator.geolocation)return reject(new Error('浏览器不支持定位'));
+      navigator.geolocation.getCurrentPosition(
+        pos=>{const gcj=wgs84togcj02(pos.coords.longitude,pos.coords.latitude);resolve(gcj);},
+        err=>reject(new Error('定位失败')),
+        {enableHighAccuracy:true,timeout:10000}
+      );
+    });}
+  }
+};
 let mapRealFailed=false,mapToken=0,realMap=null,amapLoader=null;
 function spotsWithCoords(){return SPOTS.filter(s=>Number.isFinite(s.lng)&&Number.isFinite(s.lat));}
 function haversineMeters(a,b){
@@ -865,7 +961,7 @@ function youDotElement(){
 }
 function destroyRealMap(){
   if(!realMap)return;
-  try{realMap.destroy();}catch(e){}
+  mapEngine().destroy(realMap);
   realMap=null;
 }
 function failRealMap(token){
@@ -886,23 +982,12 @@ function startLocate(){
     return;
   }
   geo.state='locating';render();
-  loadAmap().then(AMap=>{
+  mapEngine().locate().then(coords=>{
     if(mode!=='api')return;
-    AMap.plugin('AMap.Geolocation',()=>{
-      const geolocation=new AMap.Geolocation({enableHighAccuracy:true,timeout:10000,convert:true,showCircle:false,showButton:false});
-      geolocation.getCurrentPosition((status,result)=>{
-        if(mode!=='api')return;
-        if(status==='complete'&&result&&result.position){
-          const lng=typeof result.position.getLng==='function'?result.position.getLng():result.position.lng;
-          const lat=typeof result.position.getLat==='function'?result.position.getLat():result.position.lat;
-          if(!Number.isFinite(lng)||!Number.isFinite(lat)){geo.state='denied';render();return;}
-          geo.coords={lng,lat};
-          geo.accuracy=Math.max(Number(result.accuracy)||0,50);
-          geo.state='ok';
-          updateExploreDynamic();
-        }else{geo.state='denied';render();}
-      });
-    });
+    geo.coords=coords;
+    geo.accuracy=Math.max(Number(coords.accuracy)||0,50);
+    geo.state='ok';
+    updateExploreDynamic();
   }).catch(()=>{geo.state='denied';render();});
 }
 /* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
@@ -911,30 +996,31 @@ function initExploreMap(){
   const holder=document.getElementById('map-holder'),container=document.getElementById('map-canvas');
   if(!holder||!container||mode!=='api'||mapRealFailed)return;
   if(realMap){
-    const oldContainer=(typeof realMap.getContainer==='function')?realMap.getContainer():null;
-    if(oldContainer&&document.contains(oldContainer)){renderMapMarkers();return;}
+    if(mapEngine().hasContainer(realMap)){renderMapMarkers();return;}
     destroyRealMap();
   }
   const token=++mapToken;
   const c=streamCoords()||{lng:121.44635,lat:31.22465};
   const myContainer=container;
-  loadAmap().then(AMap=>{
-    if(token!==mapToken||!document.contains(myContainer))return;
-    const map=new AMap.Map(myContainer,{
-      mapStyle:'amap://styles/whitesmoke',
-      features:['bg','road','building'],
-      viewMode:'2D',
-      zoom:16,
-      center:[c.lng,c.lat],
-      dragEnable:false,zoomEnable:false,doubleClickZoom:false,scrollWheel:false,touchEnable:false
+  const boot=(engine)=>{
+    engine.load().then(()=>{
+      if(token!==mapToken||!document.contains(myContainer))return;
+      realMap=engine.createMap(myContainer,c,16);
+      renderMapMarkers();
+      const settle=()=>{const l=holder.querySelector('.map-loading');if(l)l.remove();};
+      engine.onReady(realMap,settle);
+      setTimeout(()=>{if(token===mapToken)settle();},8000);
+    }).catch(error=>{
+      if(token!==mapToken)return;
+      if(mapProviderName==='amap'){
+        mapProviderName='maplibre';
+        boot(mapEngine());
+      }else{
+        failRealMap(token);
+      }
     });
-    realMap=map;
-    renderMapMarkers();
-    const settle=()=>{const l=holder.querySelector('.map-loading');if(l)l.remove();};
-    map.on('complete',settle);
-    map.on('error',settle);
-    setTimeout(()=>{if(token===mapToken)settle();},8000);
-  }).catch(()=>failRealMap(token));
+  };
+  boot(mapEngine());
 }
 const CLUSTER_RADIUS_METERS = 45;
 function clusterNearPhotos(){
@@ -964,9 +1050,7 @@ function renderMapMarkers(){
   for(const m of mapMarkers){try{m.setMap(null);}catch(e){}}
   mapMarkers=[];
   const addMarker=(position,el,anchor,zIndex)=>{
-    const mk=new AMap.Marker({position,content:el,anchor,zIndex});
-    mk.setMap(realMap);
-    mapMarkers.push(mk);
+    mapMarkers.push(mapEngine().addEl(realMap,position.lng??position[0],position.lat??position[1],el,anchor,zIndex));
   };
   if(eventData){
     for(const s of SPOTS){
@@ -1267,8 +1351,11 @@ async function updateAccountState(){
 }
 
 function renderMinePage(){
-  const about=mode==='api'
-    ?`<p class="about-list">演示版本，活动与奖励均为虚构。</p>`
+  const mapEngBtn=mode==='api'
+    ?`<button type="button" class="btn btn-quiet" style="width:auto" data-action="map-engine-toggle">地图引擎：${mapEngine().label}</button>`
+    :'';
+    const about=mode==='api'
+    ?`<p class="about-list">演示版本，活动与奖励均为虚构。</p><p class="about-list">地图引擎：${mapEngine().label} · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="map-engine-toggle">切换</button></p>`
     :`<p class="about-list">离线演示：活动与奖励均为虚构，进度只存在本机。</p>`;
   const accountCard=mode==='api'
     ?`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><div id="account-card"><p class="about-list">正在查询…</p></div></div>`
@@ -1381,6 +1468,13 @@ function handleAction(button){
     case 'redeem':mode==='api'?checkinApi(button.dataset.spot):redeemOffline(button.dataset.spot);break;
     case 'reconnect':tryReconnect();break;
     case 'geo-retry':geo.state='idle';startLocate();render();break;
+    case 'map-engine-toggle':{
+      mapProviderName=mapProviderName==='amap'?'maplibre':'amap';
+      try{localStorage.setItem('outie.map-provider',mapProviderName);}catch(e){}
+      destroyRealMap();render();
+      toast('地图引擎已切换：'+mapEngine().label);
+      break;
+    }
     case 'github-login':location.href=API_BASE+'/auth/github';break;
     case 'login-open':openLoginModal('login');break;
     case 'auth-toggle':openLoginModal(authMode==='login'?'register':'login');break;

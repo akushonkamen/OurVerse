@@ -23,7 +23,7 @@ const assertAnonymousUploadQuota = async (anonymousId, limit) => {
     createdAt: { $gte: today, $lt: tomorrow }
   });
 
-  if (count >= limit) {
+  if (limit > 0 && count >= limit) {
     const err = new Error(`每日匿名打卡上限为${limit}次`);
     err.code = 'QUOTA_EXCEEDED';
     throw err;

@@ -18,7 +18,7 @@ const {
 } = require('../services/photo-storage-service');
 const { getOrCreateAnonymousId, assertAnonymousUploadQuota } = require('../services/anonymous-service');
 
-const ANONYMOUS_DAILY_LIMIT = Number.parseInt(process.env.ANONYMOUS_DAILY_UPLOAD_LIMIT, 10) || 1;
+const ANONYMOUS_DAILY_LIMIT = Number.parseInt(process.env.ANONYMOUS_DAILY_UPLOAD_LIMIT, 10) || 0;
 
 const uploadsRoot = path.resolve(__dirname, '..', '..', config.uploadsDir);
 
@@ -79,7 +79,7 @@ const uploadPhoto = async (req, res) => {
       }
     });
 
-    if (todayUploads >= config.dailyUploadLimit) {
+    if (config.dailyUploadLimit > 0 && todayUploads >= config.dailyUploadLimit) {
       return res.status(400).json({ error: `每日最多只能上传${config.dailyUploadLimit}张照片，请明天再来` });
     }
 
@@ -437,7 +437,11 @@ const getPhotoDetails = async (req, res) => {
       ? String(photo.userId._id)
       : photo.userId?.toString?.() || null;
     const viewerId = req.userId ? String(req.userId) : getViewerIdFromRequest(req);
-    const canDelete = Boolean(viewerId && ownerId && viewerId === ownerId);
+    const viewerAnonId = (!viewerId && req.anonymousId) ? String(req.anonymousId) : null;
+    const canDelete = Boolean(
+      (viewerId && ownerId && viewerId === ownerId)
+      || (!ownerId && viewerAnonId && photo.anonymousId && String(photo.anonymousId) === viewerAnonId)
+    );
 
     const fullUrl = photo.url.startsWith('http')
       ? photo.url
@@ -453,8 +457,8 @@ const getPhotoDetails = async (req, res) => {
         locationInfo: photo.locationInfo,
         user: {
           id: ownerId,
-          username: photo.userId.username,
-          avatar: photo.userId.avatar
+          username: (photo.userId && photo.userId.username) || '匿名旅人',
+          avatar: (photo.userId && photo.userId.avatar) || ''
         },
         createdAt: photo.createdAt,
         canDelete,

@@ -102,8 +102,8 @@ const config = {
     windowMs: parseInteger(process.env.RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
     maxRequests: parseInteger(process.env.RATE_LIMIT_MAX_REQUESTS, 100)
   },
-  dailyUploadLimit: parseInteger(process.env.DAILY_UPLOAD_LIMIT, 5),
-  anonymousDailyUploadLimit: parseInteger(process.env.ANONYMOUS_DAILY_UPLOAD_LIMIT, 1),
+  dailyUploadLimit: parseInteger(process.env.DAILY_UPLOAD_LIMIT, 0),
+  anonymousDailyUploadLimit: parseInteger(process.env.ANONYMOUS_DAILY_UPLOAD_LIMIT, 0),
   maxDistanceVerification: parseInteger(process.env.MAX_DISTANCE_VERIFICATION, 50),
   bcryptSaltRounds: parseInteger(process.env.BCRYPT_SALT_ROUNDS, 10),
   protocol: process.env.PROTOCOL || 'https',
