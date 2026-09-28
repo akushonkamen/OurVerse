@@ -37,6 +37,8 @@ a{color:inherit}svg{display:block}h1,h2,h3,p{margin:0}::selection{background:var
 .icon-btn:hover{background:var(--ink);color:var(--paper)}
 .corner-badge{position:fixed;z-index:30;border:2px solid var(--ink);background:var(--paper);color:var(--ink);font-size:9px;font-weight:700;letter-spacing:.14em;padding:6px 8px;font-family:inherit}
 .corner-badge.dev{position:static;cursor:pointer}
+.map-refresh{position:absolute;top:8px;right:8px;z-index:5;border:2px solid var(--ink);background:var(--paper);color:var(--ink);font-weight:700;font-size:9px;letter-spacing:.1em;padding:5px 8px;cursor:pointer}
+.map-refresh:hover{background:var(--ink);color:var(--paper)}
 .header-end{display:flex;align-items:center;gap:8px}
 .account-chip{display:flex;align-items:center;gap:7px;border:2px solid var(--ink);background:var(--panel);padding:3px 10px 3px 4px;font-weight:700;font-size:12px;letter-spacing:.02em}
 .account-chip:hover{background:var(--ink);color:var(--paper)}
@@ -711,10 +713,11 @@ function renderComposite(photo,sticker){
 }
 function showCompositePreview(dataUrl,spotId){
   const s=SPOTS.find(sp=>sp.id===spotId);
+  const locNote=(geo.state==='ok'&&geo.coords)?'将带上你当前的定位。':(s?'':'未开启定位，将不带坐标发布。');
   const publishBtn=mode==='api'
     ?`<button class="btn btn-primary" type="button" data-action="publish-live" data-spot="${esc(spotId||'')}"${publishing?' disabled':''}>发到现场</button>`
     :'';
-  modal(`<p class="modal-eyebrow mono">PHOTO / 现场合成</p><h2 id="dialog-title">现场照片合成。</h2><p class="modal-copy">照片加上 ${esc(state.name)} 的像素贴纸${s?`，来自${esc(s.name)}`:''}。</p><div class="reward-stage base"><img class="composite-preview" src="${dataUrl}" alt="合成照片预览"></div><div class="modal-actions">${publishBtn}<a class="btn btn-dark" download="outie-${Date.now()}.jpg" href="${dataUrl}">保存图片</a><button class="text-btn" type="button" data-action="close">关闭</button></div>`,'composite');
+  modal(`<p class="modal-eyebrow mono">PHOTO / 现场合成</p><h2 id="dialog-title">现场照片合成</h2><p class="modal-copy">照片加上 ${esc(state.name)} 的像素贴纸${s?`，来自${esc(s.name)}`:''}。<br><span class="mono muted">${locNote}</span></p><div class="reward-stage base"><img class="composite-preview" src="${dataUrl}" alt="合成照片预览"></div><div class="modal-actions">${publishBtn}<a class="btn btn-dark" download="outie-${Date.now()}.jpg" href="${dataUrl}">保存图片</a><button class="text-btn" type="button" data-action="close">关闭</button></div>`,'composite');
 }
 async function publishLive(spotId){
   if(publishing||mode!=='api')return;
@@ -799,14 +802,14 @@ function hero(welcome=false){
 }
 function renderWelcome(){
   const modeNote=mode==='api'?'':'<p class="form-foot">离线演示：进度只存在本机。</p>';
-  return `<div class="page-intro"><div><h1>到现场打卡，收集造型。</h1></div></div><div class="main-grid welcome-grid">${hero(true)}<div class="side-stack"><section class="panel adopt-panel"><h2>给它起个名字。</h2><form id="adopt-form"><label class="name-label" for="pet-name">宠物名字<span>最多 12 字</span></label><input id="pet-name" class="name-input" name="petName" value="" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="name-error" placeholder="例如：MOMO"><div class="input-error" id="name-error" role="alert"></div><button type="submit" class="btn btn-primary" id="adopt-button">领养</button></form>${modeNote}</section></div></div>`;
+  return `<div class="page-intro"><div><h1>到现场打卡，收集造型</h1></div></div><div class="main-grid welcome-grid">${hero(true)}<div class="side-stack"><section class="panel adopt-panel"><h2>给它起个名字</h2><form id="adopt-form"><label class="name-label" for="pet-name">宠物名字<span>最多 12 字</span></label><input id="pet-name" class="name-input" name="petName" value="" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="name-error" placeholder="例如：MOMO"><div class="input-error" id="name-error" role="alert"></div><button type="submit" class="btn btn-primary" id="adopt-button">领养</button></form>${modeNote}</section></div></div>`;
 }
 function progressMarkup(){
   return `<div class="progress-row"><div class="stamp-track" aria-label="已收集 ${count()} 个地点，共 ${SPOTS.length} 个">${SPOTS.map((s,i)=>`${i?`<span class="track-line ${state.rewards[s.id]?'done':''}" aria-hidden="true"></span>`:''}<span class="stamp ${state.rewards[s.id]?'done':''}" title="${s.zone}${state.rewards[s.id]?'：已打卡':'：未打卡'}">${pixIcon(s.icon)}</span>`).join('')}</div><span class="count" role="img" aria-label="${count()} / 3">${pixText(count()+'/3',3)}</span></div>`;
 }
 function goalMarkup(){
   const n=count(),complete=n===SPOTS.length;
-  const heading=state.evolved?'限定形态已解锁。':complete?'三个地点，全部集齐。':n===0?'今天有 3 个地点。':'已收集 '+n+' 个地点。';
+  const heading=state.evolved?'限定形态已解锁':complete?'三个地点，全部集齐':n===0?'今天有 3 个地点':'已收集 '+n+' 个地点';
   const copy=state.evolved?'':complete?'可以解锁活动限定形态了。':'每站打卡得一套造型，集齐解锁限定形态。';
   const action=complete&&!state.evolved?{act:'evolve-prompt',label:'解锁限定形态'}:{act:'nav',label:n===0?'去拿新造型':state.evolved?'去哪儿看看':'继续打卡'};
   return `<section class="goal-panel panel"><h2>${heading}</h2>${copy?`<p class="goal-copy">${copy}</p>`:''}${progressMarkup()}<button class="btn ${complete&&!state.evolved?'btn-primary':'btn-dark'}" type="button" data-action="${action.act}" ${action.act==='nav'?'data-view="explore"':''}>${action.label}</button></section>`;
@@ -815,7 +818,7 @@ function collectionMarkup(){
   return `<section class="panel collection"><div class="section-top"><h2>我的造型</h2><span class="small-meta mono">${LOOKS.filter(l=>unlocked(l.id)).length} / ${LOOKS.length} 已解锁</span></div><div class="looks-grid">${LOOKS.map(l=>`<button type="button" class="look-option ${!unlocked(l.id)?'locked':''} ${state.equipped===l.id?'active':''}" data-action="${unlocked(l.id)?'equip-inline':'look'}" data-look="${l.id}" aria-label="${l.name}，${state.equipped===l.id?'正在穿戴':unlocked(l.id)?'已解锁，点击换上':l.id==='evolved'&&count()===3?'可解锁':'未解锁'}" aria-pressed="${state.equipped===l.id}"><span class="look-thumb ${l.id}">${petSVG(l.id)}${state.equipped===l.id?`<span class="wear-pin">${pixIcon('check')}</span>`:!unlocked(l.id)?`<span class="lock-pin">${pixIcon(l.id==='evolved'&&count()===3?'star':'lock')}</span>`:''}</span><span class="look-name">${l.short}</span></button>`).join('')}</div><p class="collection-note">点击造型即可换上，可反复更换。</p></section>`;
 }
 function renderPetPage(){
-  return `<div class="page-intro"><div><h1>我的宠物。</h1></div><span class="intro-mark mono">${state.evolved?'FORM 5/5':'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/5'}</span></div><div class="main-grid">${hero()}<div class="side-stack">${mode==='api'&&!eventData?`<section class="panel goal-panel"><h2>当前没有进行中的活动。</h2><p class="goal-copy">新的活动上线后，这里会自动出现。</p></section>`:goalMarkup()}${collectionMarkup()}</div></div>`;
+  return `<div class="page-intro"><div><h1>我的宠物</h1></div><span class="intro-mark mono">${state.evolved?'FORM 5/5':'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/5'}</span></div><div class="main-grid">${hero()}<div class="side-stack">${mode==='api'&&!eventData?`<section class="panel goal-panel"><h2>当前没有进行中的活动</h2><p class="goal-copy">新的活动上线后，这里会自动出现。</p></section>`:goalMarkup()}${collectionMarkup()}</div></div>`;
 }
 /* ---------- pixel city map (去哪儿) ---------- */
 function mapProject(lng,lat){
@@ -925,8 +928,7 @@ function startLocate(){
     if(s){
       geo.coords={lng:s.lng,lat:s.lat};
       geo.state='ok';
-      if(realMap){realMap.setCenter([s.lng,s.lat]);}
-      render();
+      updateExploreDynamic();
     }
     return;
   }
@@ -944,8 +946,7 @@ function startLocate(){
           geo.coords={lng,lat};
           geo.accuracy=Math.max(Number(result.accuracy)||0,50);
           geo.state='ok';
-          if(realMap){realMap.setCenter([lng,lat]);}
-          render();
+          updateExploreDynamic();
         }else{geo.state='denied';render();}
       });
     });
@@ -956,7 +957,11 @@ let mapMarkers=[];
 function initExploreMap(){
   const holder=document.getElementById('map-holder'),container=document.getElementById('map-canvas');
   if(!holder||!container||mode!=='api'||mapRealFailed)return;
-  if(realMap){renderMapMarkers();return;}
+  if(realMap){
+    const oldContainer=(typeof realMap.getContainer==='function')?realMap.getContainer():null;
+    if(oldContainer&&document.contains(oldContainer)){renderMapMarkers();return;}
+    destroyRealMap();
+  }
   const token=++mapToken;
   const c=streamCoords()||{lng:121.44635,lat:31.22465};
   const myContainer=container;
@@ -971,8 +976,9 @@ function initExploreMap(){
       dragEnable:false,zoomEnable:false,doubleClickZoom:false,scrollWheel:false,touchEnable:false
     });
     realMap=map;
+    renderMapMarkers();
     const settle=()=>{const l=holder.querySelector('.map-loading');if(l)l.remove();};
-    map.on('complete',()=>{settle();renderMapMarkers();});
+    map.on('complete',settle);
     map.on('error',settle);
     setTimeout(()=>{if(token===mapToken)settle();},8000);
   }).catch(()=>failRealMap(token));
@@ -990,6 +996,15 @@ function clusterNearPhotos(){
     else clusters.push({lat:ph.lat,lng:ph.lng,items:[ph]});
   }
   return clusters;
+}
+function updateExploreDynamic(){
+  if(realMap){
+    if(geo.coords)realMap.setCenter([geo.coords.lng,geo.coords.lat]);
+    renderMapMarkers();
+  }
+  const gridEl=main.querySelector('.spots-grid');
+  if(gridEl&&eventData)gridEl.innerHTML=SPOTS.map(spotCard).join('');
+  if(view==='explore')renderNearGrid();
 }
 function renderMapMarkers(){
   if(!realMap)return;
@@ -1026,7 +1041,7 @@ function cityMapMarkup(){
   if(mode!=='api')return cityMapSchematicMarkup();
   if(mapRealFailed)return cityMapSchematicMarkup();
   if(geo.state==='idle')startLocate();
-  return `<figure class="map-wrap"><div class="map-tag mono">${eventData?'CITY MAP / '+esc(eventKeyText()):'CITY MAP'}</div><div class="map-holder" id="map-holder"><div class="map-canvas" id="map-canvas" aria-label="附近地图"></div><span class="map-loading mono">加载中…</span><span class="map-credit mono">MAP © 高德地图</span></div><figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch here"></span>你在这里</span><span class="legend-item"><span class="legend-swatch"></span>活动点位</span><span class="legend-item"><span class="legend-swatch done"></span>附近照片</span></figcaption></figure>`;
+  return `<figure class="map-wrap"><div class="map-tag mono">${eventData?'CITY MAP / '+esc(eventKeyText()):'CITY MAP'}</div><button type="button" class="map-refresh mono" data-action="map-refresh" aria-label="刷新定位与地图">刷新</button><div class="map-holder" id="map-holder"><div class="map-canvas" id="map-canvas" aria-label="附近地图"></div><span class="map-loading mono">加载中…</span><span class="map-credit mono">MAP © 高德地图</span></div><figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch here"></span>你在这里</span><span class="legend-item"><span class="legend-swatch"></span>活动点位</span><span class="legend-item"><span class="legend-swatch done"></span>附近照片</span></figcaption></figure>`;
 }
 function spotDistanceText(s){
   if(mode!=='api'||geo.state!=='ok'||!geo.coords||!Number.isFinite(s.lng))return '';
@@ -1035,10 +1050,11 @@ function spotDistanceText(s){
 }
 function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
+  if(mode==='api'&&nearStatus==='idle')loadNearStream();
   const eventPart=eventData
     ?`<section class="event-banner" aria-label="${esc(eventData.name||'WEEKEND.EXE')}"><div class="event-banner-main"><div class="event-wordmark-line" role="img" aria-label="${esc(eventKeyText())}">${pixText(eventKeyText(),5)}</div></div><div class="event-banner-side"><div class="ticket-box"><span class="count">${pixText(count()+'/3',3)}</span><span class="mono">地点已打卡</span></div></div></section><div class="spots-grid">${SPOTS.map(spotCard).join('')}</div><div class="route-note">${count()===SPOTS.length?(state.evolved?'本活动限定形态已解锁。':`本活动三站已集齐。<button type="button" data-action="evolve-prompt">解锁限定形态</button>`):'到活动点位打卡，收集限定造型。'}</div>`
     :`<p class="geo-note mono">当前没有进行中的活动 · 地图和附近的照片照常可用。</p>`;
-  return `<div class="page-intro"><div><h1>去哪儿。</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}${eventPart}`;
+  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}${eventPart}`;
 }
 function spotCard(s){
   const done=Boolean(state.rewards[s.id]);
@@ -1104,7 +1120,7 @@ function renderNearGrid(){
 }
 function nearSectionMarkup(){
   const n=nearStatus==='ready'&&nearPhotos?nearPhotos.length:0;
-  return `<section class="near-section"><div class="section-top"><h2>附近的照片。</h2><span class="small-meta mono">${n} 张 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="near-refresh">刷新</button></span></div><div class="live-grid" id="near-grid">${nearBody()}</div></section>`;
+  return `<section class="near-section"><div class="section-top"><h2>附近的照片</h2><span class="small-meta mono">${n} 张 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="photo-new">拍一张</button> · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="near-refresh">刷新</button></span></div><div class="live-grid" id="near-grid">${nearBody()}</div></section>`;
 }
 /* ---------- 照片详情 + 评论 ---------- */
 let currentDetailId=null;
@@ -1117,7 +1133,7 @@ function openClusterModal(clusterIdx){
     const cap=esc(String(ph.caption||'').trim());
     return `<figure class="live-frame cluster-cell"><button type="button" class="photo-hit" data-action="cluster-photo" data-cluster="${Number(clusterIdx)}" data-photo="${esc(ph.id||'')}"><img src="${url}" alt="${cap||'现场照片'}"></button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(ph.createdAt)}</span></figcaption></figure>`;
   }).join('');
-  modal(`<p class="modal-eyebrow mono">SPOT PHOTOS / 这个地点</p><h2 id="dialog-title">这里的 ${c.items.length} 张照片。</h2><div class="live-grid cluster-grid">${cells}</div><p class="modal-note mono">点开一张可以看大图和评论。</p>`,'cluster',true);
+  modal(`<p class="modal-eyebrow mono">SPOT PHOTOS / 这个地点</p><h2 id="dialog-title">这里的 ${c.items.length} 张照片</h2><div class="live-grid cluster-grid">${cells}</div><p class="modal-note mono">点开一张可以看大图和评论。</p>`,'cluster',true);
 }
 function openClusterPhoto(clusterIdx,photoId){
   const clusters=clusterNearPhotos();
@@ -1145,7 +1161,7 @@ async function loadPhotoComments(photoId){
 async function openPhotoDetail(id){
   if(mode!=='api'||!id)return;
   currentDetailId=id;
-  modal(`<p class="modal-eyebrow mono">PHOTO / 现场</p><h2 id="dialog-title">现场照片。</h2><div id="photo-detail"><p class="modal-copy">加载中…</p></div>`,'photo-detail',true);
+  modal(`<p class="modal-eyebrow mono">PHOTO / 现场</p><h2 id="dialog-title">现场照片</h2><div id="photo-detail"><p class="modal-copy">加载中…</p></div>`,'photo-detail',true);
   await renderPhotoDetail(id);
 }
 function deletePhotoItem(ds){
@@ -1209,7 +1225,7 @@ function openLoginModal(mode){
   const submitLabel=authMode==='login'?'登录':'注册';
   modal(
     '<p class="modal-eyebrow mono">ACCOUNT / 账号</p>'
-    +'<h2 id="dialog-title">登录 OUTIE。</h2>'
+    +'<h2 id="dialog-title">登录 OUTIE</h2>'
     +'<p class="modal-copy">登录后，宠物、造型和照片跟随账号，换设备也不丢。</p>'
     +'<button type="button" class="btn btn-dark" style="width:100%" data-action="github-login">用 GitHub 登录</button>'
     +'<div class="auth-divider mono">或</div>'
@@ -1270,12 +1286,12 @@ function renderMinePage(){
     ?`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><div id="account-card"><p class="about-list">正在查询…</p></div></div>`
     :`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><p class="about-list">离线模式，登录暂不可用。</p></div>`;
   const petCard=state.name
-    ?`<section class="panel set-panel"><h2>宠物。</h2><p class="about-list" style="margin:6px 0 12px">名字：${esc(state.name)} · 本活动已收集 ${count()} 个点位造型${pet&&pet.evolved?' · 限定形态已解锁':''}</p><form id="rename-form"><label class="name-label" for="rename-input">改名<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark" style="width:auto">保存</button></div></form></section>`
+    ?`<section class="panel set-panel"><h2>宠物</h2><p class="about-list" style="margin:6px 0 12px">名字：${esc(state.name)} · 本活动已收集 ${count()} 个点位造型${pet&&pet.evolved?' · 限定形态已解锁':''}</p><form id="rename-form"><label class="name-label" for="rename-input">改名<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark" style="width:auto">保存</button></div></form></section>`
     :`<section class="panel set-panel"><p class="about-list">还没有宠物。<button type="button" class="btn btn-dark" style="width:auto" data-action="nav" data-view="pet">去领养</button></p></section>`;
   const mineCard=mode==='api'
-    ?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>我的照片</h3><span class="small-meta mono">我发过的所有现场照片</span></div><div class="live-grid" id="mine-grid">${mineBody()}</div></section>`
+    ?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>我的照片</h3><span class="small-meta mono">我发过的所有现场照片 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="photo-new">拍一张</button></span></div><div class="live-grid" id="mine-grid">${mineBody()}</div></section>`
     :`<section class="panel set-panel"><div class="live-grid"><div class="live-cell-empty"><span class="live-dither" aria-hidden="true"></span><p>离线模式 · 连接后可用</p></div></div></section>`;
-  return `<div class="page-intro"><div><h1>我的。</h1></div></div><div class="set-stack"><section class="panel set-panel">${accountCard}</section>${petCard}${mineCard}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
+  return `<div class="page-intro"><div><h1>我的</h1></div></div><div class="set-stack"><section class="panel set-panel">${accountCard}</section>${petCard}${mineCard}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
 }
 function navigate(target,focusSpot=null){
   if(!state.name){toast('先领养宠物。');document.getElementById('pet-name')?.focus();return;}
@@ -1300,7 +1316,7 @@ function showCheckin(id){
   const frame=mode==='api'
     ?`<div class="checkin-frame"><span class="frame-note mono">${devSkipGeo?'DEV MODE<br>跳过定位校验':'GEO CHECK-IN<br>需靠近点位 '+s.radiusMeters+' 米内'}</span></div>`
     :`<div class="checkin-frame">${qrSVG()}<span class="frame-note mono">SCAN AT VENUE<br>现场扫码处</span></div>`;
-  modal(`<p class="modal-eyebrow mono">CHECK-IN / SPOT ${s.number}</p><h2 id="dialog-title">到达${esc(s.name)}。</h2>${frame}<p class="modal-copy">${s.zone?`区域：${esc(s.zone)}<br>`:''}本站造型：<strong>${esc(s.reward)}</strong><br>到达：${esc(s.line)}</p><div class="modal-actions"><button class="btn btn-primary" data-action="redeem" data-spot="${id}" type="button">打卡领取</button></div>`,'checkin');
+  modal(`<p class="modal-eyebrow mono">CHECK-IN / SPOT ${s.number}</p><h2 id="dialog-title">到达${esc(s.name)}</h2>${frame}<p class="modal-copy">${s.zone?`区域：${esc(s.zone)}<br>`:''}本站造型：<strong>${esc(s.reward)}</strong><br>到达：${esc(s.line)}</p><div class="modal-actions"><button class="btn btn-primary" data-action="redeem" data-spot="${id}" type="button">打卡领取</button></div>`,'checkin');
 }
 function redeemOffline(id){
   const s=SPOTS.find(s=>s.id===id);if(!s||!state.name)return;
@@ -1338,10 +1354,10 @@ function wear(id){
 function showEvolutionPrompt(){
   if(!state.name||count()!==SPOTS.length){toast('先集齐三个地点。');return;}
   if(state.evolved){showLook('evolved');return;}
-  modal(`<p class="modal-eyebrow mono">EVENT COMPLETE</p><h2 id="dialog-title">三个地点，全部集齐。</h2><p class="modal-copy">${esc(state.name)} 可以解锁活动限定形态「出逃星人」。</p><div class="reward-stage evolved hidden-look"><span class="stage-label mono">A NEW FORM</span>${petSVG('evolved')}<span class="reward-stamp mono">READY</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="evolve" type="button">解锁</button><button class="text-btn" type="button" data-action="close">稍后</button></div>`,'evolution-ready');
+  modal(`<p class="modal-eyebrow mono">EVENT COMPLETE</p><h2 id="dialog-title">三个地点，全部集齐</h2><p class="modal-copy">${esc(state.name)} 可以解锁活动限定形态「出逃星人」。</p><div class="reward-stage evolved hidden-look"><span class="stage-label mono">A NEW FORM</span>${petSVG('evolved')}<span class="reward-stamp mono">READY</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="evolve" type="button">解锁</button><button class="text-btn" type="button" data-action="close">稍后</button></div>`,'evolution-ready');
 }
 function showEvolutionDone(){
-  modal(`<span class="success-chip">${pixIcon('check')}UNLOCKED</span><h2 id="dialog-title">解锁：出逃星人。</h2><p class="modal-copy">活动限定形态。五套造型全部收集完成，可随时更换。</p>${rewardStage('evolved','NO.005','LIMITED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="evolved">穿上</button></div>`,'evolution-done');
+  modal(`<span class="success-chip">${pixIcon('check')}UNLOCKED</span><h2 id="dialog-title">解锁：出逃星人</h2><p class="modal-copy">活动限定形态。五套造型全部收集完成，可随时更换。</p>${rewardStage('evolved','NO.005','LIMITED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="evolved">穿上</button></div>`,'evolution-done');
   confetti();
 }
 function evolve(){
@@ -1400,6 +1416,8 @@ function handleAction(button){
     case 'compose-photo':pickCompositePhoto(button.dataset.spot);break;
     case 'publish-live':publishLive(button.dataset.spot);break;
     case 'near-refresh':nearPhotos=null;nearStatus='idle';loadNearStream(true);break;
+    case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';render();break;
+    case 'photo-new':if(mode!=='api'){toast('离线模式，连上后可发照片。');break;}pickCompositePhoto(null);break;
     case 'photo-open':openPhotoDetail(button.dataset.photo);break;
     case 'cluster-open':openClusterModal(button.dataset.cluster);break;
     case 'cluster-photo':openClusterPhoto(button.dataset.cluster,button.dataset.photo);break;
