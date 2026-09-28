@@ -200,7 +200,7 @@ a.btn{text-decoration:none}
 @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
 .map-caption{font-size:9px;letter-spacing:.12em;color:var(--muted);font-weight:700;padding:0 2px;margin:-8px 0 18px}
 /* ---- real map (高德 JS API · 纸感灰调底图 + 像素标记) ---- */
-.map-holder{position:relative;aspect-ratio:1/1;background:#ece8d6;overflow:hidden}
+.map-holder{position:relative;aspect-ratio:1/1;height:min(88vw,340px);background:#ece8d6;overflow:hidden}
 .map-canvas{position:absolute;inset:0;z-index:1;filter:grayscale(.7) sepia(.1) brightness(1.02);background:#ece8d6}
 .map-canvas .amap-logo,.map-canvas .amap-copyright,.map-canvas .amap-lib-container{display:none!important}
 .map-canvas .map-marker{position:relative;left:auto;top:auto;transform:none}
@@ -340,6 +340,7 @@ a.btn{text-decoration:none}
 .cluster-cell .photo-hit img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
 .cluster-grid .live-meta{font-size:8px}
 .map-marker-btn{display:block}
+.map-canvas.maplibregl-map{position:absolute !important;inset:0 !important;height:auto !important}
 </style>
 </head>
 <body>
@@ -843,6 +844,8 @@ const MapEngines={
     },
     setCenter(map,lng,lat){map.setCenter([lng,lat]);},
     onReady(map,cb){map.on('complete',cb);},
+    resize(map){try{map.resize();}catch(e){}},
+    getCanvas(map){try{return map.getCanvas();}catch(e){return null;}},
     addEl(map,lng,lat,el,anchor,zIndex){const mk=new AMap.Marker({position:[lng,lat],content:el,anchor,zIndex});mk.setMap(map);return mk;},
     removeEl(mk){try{mk.setMap(null);}catch(e){}},
     destroy(map){try{map.destroy();}catch(e){}},
@@ -920,6 +923,8 @@ const MapEngines={
     },
     setCenter(map,lng,lat){map.setCenter([lng,lat]);},
     onReady(map,cb){map.on('load',cb);},
+    resize(map){try{map.resize();}catch(e){}},
+    getCanvas(map){try{return map.getCanvas();}catch(e){return null;}},
     addEl(map,lng,lat,el,anchor,zIndex){const mk=new maplibregl.Marker({element:el,anchor}).setLngLat([lng,lat]).addTo(map);return mk;},
     removeEl(mk){try{mk.remove();}catch(e){}},
     destroy(map){try{map.remove();}catch(e){}},
@@ -1020,6 +1025,23 @@ function startLocate(){
 }
 /* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
 let mapMarkers=[];
+function watchMapSize(handle,container,ms){
+  const t0=performance.now();
+  const tick=()=>{
+    if(!document.contains(container))return;
+    try{
+      const canvas=mapEngine().getCanvas(handle);
+      if(canvas){
+        const cr=canvas.getBoundingClientRect();
+        const hr=container.getBoundingClientRect();
+        if(Math.abs(cr.width-hr.width)>2||Math.abs(cr.height-hr.height)>2)mapEngine().resize(handle);
+      }
+    }catch(e){}
+    if(performance.now()-t0<ms)requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+function engine_resizeSafe(){try{mapEngine().resize(realMap);}catch(e){}}
 function initExploreMap(){
   const holder=document.getElementById('map-holder'),container=document.getElementById('map-canvas');
   if(!holder||!container||mode!=='api'||mapRealFailed)return;
@@ -1035,9 +1057,14 @@ function initExploreMap(){
       if(token!==mapToken||!document.contains(myContainer))return;
       realMap=engine.createMap(myContainer,c,16);
       renderMapMarkers();
+      engine.resize(realMap);
+      watchMapSize(realMap,myContainer,3000);
       const settle=()=>{const l=holder.querySelector('.map-loading');if(l)l.remove();};
-      engine.onReady(realMap,settle);
-      setTimeout(()=>{if(token===mapToken)settle();},8000);
+      engine.onReady(realMap,()=>{settle();engine.resize(realMap);});
+      setTimeout(()=>{if(token===mapToken){settle();engine.resize(realMap);}},8000);
+      if(initExploreMap._resizeObs){try{initExploreMap._resizeObs.disconnect();}catch(e){}}
+      initExploreMap._resizeObs=new ResizeObserver(()=>{if(realMap&&view==='explore')engine_resizeSafe();});
+      initExploreMap._resizeObs.observe(myContainer);
     }).catch(error=>{
       if(token!==mapToken)return;
       if(mapProviderName==='amap'){
@@ -1613,6 +1640,7 @@ document.addEventListener('submit',async event=>{
 });
 dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)closeModal();}});
 dialog.addEventListener('cancel',event=>{event.preventDefault();closeModal();});
+window.addEventListener('resize',()=>{if(view==='explore'&&realMap)engine_resizeSafe();});
 window.addEventListener('hashchange',()=>{if(!state.name)return;closeModal();view=viewFromHash();render();});
 window.addEventListener('storage',event=>{if(mode==='offline'&&event.key===STORAGE_KEY){state=loadState();closeModal();render();}});
 function captureAuthFromUrl(){
