@@ -992,7 +992,7 @@ function failRealMap(token){
   render();
 }
 function startLocate(){
-  if(mode!=='api'||geo.state==='locating'||geo.state==='ok')return;
+  if(mode!=='api'||geo.state==='locating')return;
   if(devSkipGeo){
     const s=spotsWithCoords()[0];
     if(s){
@@ -1003,13 +1003,16 @@ function startLocate(){
     return;
   }
   geo.state='locating';render();
-  mapEngine().locate().then(coords=>{
+  Promise.race([
+    mapEngine().locate(),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error('定位超时')),12000))
+  ]).then(coords=>{
     if(mode!=='api')return;
     geo.coords=coords;
     geo.accuracy=Math.max(Number(coords.accuracy)||0,50);
     geo.state='ok';
     updateExploreDynamic();
-  }).catch(()=>{geo.state='denied';render();});
+  }).catch(()=>{geo.state='failed';render();});
 }
 /* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
 let mapMarkers=[];
@@ -1120,7 +1123,6 @@ function renderMapMarkers(){
 function cityMapMarkup(){
   if(mode!=='api')return cityMapSchematicMarkup();
   if(mapRealFailed)return cityMapSchematicMarkup();
-  if(geo.state==='idle')startLocate();
   return `<figure class="map-wrap"><div class="map-tag mono">${eventData?'CITY MAP / '+esc(eventKeyText()):'CITY MAP'}</div><button type="button" class="map-refresh mono" data-action="map-refresh" aria-label="刷新定位与地图">刷新</button><div class="map-holder" id="map-holder"><div class="map-canvas" id="map-canvas" aria-label="附近地图"></div><span class="map-loading mono">加载中…</span><span class="map-credit mono">MAP © 高德地图</span></div><figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch here"></span>你在这里</span><span class="legend-item"><span class="legend-swatch"></span>活动点位</span><span class="legend-item"><span class="legend-swatch done"></span>附近照片</span></figcaption></figure>`;
 }
 function spotDistanceText(s){
@@ -1130,16 +1132,15 @@ function spotDistanceText(s){
 }
 function geoStatusMarkup(){
   if(mode!=='api')return '';
-  if(geo.state==='locating')return '<p class="geo-note mono">正在定位…</p>';
-  if(geo.state==='denied')return '<p class="geo-note mono">未授权定位 · 地图显示活动一带 · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="geo-retry">重新定位</button></p>';
+  if(geo.state==='locating')return '<p class="geo-note mono">正在定位…（请在浏览器弹窗中允许位置权限）</p>';
+  if(geo.state==='failed'||geo.state==='denied')return '<p class="geo-note mono">定位未完成（未授权或不可用）。<button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:6px 10px;display:inline-flex;margin-left:10px" data-action="geo-start">重新定位</button></p>';
   if(geo.state==='ok'){
     const near=nearestSpot(geo.coords);
     return '<p class="geo-note mono">已定位 · 距最近点位 '+fmtDistance(near?near.distance:0)+(near&&near.distance<=(near.spot.radiusMeters||200)?' · 在打卡范围内':'')+'</p>';
   }
-  return '';
+  return '<p class="geo-note mono"><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:8px 12px" data-action="geo-start">开启定位</button><span style="margin-left:10px">开启后，地图以你的真实位置为中心。</span></p>';
 }
 function renderExplore(){
-  if(mode==='api'&&geo.state==='idle')startLocate();
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
   const devNote=devSkipGeo?'<p class="geo-note mono">开发模式 · 定位模拟在静安点位 · 公网部署为真实定位</p>':'';
   const eventChip=eventData
@@ -1522,6 +1523,7 @@ function handleAction(button){
     case 'redeem':mode==='api'?checkinApi(button.dataset.spot):redeemOffline(button.dataset.spot);break;
     case 'reconnect':tryReconnect();break;
     case 'geo-retry':geo.state='idle';startLocate();render();break;
+    case 'geo-start':startLocate();render();break;
     case 'map-engine-toggle':{
       mapProviderName=mapProviderName==='amap'?'maplibre':'amap';
       try{localStorage.setItem('outie.map-provider',mapProviderName);}catch(e){}
