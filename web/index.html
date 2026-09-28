@@ -1022,9 +1022,9 @@ function startLocate(){
     geo.state='ok';
     geo.via=(Number(coords.accuracy)||0)>1000?'ip':'gps';
     updateExploreDynamic();
-    const near=nearestSpot(geo.coords);
-    const head=geo.via==='ip'?'IP 定位成功（城市级）':'定位成功';
-    toast(head+' · 距最近点位 '+fmtDistance(near?near.distance:0));
+    loadNearStream(true);
+    const acc=Math.round(geo.accuracy||0);
+    toast('定位成功，找到你了'+(acc>0?' (精度约'+acc+'米)':''));
   }).catch(async err=>{
     if(mode!=='api')return;
     // 旧官网同款：GPS 均失败 → 服务端 IP 定位（城市级，服务端发起，不依赖浏览器权限）
@@ -1037,8 +1037,11 @@ function startLocate(){
         geo.accuracy=Number(loc.accuracyRadiusMeters)>0?Number(loc.accuracyRadiusMeters):2000;
         geo.state='ok';
         updateExploreDynamic();
-        const near=nearestSpot(geo.coords);
-        toast('IP 定位成功（城市级）· 距最近点位 '+fmtDistance(near?near.distance:0));
+        loadNearStream(true);
+        const cityText=[loc.province,loc.city].filter(Boolean).join(' ');
+        const acc=Number(geo.accuracy)||0;
+        const accText=acc>0?(acc>=1000?' • 约'+(acc/1000).toFixed(1)+'公里范围':' • 约'+acc+'米范围'):'';
+        toast('IP定位成功: '+(cityText||'当前区域')+accText);
         return;
       }
     }catch(e){/* IP 定位也不可用 */}
@@ -1161,16 +1164,6 @@ function spotDistanceText(s){
   if(mode!=='api'||geo.state!=='ok'||!geo.coords||!Number.isFinite(s.lng))return '';
   const d=haversineMeters(geo.coords,{lng:s.lng,lat:s.lat});
   return `<span class="spot-dist mono">${fmtDistance(d)}</span>`;
-}
-function geoStatusMarkup(){
-  if(mode!=='api')return '';
-  if(geo.state==='locating')return '<p class="geo-note mono">正在定位…（请在浏览器弹窗中允许位置权限）</p>';
-  if(geo.state==='failed'||geo.state==='denied')return '<p class="geo-note mono">定位未完成（未授权或不可用）。<button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:6px 10px;display:inline-flex;margin-left:10px" data-action="geo-start">重新定位</button></p>';
-  if(geo.state==='ok'){
-    const near=nearestSpot(geo.coords);
-    return '<p class="geo-note mono">已定位 · 距最近点位 '+fmtDistance(near?near.distance:0)+(near&&near.distance<=(near.spot.radiusMeters||200)?' · 在打卡范围内':'')+'</p>';
-  }
-  return '<p class="geo-note mono"><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:8px 12px" data-action="geo-start">开启定位</button><span style="margin-left:10px">开启后，地图以你的真实位置为中心。</span></p>';
 }
 function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
