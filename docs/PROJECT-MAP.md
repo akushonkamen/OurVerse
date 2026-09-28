@@ -50,7 +50,7 @@
 | 模型 | 关键字段 | 关系 |
 | --- | --- | --- |
 | `OutieEvent` | key, name, active, spots[{key,zone,rewardName,lookId,amapPoiId,address,lng,lat,radiusMeters}] | spot 是打卡目标，可绑定高德真实地点 |
-| `OutiePet` | identityKey(唯一), name, eventKey, rewards{spotKey:Date}, equipped, evolved | identityKey = `a:<anonymousId>` 或 `u:<userId>` |
+| `OutiePet` | identityKey(索引), name, rewards{eventKey:{spotKey:Date}}, evolvedEvents[eventKey], equipped | **宠物跨活动存在**（2026-09-28 重构）；identityKey = `a:<匿名id>` 或 `u:<用户id>`，登录时匿名宠物自动过户 |
 | `Bar` | amapPoiId, name, lng/lat, checkins[]（内嵌） | 旧打卡数据，冷启动城市内容 |
 | `Photo` | url, lat/lng, caption, owner/anonymous | 「现场」照片流；合成照也走这里 |
 | `User` | username, avatar, github 绑定 | 可选绑定，匿名优先 |

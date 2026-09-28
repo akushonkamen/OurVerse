@@ -40,21 +40,46 @@ const requireIdentity = req => {
 
 const findActiveEvent = () => OutieEvent.findOne({ active: true }).sort({ createdAt: -1 });
 
+const findLatestPet = identityKey => OutiePet.findOne({ identityKey }).sort({ createdAt: -1 });
+
+// 旧版数据结构（扁平 rewards：spotKey -> Date，加 evolved 布尔 + eventKey）惰性迁移到按活动分组
+const isNestedEventRewards = v => (v instanceof Map) || (v && typeof v === 'object' && !(v instanceof Date));
+const normalizeLegacyPet = pet => {
+  const entries = Object.entries(pet.rewards || {});
+  const legacyIsFlat = entries.some(([, v]) => !isNestedEventRewards(v));
+  if (legacyIsFlat || (pet.evolved && pet.eventKey && !pet.evolvedEvents.includes(pet.eventKey))) {
+    const eventKey = pet.eventKey || 'legacy';
+    const flat = {};
+    for (const [k, v] of entries) {
+      if (!isNestedEventRewards(v)) flat[k] = v;
+    }
+    pet.rewards = { [eventKey]: flat };
+    if (pet.evolved && pet.eventKey && !pet.evolvedEvents.includes(pet.eventKey)) {
+      pet.evolvedEvents.push(pet.eventKey);
+    }
+    pet.markModified('rewards');
+    pet.markModified('evolvedEvents');
+    return pet.save();
+  }
+  return Promise.resolve(pet);
+};
+
 // 登录后若账号名下没有宠物，把当前匿名身份的宠物过户到账号，进度无缝衔接
+// 注意：带 Bearer token 时中间件会把 req.anonymousId 置空，这里直接读原始请求头
 const maybeMigrateAnonymousPet = async req => {
-  if (!req.userId || !req.anonymousId) return;
+  if (!req.userId) return;
+  const headerAnonId = (req.headers && req.headers['x-anonymous-id']) || '';
+  if (!headerAnonId) return;
   const userKey = `u:${req.userId}`;
-  const anonKey = `a:${req.anonymousId}`;
+  const anonKey = `a:${headerAnonId}`;
   if (userKey === anonKey) return;
-  const existingUserPet = await OutiePet.findOne({ identityKey: userKey }).sort({ createdAt: -1 });
+  const existingUserPet = await findLatestPet(userKey);
   if (existingUserPet) return;
-  const anonPet = await OutiePet.findOne({ identityKey: anonKey }).sort({ createdAt: -1 });
+  const anonPet = await findLatestPet(anonKey);
   if (!anonPet) return;
   anonPet.identityKey = userKey;
   await anonPet.save();
 };
-
-const findPet = (identityKey, eventKey) => OutiePet.findOne({ identityKey, eventKey });
 
 const serializeSpot = spot => ({
   key: spot.key,
@@ -78,16 +103,31 @@ const serializeEvent = event => ({
   spots: (event.spots || []).map(serializeSpot)
 });
 
-const serializePet = pet => ({
-  id: String(pet._id),
-  identityKey: pet.identityKey,
-  name: pet.name,
-  eventKey: pet.eventKey,
-  rewards: Object.fromEntries(pet.rewards instanceof Map ? pet.rewards : new Map(Object.entries(pet.rewards || {}))),
-  equipped: pet.equipped || 'base',
-  evolved: Boolean(pet.evolved),
-  createdAt: pet.createdAt
-});
+const collectedSpotKeys = pet => {
+  const keys = new Set();
+  for (const perEvent of Object.values(pet.rewards || {})) {
+    for (const spotKey of Object.keys(perEvent || {})) keys.add(spotKey);
+  }
+  return keys;
+};
+
+const eventRewardsOf = (pet, eventKey) => (pet.rewards && pet.rewards[eventKey]) || {};
+
+const serializePet = (pet, event) => {
+  const eventKey = event ? event.key : null;
+  const rewards = eventKey ? eventRewardsOf(pet, eventKey) : {};
+  const evolved = eventKey ? pet.evolvedEvents.includes(eventKey) : false;
+  return {
+    id: String(pet._id),
+    identityKey: pet.identityKey,
+    name: pet.name,
+    eventKey,
+    rewards,
+    evolved,
+    equipped: pet.equipped || 'base',
+    createdAt: pet.createdAt
+  };
+};
 
 const getCurrentEventData = async () => {
   const event = await findActiveEvent();
@@ -97,34 +137,30 @@ const getCurrentEventData = async () => {
   };
 };
 
+// 领养与活动解耦：任何时候都可以拥有宠物；活动只决定去哪儿收集
 const upsertPetForIdentity = async req => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
 
   const event = await findActiveEvent();
-  if (!event) {
-    throw new ServiceError(404, '当前没有进行中的活动');
-  }
+  const pet = await findLatestPet(identityKey);
+  if (pet) await normalizeLegacyPet(pet);
 
   const { name, equipped } = req.body || {};
   const trimmedName = typeof name === 'string' ? name.trim().slice(0, 12) : '';
-  const pet = await findPet(identityKey, event.key);
 
   if (pet) {
     if (trimmedName) {
       pet.name = trimmedName;
     }
     if (typeof equipped === 'string') {
-      const allowedEquipped = ['base', ...LOOK_IDS.filter(look => pet.rewards.has(look))];
-      if (pet.evolved) {
-        allowedEquipped.push('evolved');
-      }
-      if (allowedEquipped.includes(equipped)) {
+      const owned = ['base', ...collectedSpotKeys(pet), ...(pet.evolvedEvents.length ? ['evolved'] : [])];
+      if (owned.includes(equipped)) {
         pet.equipped = equipped;
       }
     }
     await pet.save();
-    return { success: true, created: false, pet: serializePet(pet), event: serializeEvent(event) };
+    return { success: true, created: false, pet: serializePet(pet, event), event: event ? serializeEvent(event) : null };
   }
 
   if (!trimmedName) {
@@ -134,24 +170,29 @@ const upsertPetForIdentity = async req => {
   const newPet = await OutiePet.create({
     identityKey,
     name: trimmedName,
-    eventKey: event.key,
     rewards: {},
-    equipped: 'base',
-    evolved: false
+    evolvedEvents: [],
+    equipped: 'base'
   });
 
-  return { success: true, created: true, pet: serializePet(newPet), event: serializeEvent(event) };
+  return { success: true, created: true, pet: serializePet(newPet, event), event: event ? serializeEvent(event) : null };
 };
 
 const getPetState = async req => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
-  const pet = await OutiePet.findOne({ identityKey }).sort({ createdAt: -1 });
-  return { pet: pet ? serializePet(pet) : null };
+  const pet = await findLatestPet(identityKey);
+  if (pet) await normalizeLegacyPet(pet);
+  if (!pet) {
+    return { pet: null };
+  }
+  const event = await findActiveEvent();
+  return { pet: serializePet(pet, event) };
 };
 
 const checkinAtSpot = async req => {
   const identityKey = requireIdentity(req);
+  await maybeMigrateAnonymousPet(req);
 
   const event = await findActiveEvent();
   if (!event) {
@@ -168,7 +209,8 @@ const checkinAtSpot = async req => {
     throw new ServiceError(400, '活动点位不存在');
   }
 
-  const pet = await findPet(identityKey, event.key);
+  const pet = await findLatestPet(identityKey);
+  if (pet) await normalizeLegacyPet(pet);
   if (!pet) {
     throw new ServiceError(404, '请先领养宠物');
   }
@@ -189,25 +231,27 @@ const checkinAtSpot = async req => {
     throw new ServiceError(400, '缺少定位坐标，请允许定位后重试');
   }
 
-  if (pet.rewards.has(spotKey)) {
+  const otherEvents = { ...(pet.rewards || {}) };
+  delete otherEvents[event.key];
+  const perEvent = { ...eventRewardsOf(pet, event.key) };
+  if (perEvent[spotKey]) {
     return {
       success: true,
       alreadyOwned: true,
       newlyEvolved: false,
       reward: { spotKey, lookId: spot.lookId, rewardName: spot.rewardName || '' },
-      pet: serializePet(pet)
+      pet: serializePet(pet, event)
     };
   }
 
-  pet.rewards.set(spotKey, new Date());
-  const rewardCount = LOOK_IDS.filter(look => pet.rewards.has(look)).length;
+  perEvent[spotKey] = new Date();
+  pet.rewards = { ...otherEvents, [event.key]: perEvent };
+
+  const collected = Object.keys(perEvent).length;
   let newlyEvolved = false;
-  if (rewardCount >= LOOK_IDS.length && !pet.evolved) {
-    pet.evolved = true;
+  if (collected >= LOOK_IDS.length && !pet.evolvedEvents.includes(event.key)) {
+    pet.evolvedEvents.push(event.key);
     newlyEvolved = true;
-  }
-  if (!LOOK_IDS.includes(pet.equipped)) {
-    pet.equipped = 'base';
   }
 
   await pet.save();
@@ -217,7 +261,7 @@ const checkinAtSpot = async req => {
     alreadyOwned: false,
     newlyEvolved,
     reward: { spotKey, lookId: spot.lookId, rewardName: spot.rewardName || '' },
-    pet: serializePet(pet)
+    pet: serializePet(pet, event)
   };
 };
 
