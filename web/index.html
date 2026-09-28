@@ -1116,10 +1116,11 @@ function spotDistanceText(s){
 function renderExplore(){
   if(mode==='api'&&geo.state==='idle')startLocate();
   if(mode==='api'&&nearStatus==='idle')loadNearStream();
+  const devNote=devSkipGeo?'<p class="geo-note mono">开发模式 · 定位模拟在静安点位 · 公网部署为真实定位</p>':'';
   const eventChip=eventData
     ?`<section class="event-banner" aria-label="进行中的活动"><div class="event-banner-main" style="padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="event-tags mono" style="margin:0 0 6px"><span class="event-tag">进行中 · ${esc(eventKeyText())}</span></div><p class="event-sub" style="margin:0">${count()+'/3 点位已打卡'}</p></div><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:10px 16px" data-action="nav" data-view="event">去打卡</button></div></section>`
     :`<p class="geo-note mono">当前没有进行中的活动 · 地图与附近照片照常可用。</p>`;
-  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
+  return `<div class="page-intro"><div><h1>去哪儿</h1></div></div>${mode==='api'?'':offlineNote()}${devNote}${cityMapMarkup()}${nearSectionMarkup()}${mode==='api'?eventChip:''}`;
 }
 function renderEventPage(){
   if(mode!=='api'||!eventData){
