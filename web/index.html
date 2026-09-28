@@ -431,7 +431,7 @@ async function apiFetch(path,options={}){
 }
 async function probeApi(){
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),3500);
+  const timer=setTimeout(()=>controller.abort(),10000);
   try{
     const res=await fetch(API_BASE+'/outie/event/current',{signal:controller.signal,headers:authHeaders()});
     clearTimeout(timer);
