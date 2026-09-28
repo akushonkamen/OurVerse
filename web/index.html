@@ -741,9 +741,9 @@ function offlineNote(){
 function render(){
   document.body.classList.toggle('has-pet',Boolean(state.name));
   document.getElementById('storage-warning').hidden=storageOK;
-  for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=!state.name;nav.innerHTML=state.name?navMarkup():'';}
+  for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=false;nav.innerHTML=navMarkup();}
   document.getElementById('footer-local').textContent=eventKeyText();
-  main.innerHTML=!state.name?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='event'?renderEventPage():view==='mine'?renderMinePage():renderWelcome();
+  main.innerHTML=(view==='pet'&&!state.name)?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='event'?renderEventPage():view==='mine'?renderMinePage():renderWelcome();
   if(view==='mine'){updateAccountState();loadMinePhotos();}
   updateAccountHeader();
   if(view==='explore'){initExploreMap();}
