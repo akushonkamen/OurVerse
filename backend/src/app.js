@@ -91,10 +91,18 @@ if (Number.isFinite(config.maxFileSize) && config.maxFileSize > 0) {
   app.use(express.json({ limit: unlimitedBodyPayloadLimit }));
   app.use(express.urlencoded({ limit: unlimitedBodyPayloadLimit, extended: true }));
 }
-app.use(rateLimit({
+// 限流只作用于 API：静态资源（vendor/uploads）与地图瓦片代理单独高限额，避免刷几次页面就 429
+const apiLimiter = rateLimit({
   windowMs: config.rateLimit.windowMs,
   max: config.rateLimit.maxRequests
-}));
+});
+const assetLimiter = rateLimit({
+  windowMs: config.rateLimit.windowMs,
+  max: Math.max(config.rateLimit.maxRequests * 20, 2000)
+});
+app.use('/api/outie/tiles', assetLimiter);
+app.use('/vendor', assetLimiter);
+app.use('/api', apiLimiter);
 app.use(createSessionMiddleware());
 app.use(passport.initialize());
 
@@ -113,6 +121,7 @@ app.use('/vendor', express.static(path.resolve(__dirname, '..', 'public', 'vendo
 const websitePath = path.resolve(__dirname, '..', 'public', 'website.html');
 if (fs.existsSync(websitePath)) {
   app.get('/website.html', (req, res) => {
+    res.set('Cache-Control', 'no-cache');
     res.sendFile(websitePath);
   });
 }
@@ -121,8 +130,9 @@ if (fs.existsSync(websitePath)) {
 const outieWebPath = path.resolve(__dirname, '..', '..', 'web', 'index.html');
 const homePagePath = fs.existsSync(outieWebPath) ? outieWebPath : websitePath;
 if (fs.existsSync(homePagePath)) {
-  // 在生产环境下也支持根路径访问
+  // 在生产环境下也支持根路径访问；页面本身禁缓存，避免更新后浏览器滞留旧版
   app.get('/', (req, res) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.sendFile(homePagePath);
   });
 }
