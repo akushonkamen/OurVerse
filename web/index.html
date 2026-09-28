@@ -882,6 +882,7 @@ const MapEngines={
     },
     setCenter(map,lng,lat){map.setCenter([lng,lat]);},
     setZoom(map,z){try{map.setZoom(z);}catch(e){}},
+    nudge(map){try{map.triggerRepaint&&map.triggerRepaint();}catch(e){}try{map.setCenter(map.getCenter());}catch(e){}},
     onReady(map,cb){map.on('complete',cb);},
     resize(map){try{map.resize();}catch(e){}},
     getCanvas(map){try{return map.getCanvas();}catch(e){return null;}},
@@ -943,6 +944,7 @@ const MapEngines={
     },
     setCenter(map,lng,lat){map.setCenter([lng,lat]);},
     setZoom(map,z){try{map.setZoom(z);}catch(e){}},
+    nudge(map){try{map.triggerRepaint&&map.triggerRepaint();}catch(e){}try{map.setCenter(map.getCenter());}catch(e){}},
     onReady(map,cb){map.on('load',cb);},
     resize(map){try{map.resize();}catch(e){}},
     getCanvas(map){try{return map.getCanvas();}catch(e){return null;}},
@@ -1150,15 +1152,29 @@ function updateExploreDynamic(){
 }
 function renderMapMarkers(){
   if(!realMap)return;
-  for(const m of mapMarkers){try{m.setMap(null);}catch(e){}}
+  for(const m of mapMarkers){try{m.setMap(null);}catch(e){}try{m.remove&&m.remove();}catch(e){}try{m.el&&m.el.remove();}catch(e){}}
   mapMarkers=[];
-  const addMarker=(position,el,anchor,zIndex)=>{
+  const addNative=(position,el,anchor,zIndex)=>{
     mapMarkers.push(mapEngine().addEl(realMap,position.lng??position[0],position.lat??position[1],el,anchor,zIndex));
+  };
+  const addManual=(lng,lat,el,via)=>{
+    // 锁定地图：手动投影定位最可靠（原生 Marker 对部分元素不排版）
+    el.style.position='absolute';
+    el.style.transform=via==='center'?'translate(-50%,-50%)':'translate(-50%,-100%)';
+    const holder=document.getElementById('map-canvas');
+    let p=null;
+    try{p=realMap.project?realMap.project([lng,lat]):(realMap.lngLatToContainer?realMap.lngLatToContainer([lng,lat]):null);}catch(e){}
+    if(p&&Number.isFinite(p.x)&&Number.isFinite(p.y)){
+      el.style.left=p.x+'px';
+      el.style.top=p.y+'px';
+      holder.appendChild(el);
+      mapMarkers.push({el,remove(){el.remove();},setMap(){el.remove();}});
+    }
   };
   if(eventData){
     for(const s of SPOTS){
       if(!Number.isFinite(s.lng)||!Number.isFinite(s.lat))continue;
-      addMarker([s.lng,s.lat],mapMarkerButton(s),'center',120);
+      addNative([s.lng,s.lat],mapMarkerButton(s),'center',120);
     }
   }
   const clusters=clusterNearPhotos();
@@ -1171,11 +1187,12 @@ function renderMapMarkers(){
     pin.dataset.cluster=String(ci);
     pin.title=(c.items.length>1?c.items.length+' 张照片 · ':'')+(first.caption||'现场照片');
     pin.innerHTML=`<img src="${esc(photoAbsUrl(first.url))}" alt="">${c.items.length>1?`<span class="pin-count mono">${c.items.length}</span>`:''}`;
-    addMarker([c.lng,c.lat],pin,'bottom-center',140);
+    addManual(c.lng,c.lat,pin,'bottom');
   });
   if(geo.state==='ok'&&geo.coords){
-    addMarker([geo.coords.lng,geo.coords.lat],youDotElement(),'center',130);
+    addManual(geo.coords.lng,geo.coords.lat,youDotElement(),'center');
   }
+  if(realMap)mapEngine().nudge(realMap);
 }
 function cityMapMarkup(){
   if(mode!=='api')return cityMapSchematicMarkup();
