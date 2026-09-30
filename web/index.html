@@ -709,21 +709,34 @@ function qrSVG(){
 
 /* ---------- photo composite (client-side, no AI) ---------- */
 /* ---------- 拍一张：拍照/选图 + 一句描述 + 发到现场 ---------- */
-let postingPhoto=false;
-function fileToDataUrl(file){
+let postingPhoto=false,postPresetEvent=null,postNearEvents=null;
+function compressImage(file,maxSide){
   return new Promise((resolve,reject)=>{
-    const reader=new FileReader();
-    reader.onerror=()=>reject(new Error('照片读取失败'));
-    reader.onload=()=>resolve(String(reader.result));
-    reader.readAsDataURL(file);
+    const img=new Image();
+    const url=URL.createObjectURL(file);
+    img.onload=()=>{
+      try{
+        const scale=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight));
+        const w=Math.max(1,Math.round(img.naturalWidth*scale)),h=Math.max(1,Math.round(img.naturalHeight*scale));
+        const c=document.createElement('canvas');c.width=w;c.height=h;
+        const g=c.getContext('2d');g.drawImage(img,0,0,w,h);
+        URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg',0.85));
+      }catch(e){URL.revokeObjectURL(url);reject(e);}
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('照片读取失败'));};
+    img.src=url;
   });
 }
-function postCoords(){
-  if(geo.state==='ok'&&geo.coords)return geo.coords;
-  return streamCoords()||LIVE_CENTER;
+function postEventById(key){
+  for(const list of [postNearEvents,nearEvents]){
+    if(Array.isArray(list)){const hit=list.find(x=>x.key===key);if(hit)return hit;}
+  }
+  return null;
 }
-function startPhotoPost(){
+function startPhotoPost(presetEvent){
   if(mode!=='api'){toast('离线模式，连上后可发照片。');return;}
+  postPresetEvent=presetEvent?{key:String(presetEvent.key||presetEvent),name:String(presetEvent.name||'')}:(presetEvent&&typeof presetEvent==='object'?presetEvent:null);
   const input=document.createElement('input');
   input.type='file';
   input.accept='image/*';
@@ -733,7 +746,8 @@ function startPhotoPost(){
     const file=input.files&&input.files[0];
     if(!file)return;
     try{
-      const dataUrl=await fileToDataUrl(file);
+      toast('正在处理照片…');
+      const dataUrl=await compressImage(file,1600);
       openPhotoPostModal(dataUrl);
     }catch(e){toast('照片读取失败。');}
   });
@@ -741,30 +755,48 @@ function startPhotoPost(){
   input.click();
   setTimeout(()=>input.remove(),60000);
 }
+/* 坐标决策：真实定位优先；勾选/预设了活动则可用活动中心；否则不可发布 */
+function resolvePostCoords(){
+  if(geo.state==='ok'&&geo.coords)return {coords:geo.coords,real:true};
+  const evtCb=document.querySelector('.post-evt:checked');
+  const key=postPresetEvent?postPresetEvent.key:(evtCb?evtCb.value:null);
+  if(key){
+    const e=postEventById(key);
+    if(e&&e.center)return {coords:e.center,real:false,eventKey:key};
+  }
+  return {error:true};
+}
 function openPhotoPostModal(dataUrl){
-  const c=postCoords();
+  const hasLoc=geo.state==='ok'&&geo.coords;
   modal(
     '<p class="modal-eyebrow mono">NEW PHOTO / 拍一张</p>'
     +'<h2 id="dialog-title">发到现场</h2>'
     +'<div class="detail-photo"><img id="post-preview" src="'+dataUrl+'" alt="要发布的照片"></div>'
     +'<form id="photo-post-form" class="account-form">'
     +'<textarea id="post-caption" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;line-height:1.6;resize:none" rows="2" maxlength="140" placeholder="你想留下什么诗句"></textarea>'
-    +'<div id="post-events"><p class="about-list mono">正在查找附近的活动…</p></div>'
-    +'<p class="about-list mono">定位：'+(geo.state==='ok'&&geo.coords?'你当前的位置':'活动一带')+'</p>'
+    +'<div id="post-events"><p class="about-list mono">'+(postPresetEvent?'将归入活动：'+esc(postPresetEvent.name):(hasLoc?'正在查找附近的活动…':'正在确认定位…'))+'</p></div>'
+    +'<p class="about-list mono" id="post-loc-note">'+(hasLoc?'定位：你当前的位置':'定位：尚未成功')+'</p>'
     +'<div class="modal-actions"><button class="btn btn-primary" type="submit">发到现场</button><button type="button" class="text-btn" data-action="close">取消</button></div>'
     +'</form>',
     'photo-post',true
   );
   (async()=>{
     const box=document.getElementById('post-events');
-    if(!box||geo.state!=='ok'||!geo.coords){if(box)box.innerHTML='<p class="about-list mono">未定位：照片不会归入活动。</p>';return;}
+    if(!box)return;
+    if(postPresetEvent){box.innerHTML='';return;}
+    if(geo.state!=='ok'||!geo.coords){
+      box.innerHTML='<p class="about-list mono">定位未完成：需要先定位成功才能发布照片。</p>';
+      const btn=document.querySelector('#photo-post-form button[type="submit"]');
+      if(btn){btn.disabled=true;btn.textContent='需要定位';}
+      return;
+    }
     try{
       const data=await apiFetch(`/outie/events/nearby?lat=${geo.coords.lat}&lng=${geo.coords.lng}&radius=500`);
-      const evs=(data&&data.events)||[];
-      box.innerHTML=evs.length
-        ?'<p class="about-list mono">归入附近的活动（默认不归）：</p>'+evs.slice(0,4).map(e=>`<label class="name-label" style="margin:4px 0;display:flex;gap:8px;align-items:center"><input type="checkbox" class="post-evt" value="${esc(e.key)}"> ${esc(e.name)}（${fmtDistance(e.distanceMeters)}）</label>`).join('')
+      postNearEvents=(data&&data.events)||[];
+      box.innerHTML=postNearEvents.length
+        ?'<p class="about-list mono">归入附近的活动（默认不归）：</p>'+postNearEvents.slice(0,4).map(e=>`<label class="name-label" style="margin:4px 0;display:flex;gap:8px;align-items:center"><input type="checkbox" class="post-evt" value="${esc(e.key)}"> ${esc(e.name)}（${fmtDistance(e.distanceMeters)}）</label>`).join('')
         :'<p class="about-list mono">附近没有进行中的活动：照片不会归入活动。</p>';
-    }catch(e){if(box)box.innerHTML='<p class="about-list mono">未定位：照片不会归入活动。</p>';}
+    }catch(e){box.innerHTML='<p class="about-list mono">附近活动查询失败：照片不会归入活动。</p>';}
   })();
 }
 async function publishPhotoPost(){
@@ -772,24 +804,34 @@ async function publishPhotoPost(){
   const dataUrl=document.getElementById('post-preview')?.getAttribute('src');
   const caption=document.getElementById('post-caption').value.trim();
   if(!dataUrl)return;
+  const decision=resolvePostCoords();
+  if(decision.error){
+    toast('需要定位成功才能发布：点地图右上角刷新重试，或允许位置权限。');
+    return;
+  }
   postingPhoto=true;
   const submitBtn=document.querySelector('#photo-post-form button[type="submit"]');
   if(submitBtn)submitBtn.disabled=true;
   try{
     const blob=await (await fetch(dataUrl)).blob();
-    const c=postCoords();
+    const c=decision.coords;
+    const evtCb=document.querySelector('.post-evt:checked');
+    const eventKey=postPresetEvent?postPresetEvent.key:(evtCb?evtCb.value:'');
     const form=new FormData();
     form.append('photo',blob,'outie-photo.jpg');
     if(caption)form.append('caption',caption);
-    const evtCb=document.querySelector('.post-evt:checked');
-    if(evtCb)form.append('eventKey',evtCb.value);
+    if(eventKey)form.append('eventKey',eventKey);
     form.append('userLat',String(c.lat));
     form.append('userLng',String(c.lng));
     form.append('locationSource','amap');
     await apiFetch('/photos/anonymous',{method:'POST',body:form});
     postingPhoto=false;
-    nearPhotos=null;nearStatus='idle';minePhotos=null;mineStatus='idle';
-    closeModal();navigate('explore');loadNearStream(true);toast('已发到现场。');
+    nearPhotos=null;nearStatus='idle';minePhotos=null;mineStatus='idle';mineAlbumIdx=null;
+    nearEvents=null;nearEventsStatus='idle';
+    closeModal();
+    navigate('explore');
+    loadNearStream(true);loadNearEvents(true);
+    toast(eventKey?'已发到现场，并归入活动。':'已发到现场。');
   }catch(error){
     postingPhoto=false;
     if(submitBtn)submitBtn.disabled=false;
@@ -1412,6 +1454,7 @@ function openEventDetail(key){
       document.getElementById('event-detail').innerHTML=
         (e.coverUrl?`<div class="detail-photo"><img src="${esc(photoAbsUrl(e.coverUrl))}" alt=""></div>`:'')
         +`<p class="modal-copy">${esc(e.subtitle||'')} · ${e.spots.length} 个点位</p>`
+        +`<div class="modal-actions" style="margin:12px 0 4px"><button type="button" class="btn btn-dark" data-action="photo-new" data-event='${esc(JSON.stringify({key:e.key,name:e.name}))}'>在这场活动拍一张</button></div>`
         +`<div class="evt-spots">${spots}</div>`
         +((data.promoPhotos||[]).length?`<h3 style="margin:14px 0 6px">现场宣传照</h3><div class="event-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${covers}</div>`:'');
     }catch(error){
@@ -1781,7 +1824,7 @@ function rewardStage(id,label='NEW LOOK',stamp='COLLECTED'){
 }
 function showReward(id){
   const s=SPOTS.find(s=>s.id===id);const all=count()===SPOTS.length;
-  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="photo-new" type="button">拍一张，发到现场</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
+  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="photo-new"${pet&&pet.eventKey?` data-event='${esc(JSON.stringify({key:pet.eventKey,name:eventKeyText()}))}'`:''} type="button">拍一张，发到现场</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
 }
 function showLook(id){
   const look=lookFor(id);if(id==='evolved'&&!state.evolved&&count()===3){showEvolutionPrompt();return;}
@@ -1891,7 +1934,7 @@ function handleAction(button){
       }catch(error){toast(errText(error));}
     })();break;
     case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';render();startLocate();break;
-    case 'photo-new':startPhotoPost();break;
+    case 'photo-new':startPhotoPost(button.dataset.event?JSON.parse(button.dataset.event):null);break;
     case 'dev-toggle':devMode=!devMode;try{localStorage.setItem('outie.dev-mode',devMode?'on':'off');}catch(e){}render();toast(devMode?'活动方模式已开启。':'活动方模式已关闭。');break;
     case 'wb-use-loc':{
       const i=Number(button.dataset.idx);const c=(geo.state==='ok'&&geo.coords)?geo.coords:(streamCoords()||{lng:121.4426,lat:31.224});
@@ -1905,7 +1948,7 @@ function handleAction(button){
       input.addEventListener('change',async()=>{
         const file=input.files&&input.files[0];if(!file)return;
         try{
-          const dataUrl=await fileToDataUrl(file);
+          const dataUrl=await compressImage(file,1600);
           const blob=await (await fetch(dataUrl)).blob();
           const fd=new FormData();
           fd.append('photo',blob,'promo.jpg');
@@ -1969,6 +2012,11 @@ document.addEventListener('submit',async event=>{
   if(event.target.id==='wb-form'){
     event.preventDefault();
     submitWorkbench();
+    return;
+  }
+  if(event.target.id==='photo-post-form'){
+    event.preventDefault();
+    publishPhotoPost();
     return;
   }
   if(event.target.id==='comment-form'){
