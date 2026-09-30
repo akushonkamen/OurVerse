@@ -741,6 +741,15 @@ function compressImage(file,maxSide){
     img.src=url;
   });
 }
+/* dataURL 转 Blob：CSP 的 connect-src 不含 data:，fetch(data:) 在生产会被拦，必须本地解码 */
+function dataUrlToBlob(dataUrl){
+  const[meta,b64]=String(dataUrl).split(',');
+  const mime=(String(meta).match(/^data:([^;]+)/)||[])[1]||'image/jpeg';
+  const bin=atob(b64);
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes],{type:mime});
+}
 function postEventById(key){
   for(const list of [postNearEvents,nearEvents]){
     if(Array.isArray(list)){const hit=list.find(x=>x.key===key);if(hit)return hit;}
@@ -849,7 +858,7 @@ async function publishPhotoPost(){
       if(errEl)errEl.textContent='定位服务暂不可用：请点地图右上角「刷新」重试。';
       return;
     }
-    const blob=await (await fetch(dataUrl)).blob();
+    const blob=dataUrlToBlob(dataUrl);
     const c=decision.coords;
     const evtCb=document.querySelector('.post-evt:checked');
     const eventKey=postPresetEvent?postPresetEvent.key:(evtCb?evtCb.value:'');
@@ -1989,7 +1998,7 @@ function handleAction(button){
         const file=input.files&&input.files[0];if(!file)return;
         try{
           const dataUrl=await compressImage(file,1600);
-          const blob=await (await fetch(dataUrl)).blob();
+          const blob=dataUrlToBlob(dataUrl);
           const fd=new FormData();
           fd.append('photo',blob,'promo.jpg');
           fd.append('caption','');
