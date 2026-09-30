@@ -368,6 +368,13 @@ a.btn{text-decoration:none}
 .wb-preview{width:44px;height:34px;display:inline-flex;align-items:center;justify-content:center;border:2px solid var(--ink);background:var(--paper)}
 .wb-preview svg{width:38px;height:28px}
 .wb-event{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.album-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.album-card{display:block;border:2px solid var(--ink);background:var(--paper);padding:6px;text-align:left;cursor:pointer}
+.album-card:hover{transform:translateY(-2px)}
+.album-card img{width:100%;height:96px;object-fit:cover;display:block;background:var(--faint)}
+.album-name{display:block;font-size:12px;font-weight:700;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.album-count{display:block;font-size:9px;color:var(--muted);letter-spacing:.1em;margin-top:2px}
+.album-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -803,7 +810,7 @@ function render(){
   for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=false;nav.innerHTML=navMarkup();}
   document.getElementById('footer-local').textContent=eventKeyText();
   main.innerHTML=(view==='pet'&&!state.name)?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='event'?renderEventPage():view==='mine'?renderMinePage():renderWelcome();
-  if(view==='mine'){updateAccountState();loadMinePhotos();if(devMode)renderWorkbench();}
+  if(view==='mine'){updateAccountState();(minePhotos?renderMineGrid():loadMinePhotos());if(devMode)renderWorkbench();}
   updateAccountHeader();
   if(view==='explore'){initExploreMap();}
   else destroyRealMap();
@@ -1347,11 +1354,7 @@ function nearBody(){
   if(!nearPhotos||!nearPhotos.length)return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>附近还没有照片。<br>到现场拍一张合成照发出来，这里就会有第一张。</p></div>`;
   return nearPhotos.map(nearCell).join('');
 }
-function renderNearGrid(){
-  if(nearTab==='events'){const wrap=main.querySelector('#near-body');if(wrap)wrap.innerHTML=eventsBody();return;}
-  const grid=main.querySelector('#near-grid');
-  if(grid)grid.innerHTML=nearBody();
-}
+
 function nearSectionMarkup(){
   const n=nearStatus==='ready'&&nearPhotos?nearPhotos.length:0;
   const ne=nearEventsStatus==='ready'&&nearEvents?nearEvents.length:0;
@@ -1360,6 +1363,11 @@ function nearSectionMarkup(){
     ?`<button type="button" class="btn btn-dark photo-new-btn" data-action="photo-new">${pixIcon('camera')}<span>拍一张</span></button><button type="button" class="live-status-btn" data-action="near-refresh">刷新</button>`
     :`<button type="button" class="live-status-btn" data-action="near-refresh">刷新</button>`;
   return `<section class="near-section"><div class="section-top"><div class="near-tabs"><button type="button" class="near-tab-btn${nearTab==='photos'?' on':''}" data-action="near-tab" data-tab="photos">附近的照片</button><button type="button" class="near-tab-btn${nearTab==='events'?' on':''}" data-action="near-tab" data-tab="events">附近的活动</button></div><div class="near-actions">${actions}</div></div><p class="small-meta mono" style="margin:0 0 10px">${count}</p><div id="near-body">${nearTab==='photos'?`<div class="live-grid" id="near-grid">${nearBody()}</div>`:eventsBody()}</div></section>`;
+}
+function renderNearGrid(){
+  if(nearTab==='events'){const wrap=main.querySelector('#near-body');if(wrap)wrap.innerHTML=eventsBody();return;}
+  const grid=main.querySelector('#near-grid');
+  if(grid)grid.innerHTML=nearBody();
 }
 /* ---------- 附近活动 ---------- */
 async function loadNearEvents(force){
@@ -1510,15 +1518,66 @@ function mineCell(p){
   const anon=authToken()?'0':'1';
   return `<figure class="live-frame"><button type="button" class="photo-hit" data-action="photo-open" data-photo="${esc(p.id)}" aria-label="查看照片与评论"><img src="${url}" alt="${cap||'现场照片'}" loading="lazy" decoding="async"></button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)}</span></figcaption></figure>`;
 }
+function albumNameForEvent(eventKey){
+  for(const list of [myEvents,nearEvents]){
+    if(!Array.isArray(list))continue;
+    const hit=list.find(e=>e.key===eventKey);
+    if(hit)return hit.name;
+  }
+  return '活动相册';
+}
+function groupMinePhotos(photos){
+  const albums=[];
+  for(const p of (Array.isArray(photos)?photos:[])){
+    if(p.eventKey){
+      let a=albums.find(x=>x.key==='evt:'+p.eventKey);
+      if(!a){a={key:'evt:'+p.eventKey,name:albumNameForEvent(p.eventKey),cover:p,items:[]};albums.push(a);}
+      a.items.push(p);
+      continue;
+    }
+    if(!Number.isFinite(p.lat)||!Number.isFinite(p.lng)){
+      let g=albums.find(x=>x.key==='other');
+      if(!g){g={key:'other',name:'其他',cover:p,items:[]};albums.push(g);}
+      g.items.push(p);
+      continue;
+    }
+    let a=null;
+    for(const x of albums){
+      if(x.key.startsWith('geo:')&&haversineMeters({lat:x.lat,lng:x.lng},{lat:p.lat,lng:p.lng})<=45){a=x;break;}
+    }
+    if(!a){a={key:'geo:'+albums.length,lat:p.lat,lng:p.lng,name:(String(p.caption||'').trim()||'现场').slice(0,12),cover:p,items:[]};albums.push(a);}
+    a.items.push(p);
+  }
+  return albums;
+}
+let mineAlbumIdx=null;
+function renderMineGrid(){
+  const wrap=document.getElementById('mine-albums');
+  if(!wrap)return;
+  if(mineAlbumIdx!==null){
+    const albums=groupMinePhotos(minePhotos);
+    const album=albums[mineAlbumIdx];
+    if(!album){mineAlbumIdx=null;}
+    else{
+      wrap.innerHTML=`<div class="album-topbar"><button type="button" class="live-status-btn" data-action="album-back">返回相册</button><span class="small-meta mono">${esc(album.name)} · ${album.items.length} 张</span></div><div class="live-grid" id="mine-grid">${album.items.map(mineCell).join('')}</div>`;
+      return;
+    }
+  }
+  const albums=groupMinePhotos(minePhotos);
+  if(!albums.length){
+    wrap.innerHTML=`<div class="live-grid"><div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>还没有发过照片。<br>拍一张发到现场，就会按地点归入相册。</p></div></div>`;
+    return;
+  }
+  wrap.innerHTML=`<div class="album-grid">${albums.map((a,i)=>{
+    const cover=esc(photoAbsUrl(a.cover.url));
+    return `<button type="button" class="album-card" data-action="album-open" data-idx="${i}"><img src="${cover}" alt="" loading="lazy"><span class="album-name">${esc(a.name)}</span><span class="album-count mono">${a.items.length} 张</span></button>`;
+  }).join('')}</div>`;
+}
 function mineBody(){
   if(mineStatus==='loading')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>正在加载…</p></div>`;
   if(mineStatus==='error')return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>加载失败。</p><button class="live-status-btn" type="button" data-action="mine-refresh">重试</button></div>`;
   if(!minePhotos||!minePhotos.length)return `<div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>还没有发过照片。<br>打卡后拍一张合成照发到现场，就会出现在这里和附近照片流里。</p></div>`;
   return minePhotos.map(mineCell).join('');
-}
-function renderMineGrid(){
-  const grid=main.querySelector('#mine-grid');
-  if(grid)grid.innerHTML=mineBody();
 }
 let authUser=null;
 let authMode='login';
@@ -1678,10 +1737,13 @@ function renderMinePage(){
   const petCard=state.name
     ?`<section class="panel set-panel"><h2>宠物</h2><p class="about-list" style="margin:6px 0 12px">名字：${esc(state.name)} · 本活动已收集 ${count()} 个点位造型${pet&&pet.evolved?' · 限定形态已解锁':''}</p><form id="rename-form"><label class="name-label" for="rename-input">改名<span>最多 12 字</span></label><input id="rename-input" class="name-input" value="${esc(state.name)}" maxlength="24" autocomplete="off" aria-describedby="rename-error"><div id="rename-error" class="input-error" role="alert"></div><div class="modal-actions"><button type="submit" class="btn btn-dark" style="width:auto">保存</button></div></form></section>`
     :`<section class="panel set-panel"><p class="about-list">还没有宠物。<button type="button" class="btn btn-dark" style="width:auto" data-action="nav" data-view="pet">去领养</button></p></section>`;
+  const orgCard=mode==='api'
+    ?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0;display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 style="margin:0">活动方模式</h3><button type="button" class="btn ${devMode?'btn-primary':'btn-quiet'}" style="width:auto;min-height:0;padding:8px 12px;font-size:11px" data-action="dev-toggle">${devMode?'已开启':'开启'}</button></div><p class="about-list" style="margin:8px 0 0">发布活动 · 在地图上宣传 · 设计专属装扮${devMode?'<br>工作台就在下方。':''}</p></section>${devMode?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><div id="wb-panel"></div></div></section>`:''}`
+    :'';
   const mineCard=mode==='api'
-    ?`${devMode?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0;display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 style="margin:0">活动方模式</h3><button type="button" class="btn ${devMode?'btn-primary':'btn-quiet'}" style="width:auto;min-height:0;padding:8px 12px;font-size:11px" data-action="dev-toggle">已开启</button></div><div class="setting-section" style="border-top:2px solid var(--line);margin-top:12px;padding-top:12px"><div id="wb-panel"></div></div></section>`:''}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0;display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 style="margin:0">我的照片</h3><button type="button" class="btn btn-dark photo-new-btn" style="width:auto;min-height:0;padding:8px 12px;font-size:11px" data-action="photo-new">${pixIcon('camera')}<span style="margin-left:6px">拍一张</span></button></div><div class="live-grid" id="mine-grid">${mineBody()}</div></section>`
+    ?`<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0;display:flex;align-items:center;justify-content:space-between;gap:10px"><h3 style="margin:0">我的照片</h3><button type="button" class="btn btn-dark photo-new-btn" style="width:auto;min-height:0;padding:8px 12px;font-size:11px" data-action="photo-new">${pixIcon('camera')}<span style="margin-left:6px">拍一张</span></button></div><div id="mine-albums"><div class="live-grid" id="mine-grid">${mineBody()}</div></div></section>`
     :`<section class="panel set-panel"><div class="live-grid"><div class="live-cell-empty"><span class="live-dither" aria-hidden="true"></span><p>离线模式 · 连接后可用</p></div></div></section>`;
-  return `<div class="page-intro"><div><h1>我的</h1></div></div><div class="set-stack"><section class="panel set-panel">${accountCard}</section>${petCard}${mineCard}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
+  return `<div class="page-intro"><div><h1>我的</h1></div></div><div class="set-stack">${orgCard}<section class="panel set-panel">${accountCard}</section>${petCard}${mineCard}<section class="panel set-panel"><div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>关于</h3>${about}</div>${state.name?`<div class="setting-section"><button class="btn danger-btn" type="button" data-action="reset-prompt">清空进度，重新开始</button></div>`:''}</section></div>`;
 }
 function navigate(target,focusSpot=null){
   view=VIEWS.includes(target)?target:'pet';
@@ -1860,7 +1922,11 @@ function handleAction(button){
     case 'cluster-photo':openClusterPhoto(button.dataset.cluster,button.dataset.photo);break;
     case 'cluster-back':openClusterModal(button.dataset.cluster);break;
     case 'photo-del':deletePhotoItem(button.dataset);break;
-    case 'mine-refresh':minePhotos=null;mineStatus='idle';loadMinePhotos(true);break;
+    case 'mine-refresh':minePhotos=null;mineStatus='idle';mineAlbumIdx=null;loadMinePhotos(true);break;
+    case 'album-open':mineAlbumIdx=Number(button.dataset.idx);renderMineGrid();break;
+    case 'album-back':mineAlbumIdx=null;renderMineGrid();break;
+    case 'album-open':mineAlbumIdx=Number(button.dataset.idx);renderMineGrid();break;
+    case 'album-back':mineAlbumIdx=null;renderMineGrid();break;
     case 'github-login':location.href=API_BASE+'/auth/github';break;
     case 'goto-spot':closeModal();navigate('explore',button.dataset.spot||null);break;
     case 'evolve-prompt':showEvolutionPrompt();break;
