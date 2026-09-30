@@ -53,6 +53,12 @@ const getViewerIdFromRequest = req => {
 const uploadPhoto = async (req, res) => {
   try {
     const { caption, userLat, userLng, locationSource } = req.body;
+    let eventKeyStamp = '';
+    const requestedEventKey = String((req.body || {}).eventKey || '').trim().slice(0, 60);
+    if (requestedEventKey) {
+      const eventDoc = await OutieEvent.findOne({ key: requestedEventKey, active: true });
+      if (eventDoc) eventKeyStamp = eventDoc.key;
+    }
     const file = req.file;
 
     if (req.fileValidationError) {
@@ -61,6 +67,9 @@ const uploadPhoto = async (req, res) => {
 
     if (!file) {
       return res.status(400).json({ error: 'No photo provided' });
+    }
+    if (!file.buffer || !file.buffer.length) {
+      return res.status(400).json({ error: '照片文件为空' });
     }
 
     const finalCaption = (caption || '').trim() || '现场留影';
@@ -602,6 +611,9 @@ const uploadAnonymousPhoto = async (req, res) => {
     if (!file) {
       return res.status(400).json({ error: 'No photo provided' });
     }
+    if (!file.buffer || !file.buffer.length) {
+      return res.status(400).json({ error: '照片文件为空' });
+    }
 
     const finalCaption = (caption || '').trim() || '现场留影';
 
@@ -734,10 +746,11 @@ const uploadAnonymousPhoto = async (req, res) => {
       if (eventDoc) eventKeyStamp = eventDoc.key;
     }
 
+    const loggedIn = Boolean(req.userId);
     const photo = new Photo({
-      userId: null,
-      isAnonymous: true,
-      anonymousId: req.anonymousId,
+      userId: loggedIn ? req.userId : null,
+      isAnonymous: !loggedIn,
+      anonymousId: loggedIn ? null : req.anonymousId,
       url: imageUrl,
       caption: finalCaption,
       lat: photoLat,
