@@ -1,0 +1,14 @@
+{
+  "name": "OUTIE — 到现场打卡，收集造型",
+  "short_name": "OUTIE",
+  "description": "到现场打卡，收集宠物造型。线下活动聚人气平台。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#efecdf",
+  "theme_color": "#efecdf",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

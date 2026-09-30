@@ -84,6 +84,22 @@ const listMyEvents = async (req, res) => {
   }
 };
 
+const listAllEvents = async (req, res) => {
+  try {
+    res.json(await outieService.listActiveEvents());
+  } catch (error) {
+    handleError(res, error, '获取活动列表失败，请重试');
+  }
+};
+
+const feedPet = async (req, res) => {
+  try {
+    res.json(await outieService.feedPetForIdentity(req));
+  } catch (error) {
+    handleError(res, error, '喂食失败，请重试');
+  }
+};
+
 const nearbyEvents = async (req, res) => {
   try {
     const lat = Number(req.query.lat);
@@ -151,11 +167,13 @@ module.exports = {
   upsertPet,
   getMe,
   checkin,
+  feedPet,
   createComposite,
   staticMap,
   getMapTile,
   createEvent,
   listMyEvents,
+  listAllEvents,
   nearbyEvents,
   getEventDetail,
   uploadEventPromo,

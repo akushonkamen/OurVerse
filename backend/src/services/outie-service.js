@@ -124,6 +124,20 @@ const collectedSpotKeys = pet => {
 
 const eventRewardsOf = (pet, eventKey) => (pet.rewards && pet.rewards[eventKey]) || {};
 
+// 心情随喂食时长衰减：满值 100，每小时掉 4 点，下限 10；6 小时内视为刚吃饱
+const MOOD_DECAY_PER_HOUR = 4;
+const MOOD_FLOOR = 10;
+const deriveMood = pet => {
+  if (!pet.lastFedAt) return 60;
+  const hours = (Date.now() - new Date(pet.lastFedAt).getTime()) / 3600000;
+  return Math.max(MOOD_FLOOR, Math.min(100, Math.round(100 - hours * MOOD_DECAY_PER_HOUR)));
+};
+// 东八区日期串，喂食以自然日为界
+const dayKeyOf = (d = new Date()) => {
+  const t = new Date(d.getTime() + 8 * 3600000);
+  return t.toISOString().slice(0, 10);
+};
+
 const serializePet = (pet, event) => {
   const eventKey = event ? event.key : null;
   const rewards = eventKey ? eventRewardsOf(pet, eventKey) : {};
@@ -136,7 +150,54 @@ const serializePet = (pet, event) => {
     rewards,
     evolved,
     equipped: pet.equipped || 'base',
+    mood: deriveMood(pet),
+    fedToday: pet.lastFeedDay === dayKeyOf(),
+    feedStreak: pet.feedStreak || 0,
+    feedTotal: pet.feedTotal || 0,
     createdAt: pet.createdAt
+  };
+};
+
+// 每天一次喂食：连击记录 + 回访钩子。重复喂当天返回 alreadyFed
+const feedPetForIdentity = async req => {
+  const identityKey = requireIdentity(req);
+  await maybeMigrateAnonymousPet(req);
+  const pet = await findLatestPet(identityKey);
+  if (!pet) throw new ServiceError(400, '先领养一只宠物，才能喂它');
+  const today = dayKeyOf();
+  if (pet.lastFeedDay === today) {
+    const event = await findActiveEvent();
+    return { pet: serializePet(pet, event), alreadyFed: true };
+  }
+  const yesterday = dayKeyOf(new Date(Date.now() - 86400000));
+  pet.feedStreak = pet.lastFeedDay === yesterday ? (pet.feedStreak || 0) + 1 : 1;
+  pet.feedTotal = (pet.feedTotal || 0) + 1;
+  pet.lastFeedDay = today;
+  pet.lastFedAt = new Date();
+  await pet.save();
+  const event = await findActiveEvent();
+  return { pet: serializePet(pet, event), alreadyFed: false };
+};
+
+// 全部进行中活动：定位失败/附近为空时，用户仍能看到可去的地方
+const listActiveEvents = async () => {
+  const events = await OutieEvent.find({ active: true }).sort({ createdAt: -1 }).limit(20);
+  return {
+    events: events.map(e => {
+      const s = serializeEvent(e);
+      const pts = (s.spots || []).filter(sp => Number.isFinite(sp.lng) && Number.isFinite(sp.lat));
+      const center = pts.length
+        ? { lng: pts.reduce((a, sp) => a + sp.lng, 0) / pts.length, lat: pts.reduce((a, sp) => a + sp.lat, 0) / pts.length }
+        : null;
+      return {
+        key: s.key,
+        name: s.name,
+        subtitle: s.subtitle || '',
+        coverUrl: s.coverUrl || '',
+        spotCount: pts.length,
+        center
+      };
+    })
   };
 };
 
@@ -525,6 +586,8 @@ module.exports = {
   createEventForIdentity,
   listMyEvents,
   nearbyEvents,
+  listActiveEvents,
+  feedPetForIdentity,
   getEventByKey,
   saveEventPromoPhoto,
   resolveIdentityKey,

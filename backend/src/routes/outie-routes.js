@@ -6,11 +6,13 @@ const {
   upsertPet,
   getMe,
   checkin,
+  feedPet,
   createComposite,
   staticMap,
   getMapTile,
   createEvent,
   listMyEvents,
+  listAllEvents,
   nearbyEvents,
   getEventDetail,
   uploadEventPromo,
@@ -25,10 +27,12 @@ router.get('/amap-config', amapConfig);
 router.get('/tiles/:z/:x/:y', getMapTile);
 router.post('/events', optionalAuth, createEvent);
 router.get('/events/nearby', nearbyEvents);
+router.get('/events/all', listAllEvents);
 router.get('/my-events', optionalAuth, listMyEvents);
 router.get('/events/:key', getEventDetail);
 router.post('/events/:key/promo', optionalAuth, uploadSinglePhoto, uploadEventPromo);
 router.post('/pet', optionalAuth, upsertPet);
+router.post('/pet/feed', optionalAuth, feedPet);
 router.get('/me', optionalAuth, getMe);
 router.post('/checkin', optionalAuth, checkin);
 router.post('/composites', optionalAuth, uploadSinglePhoto, createComposite);

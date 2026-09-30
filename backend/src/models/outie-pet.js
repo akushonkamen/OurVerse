@@ -9,6 +9,11 @@ const outiePetSchema = new mongoose.Schema({
   rewards: { type: {}, default: {} },
   evolvedEvents: { type: [String], default: [] },
   equipped: { type: String, default: 'base' },
+  // 养成层：每天喂一次，心情随时间衰减（前端按时长推导），连续喂食=回访理由
+  lastFedAt: { type: Date, default: null },
+  lastFeedDay: { type: String, default: '' },
+  feedStreak: { type: Number, default: 0 },
+  feedTotal: { type: Number, default: 0 },
   // 旧字段：仅保留兼容历史数据（读入时惰性迁移到 rewards/evolvedEvents）
   eventKey: { type: String, default: '' },
   evolved: { type: Boolean, default: false },
