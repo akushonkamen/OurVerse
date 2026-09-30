@@ -137,6 +137,20 @@ if (fs.existsSync(homePagePath)) {
   });
 }
 
+// OUTIE PWA 静态资源：安装清单与像素图标（与 index.html 同仓库 web/ 目录）
+app.use('/icons', express.static(path.resolve(__dirname, '..', '..', 'web', 'icons'), {
+  maxAge: '7d',
+  immutable: true
+}));
+const outieManifestPath = path.resolve(__dirname, '..', '..', 'web', 'manifest.webmanifest');
+if (fs.existsSync(outieManifestPath)) {
+  app.get('/manifest.webmanifest', (req, res) => {
+    res.set('Cache-Control', 'no-cache');
+    res.type('application/manifest+json');
+    res.sendFile(outieManifestPath);
+  });
+}
+
 app.use('/api', routes);
 
 app.get('/health', (req, res) => {
