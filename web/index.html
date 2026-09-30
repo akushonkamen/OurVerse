@@ -756,7 +756,7 @@ function startPhotoPost(presetEvent){
   setTimeout(()=>input.remove(),60000);
 }
 /* 坐标决策：真实定位优先；勾选/预设了活动则可用活动中心；否则不可发布 */
-function resolvePostCoords(){
+async function resolvePostCoords(){
   if(geo.state==='ok'&&geo.coords)return {coords:geo.coords,real:true};
   const evtCb=document.querySelector('.post-evt:checked');
   const key=postPresetEvent?postPresetEvent.key:(evtCb?evtCb.value:null);
@@ -764,6 +764,14 @@ function resolvePostCoords(){
     const e=postEventById(key);
     if(e&&e.center)return {coords:e.center,real:false,eventKey:key};
   }
+  // GPS 不可用：服务端 IP 定位（OurVerse 同款，城市级真实推断）
+  try{
+    const data=await apiFetch('/location/ip');
+    const loc=data&&data.location;
+    if(loc&&Number.isFinite(loc.lat)&&Number.isFinite(loc.lng)){
+      return {coords:{lng:loc.lng,lat:loc.lat},real:false,ip:true};
+    }
+  }catch(e){}
   return {error:true};
 }
 function openPhotoPostModal(dataUrl){
@@ -774,8 +782,8 @@ function openPhotoPostModal(dataUrl){
     +'<div class="detail-photo"><img id="post-preview" src="'+dataUrl+'" alt="要发布的照片"></div>'
     +'<form id="photo-post-form" class="account-form">'
     +'<textarea id="post-caption" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;line-height:1.6;resize:none" rows="2" maxlength="140" placeholder="你想留下什么诗句"></textarea>'
-    +'<div id="post-events"><p class="about-list mono">'+(postPresetEvent?'将归入活动：'+esc(postPresetEvent.name):(hasLoc?'正在查找附近的活动…':'正在确认定位…'))+'</p></div>'
-    +'<p class="about-list mono" id="post-loc-note">'+(hasLoc?'定位：你当前的位置':'定位：尚未成功')+'</p>'
+    +'<div id="post-events"><p class="about-list mono">'+(postPresetEvent?'将归入活动：'+esc(postPresetEvent.name):(hasLoc?'正在查找附近的活动…':'正在通过 IP 确定位置…'))+'</p></div>'
+    +'<p class="about-list mono" id="post-loc-note">'+(hasLoc?'定位：你当前的位置':'定位：将通过 IP 推断（城市级）')+'</p>'
     +'<div class="modal-actions"><button class="btn btn-primary" type="submit">发到现场</button><button type="button" class="text-btn" data-action="close">取消</button></div>'
     +'</form>',
     'photo-post',true
@@ -784,14 +792,18 @@ function openPhotoPostModal(dataUrl){
     const box=document.getElementById('post-events');
     if(!box)return;
     if(postPresetEvent){box.innerHTML='';return;}
-    if(geo.state!=='ok'||!geo.coords){
-      box.innerHTML='<p class="about-list mono">定位未完成：需要先定位成功才能发布照片。</p>';
-      const btn=document.querySelector('#photo-post-form button[type="submit"]');
-      if(btn){btn.disabled=true;btn.textContent='需要定位';}
-      return;
+    let lat=null,lng=null;
+    if(geo.state==='ok'&&geo.coords){lat=geo.coords.lat;lng=geo.coords.lng;}
+    else{
+      try{
+        const data=await apiFetch('/location/ip');
+        const loc=data&&data.location;
+        if(loc&&Number.isFinite(loc.lat)&&Number.isFinite(loc.lng)){lat=loc.lat;lng=loc.lng;}
+      }catch(e){}
     }
+    if(lat===null){box.innerHTML='<p class="about-list mono">暂时无法定位：照片将不带位置发布。</p>';return;}
     try{
-      const data=await apiFetch(`/outie/events/nearby?lat=${geo.coords.lat}&lng=${geo.coords.lng}&radius=500`);
+      const data=await apiFetch(`/outie/events/nearby?lat=${lat}&lng=${lng}&radius=1000`);
       postNearEvents=(data&&data.events)||[];
       box.innerHTML=postNearEvents.length
         ?'<p class="about-list mono">归入附近的活动（默认不归）：</p>'+postNearEvents.slice(0,4).map(e=>`<label class="name-label" style="margin:4px 0;display:flex;gap:8px;align-items:center"><input type="checkbox" class="post-evt" value="${esc(e.key)}"> ${esc(e.name)}（${fmtDistance(e.distanceMeters)}）</label>`).join('')
@@ -804,15 +816,17 @@ async function publishPhotoPost(){
   const dataUrl=document.getElementById('post-preview')?.getAttribute('src');
   const caption=document.getElementById('post-caption').value.trim();
   if(!dataUrl)return;
-  const decision=resolvePostCoords();
-  if(decision.error){
-    toast('需要定位成功才能发布：点地图右上角刷新重试，或允许位置权限。');
-    return;
-  }
   postingPhoto=true;
   const submitBtn=document.querySelector('#photo-post-form button[type="submit"]');
   if(submitBtn)submitBtn.disabled=true;
   try{
+    const decision=await resolvePostCoords();
+    if(decision.error){
+      postingPhoto=false;
+      if(submitBtn)submitBtn.disabled=false;
+      toast('定位服务暂不可用：请点地图右上角刷新重试。');
+      return;
+    }
     const blob=await (await fetch(dataUrl)).blob();
     const c=decision.coords;
     const evtCb=document.querySelector('.post-evt:checked');
@@ -831,7 +845,7 @@ async function publishPhotoPost(){
     closeModal();
     navigate('explore');
     loadNearStream(true);loadNearEvents(true);
-    toast(eventKey?'已发到现场，并归入活动。':'已发到现场。');
+    toast((decision.ip?'已发到现场（使用 IP 定位）。':decision.real?'已发到现场。':'已发到现场，并归入活动。'));
   }catch(error){
     postingPhoto=false;
     if(submitBtn)submitBtn.disabled=false;
