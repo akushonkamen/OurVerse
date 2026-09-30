@@ -509,7 +509,7 @@ function identityId(){
 function authToken(){try{return localStorage.getItem('outie.auth-token')||'';}catch(e){return '';}}
 function authHeaders(){const h={'x-anonymous-id':identityId()};const t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
 /* 错误文案：业务提示原样给用户；技术黑话只进日志，界面上说人话 */
-const ERR_SAFE_KEYS=['该地点不在打卡范围内','才能打卡','匿名打卡24小时后无法删除','每日最多只能上传','相距过远','无权删除这张照片','已被注册','密码至少','邮箱格式','用户名或密码错误','用户名和密码都是必需的','设备已注册','照片文件为空','照片数据校验失败','照片源文件已丢失','GitHub账号已绑定其他用户','未能获取你的位置'];
+const ERR_SAFE_KEYS=['该地点不在打卡范围内','才能打卡','饲料不够','匿名打卡24小时后无法删除','每日最多只能上传','相距过远','无权删除这张照片','已被注册','密码至少','邮箱格式','用户名或密码错误','用户名和密码都是必需的','设备已注册','照片文件为空','照片数据校验失败','照片源文件已丢失','GitHub账号已绑定其他用户','未能获取你的位置','先领养一只宠物'];
 function errText(error){
   const raw=error&&error.message?String(error.message):'';
   if(raw)console.warn('[outie api]',raw);
@@ -1036,16 +1036,87 @@ function maybeNudgeLogin(){
   try{localStorage.setItem('outie.saver-nudged','1');}catch(e){}
   modal(`<p class="modal-eyebrow mono">SAVE / 进度保命</p><h2 id="dialog-title">你已经收集到两站了</h2><p class="modal-copy">现在的进度只存在这台手机里，换设备或清理浏览器就没了。<br>登录一下，宠物和造型永远跟着你走。</p><div class="modal-actions"><button type="button" class="btn btn-primary" data-action="login-open">登录 / 注册</button><button type="button" class="text-btn" data-action="close">先用着</button></div>`,'saver');
 }
-/* ---------- 养成：每天喂一次，心情随时间衰减 ---------- */
+/* ---------- 步数换饲料：页面内实时计步（iOS 需手势授权动作传感器） ---------- */
+function todayKey(){const d=new Date(Date.now()+8*3600000);return d.toISOString().slice(0,10);}
+let stepBuf={day:'',count:0,synced:0};
+let pedometerState='off';
+let motionAvg=9.8,motionLast=0;
+function stepsLoad(){
+  try{
+    const raw=JSON.parse(localStorage.getItem('outie.steps')||'{}');
+    if(raw&&raw.day===todayKey())stepBuf=raw;
+    else stepBuf={day:todayKey(),count:0,synced:0};
+  }catch(e){stepBuf={day:todayKey(),count:0,synced:0};}
+  try{pedometerState=localStorage.getItem('outie.pedometer')==='on'?'on':(localStorage.getItem('outie.pedometer')||'off');}catch(e){}
+}
+function stepsSave(){try{localStorage.setItem('outie.steps',JSON.stringify(stepBuf));}catch(e){}}
+function onMotion(e){
+  const a=e.accelerationIncludingGravity;
+  if(!a||a.x==null)return;
+  const mag=Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);
+  motionAvg=motionAvg*0.8+mag*0.2;
+  const now=Date.now();
+  if(mag-motionAvg>1.2&&now-motionLast>280){motionLast=now;addLocalSteps(1);}
+}
+function addLocalSteps(n){
+  stepsLoad();
+  if(stepBuf.day!==todayKey())stepBuf={day:todayKey(),count:0,synced:0};
+  stepBuf.count+=n;stepsSave();
+  if(view==='pet'&&document.querySelector('.feed-panel'))renderFeedPanelLive();
+  if(stepBuf.count-stepBuf.synced>=25)syncSteps();
+}
+let syncingSteps=false;
+async function syncSteps(){
+  const delta=stepBuf.count-stepBuf.synced;
+  if(delta<=0||mode!=='api'||syncingSteps)return;
+  syncingSteps=true;
+  try{
+    const data=await apiFetch('/outie/steps/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({steps:delta})});
+    stepBuf.synced=stepBuf.count;stepsSave();
+    if(pet){pet.feedTokens=data.feedTokens;pet.stepsToday=data.stepsToday;}
+    if(view==='pet')render();
+  }catch(e){/* 静默：本地步数留着，下轮再同步 */}
+  syncingSteps=false;
+}
+function enablePedometer(){
+  const D=window.DeviceMotionEvent;
+  if(!D){pedometerState='unsupported';render();toast('这台设备不支持计步，用打卡赚不了饲料但还能正常喂。');return;}
+  const start=()=>{
+    window.addEventListener('devicemotion',onMotion);
+    pedometerState='on';
+    try{localStorage.setItem('outie.pedometer','on');}catch(e){}
+    render();toast('计步已开启：带着手机走路就有饲料。');
+  };
+  if(typeof D.requestPermission==='function'){
+    D.requestPermission().then(state=>{
+      if(state==='granted')start();
+      else{pedometerState='denied';try{localStorage.setItem('outie.pedometer','denied');}catch(e){}render();toast('没拿到动作传感器权限，开不了计步。');}
+    }).catch(()=>toast('计步开启失败，再试一次。'));
+  }else start();
+}
+/* ---------- 养成：喂食消耗饲料，心情随时间衰减 ---------- */
 function feedMarkup(){
   if(mode!=='api'||!state.name||!pet)return '';
   const mood=Number(pet.mood)||60;
   const streak=Number(pet.feedStreak)||0;
-  let inner;
-  if(pet.fedToday)inner=`<span class="about-list mono" style="margin:0">今天吃饱了${streak>1?' · 已连续喂 '+streak+' 天':' · 明天再来喂'}</span>`;
-  else if(mood<70)inner=`<span class="about-list mono" style="margin:0">${esc(state.name)} 饿了 · 心情 ${mood}</span><button type="button" class="btn btn-primary" style="width:auto;min-height:0;padding:9px 18px" data-action="feed">喂食</button>`;
-  else inner=`<span class="about-list mono" style="margin:0">心情不错（${mood}）${streak>0?' · 已连续喂 '+streak+' 天':''}</span><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:9px 18px" data-action="feed">喂食</button>`;
-  return `<section class="panel feed-panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">${inner}</div></section>`;
+  const tokens=Number(pet.feedTokens)||0;
+  stepsLoad();
+  const localSteps=Math.max(stepBuf.day===todayKey()?stepBuf.count:0,Number(pet.stepsToday)||0);
+  const carry=Number(pet.stepsCarry)||0;
+  const toNext=Math.max(1,50-carry);
+  const pedo=pedometerState==='on'
+    ?'<span class="about-list mono" style="margin:0">计步中</span>'
+    :`<button type="button" class="live-status-btn" data-action="pedometer">${pedometerState==='denied'?'重开计步':'开启计步'}</button>`;
+  const feedBtn=tokens>0
+    ?`<button type="button" class="btn ${mood<70?'btn-primary':'btn-dark'}" style="width:auto;min-height:0;padding:9px 18px" data-action="feed">喂食（-1 包）</button>`
+    :'<span class="about-list mono" style="margin:0">没饲料了 · 走路赚</span>';
+  const moodText=pet.fedToday&&mood>=70?`今天状态不错（心情 ${mood}）`:`${esc(state.name)} 饿了（心情 ${mood}）`;
+  return `<section class="panel feed-panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span class="about-list mono" style="margin:0">饲料 x${tokens} · 今日 ${localSteps} 步${carry>0?` · 再走${toNext}步=1包`:''}</span>${pedo}</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px"><span class="about-list mono" style="margin:0">${moodText}${streak>0?` · 连喂 ${streak} 天`:''}</span>${feedBtn}</div></section>`;
+}
+function renderFeedPanelLive(){
+  const panel=document.querySelector('.feed-panel');
+  if(!panel)return;
+  panel.outerHTML=feedMarkup();
 }
 function renderPetPage(){
   return `<div class="page-intro"><div><h1>我的宠物</h1></div><span class="intro-mark mono">${state.evolved?'FORM 5/5':'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/5'}</span></div><div class="main-grid">${hero()}<div class="side-stack">${feedMarkup()}${mode==='api'&&!eventData?`<section class="panel goal-panel"><h2>当前没有进行中的活动</h2><p class="goal-copy">新的活动上线后，这里会自动出现。</p></section>`:goalMarkup()}${collectionMarkup()}</div></div>`;
@@ -2255,12 +2326,14 @@ function handleAction(button){
         flashNext=true;render();
         blip('feed');feedHearts();
         const streak=pet.feedStreak||0;
-        const milestone=[3,7,14,30,60,100].includes(streak);
-        toast(data.alreadyFed?'今天已经喂过啦。':milestone
+        const milestone=[3,7,14,30,60,100].includes(streak)&&data.firstToday;
+        toast(milestone
           ?'连续 '+streak+' 天！'+(pet.name||'它')+' 已经离不开你了。'
-          :'喂饱了！'+(streak>1?'已连续 '+streak+' 天，明天再来。':'明天再来喂。'));
+          :data.firstToday?'喂饱了！'+(streak>1?'已连喂 '+streak+' 天。':'')+((Number(pet.feedTokens)||0)<3?' 记得走路攒饲料。':'')
+          :'又喂了一口，'+(pet.name||'它')+' 心情 +25。剩 '+((Number(pet.feedTokens)||0))+' 包。');
       }catch(error){button.disabled=false;toast(errText(error));}
     })();break;
+    case 'pedometer':enablePedometer();break;
     case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';mapRealFailed=false;destroyRealMap();render();startLocate();break;
     case 'photo-new':{let pe=null;try{pe=button.dataset.event?JSON.parse(button.dataset.event):null;}catch(e){}startPhotoPost(pe);break;}
     case 'dev-toggle':devMode=!devMode;try{localStorage.setItem('outie.dev-mode',devMode?'on':'off');}catch(e){}render();toast(devMode?'活动方模式已开启。':'活动方模式已关闭。');break;
@@ -2471,6 +2544,14 @@ async function tryReconnect(){
   else toast('还是连不上，稍后再试。');
 }
 document.getElementById('wordmark').innerHTML=pixText('OUTIE',4);
+/* 步数计步：恢复今日进度；之前授权过就静默继续 */
+stepsLoad();
+if(pedometerState==='on'&&window.DeviceMotionEvent&&typeof window.DeviceMotionEvent.requestPermission!=='function'){
+  window.addEventListener('devicemotion',onMotion);
+}
+setInterval(()=>{stepsLoad();syncSteps();},30000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)syncSteps();});
+window.addEventListener('pagehide',()=>syncSteps());
 /* iOS 加到主屏的一次性引导：装成图标才有回访入口 */
 (function(){
   try{

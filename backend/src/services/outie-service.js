@@ -154,34 +154,69 @@ const serializePet = (pet, event) => {
     fedToday: pet.lastFeedDay === dayKeyOf(),
     feedStreak: pet.feedStreak || 0,
     feedTotal: pet.feedTotal || 0,
+    feedTokens: effectiveTokens(pet),
+    stepsToday: pet.stepsDayKey === dayKeyOf() ? (pet.stepsDay || 0) : 0,
+    stepsCarry: pet.stepsDayKey === dayKeyOf() ? (pet.stepsCarry || 0) : 0,
     createdAt: pet.createdAt
   };
 };
 
-// 每天一次喂食：连击记录 + 回访钩子。以 lastFeedDay 做原子条件更新，并发重复喂不会重复计数
+// 步数经济：每 50 步兑 1 包饲料，每日计步封顶防刷
+const STEPS_PER_TOKEN = 50;
+const STEPS_DAILY_CAP = 30000;
+const effectiveTokens = pet => (pet.feedTokens == null ? 3 : pet.feedTokens);
+
+// 上报本机计步：按日累计、封顶、兑饲料（carry 攒零头）
+const syncStepsForIdentity = async (req, stepsInput) => {
+  const identityKey = requireIdentity(req);
+  await maybeMigrateAnonymousPet(req);
+  const pet = await findLatestPet(identityKey);
+  if (!pet) throw new ServiceError(400, '先领养一只宠物，步数才有用处');
+  let steps = Math.floor(Number(stepsInput));
+  if (!Number.isFinite(steps) || steps <= 0) throw new ServiceError(400, '步数不对');
+  steps = Math.min(steps, 2000);
+  const today = dayKeyOf();
+  const sameDay = pet.stepsDayKey === today;
+  const prevDay = sameDay ? (pet.stepsDay || 0) : 0;
+  const credited = Math.min(prevDay + steps, STEPS_DAILY_CAP) - prevDay;
+  const carry = (sameDay ? (pet.stepsCarry || 0) : 0) + credited;
+  const tokens = effectiveTokens(pet) + Math.floor(carry / STEPS_PER_TOKEN);
+  const carryLeft = carry % STEPS_PER_TOKEN;
+  const updated = await OutiePet.findOneAndUpdate(
+    { _id: pet._id },
+    { $set: { stepsDayKey: today, stepsCarry: carryLeft, feedTokens: tokens }, $inc: { stepsDay: credited } },
+    { new: true }
+  );
+  return {
+    feedTokens: effectiveTokens(updated),
+    stepsToday: updated.stepsDay || 0,
+    dailyCapped: prevDay + steps > STEPS_DAILY_CAP,
+    tokensAwarded: Math.floor(carry / STEPS_PER_TOKEN)
+  };
+};
+
+// 喂食：消耗 1 包饲料（心情 +25），当天首次喂计连击；饲料不足明确拒绝
 const feedPetForIdentity = async req => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
   const pet = await findLatestPet(identityKey);
   if (!pet) throw new ServiceError(400, '先领养一只宠物，才能喂它');
   const today = dayKeyOf();
-  if (pet.lastFeedDay === today) {
-    const event = await findActiveEvent();
-    return { pet: serializePet(pet, event), alreadyFed: true };
+  const startingTokens = effectiveTokens(pet);
+  if (startingTokens < 1) {
+    throw new ServiceError(400, '饲料不够了：带着手机出门走走，50 步换 1 包');
   }
+  const firstToday = pet.lastFeedDay !== today;
   const yesterday = dayKeyOf(new Date(Date.now() - 86400000));
-  const streakNext = pet.lastFeedDay === yesterday ? (pet.feedStreak || 0) + 1 : 1;
+  const streakNext = firstToday ? (pet.lastFeedDay === yesterday ? (pet.feedStreak || 0) + 1 : 1) : (pet.feedStreak || 0);
   const updated = await OutiePet.findOneAndUpdate(
-    { _id: pet._id, lastFeedDay: { $ne: today } },
-    { $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext }, $inc: { feedTotal: 1 } },
+    { _id: pet._id, $or: [{ feedTokens: { $gt: 0 } }, { feedTokens: null }] },
+    { $inc: { feedTokens: -1, feedTotal: 1 }, $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext } },
     { new: true }
   );
-  if (!updated) {
-    const event = await findActiveEvent();
-    return { pet: serializePet(pet, event), alreadyFed: true };
-  }
+  if (!updated) throw new ServiceError(400, '饲料不够了：带着手机出门走走，50 步换 1 包');
   const event = await findActiveEvent();
-  return { pet: serializePet(updated, event), alreadyFed: false };
+  return { pet: serializePet(updated, event), alreadyFed: !firstToday, firstToday };
 };
 
 // 全部进行中活动：定位失败/附近为空时，用户仍能看到可去的地方
@@ -593,6 +628,7 @@ module.exports = {
   nearbyEvents,
   listActiveEvents,
   feedPetForIdentity,
+  syncStepsForIdentity,
   getEventByKey,
   saveEventPromoPhoto,
   resolveIdentityKey,
