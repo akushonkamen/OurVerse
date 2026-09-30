@@ -124,8 +124,8 @@ const collectedSpotKeys = pet => {
 
 const eventRewardsOf = (pet, eventKey) => (pet.rewards && pet.rewards[eventKey]) || {};
 
-// 心情随喂食时长衰减：满值 100，每小时掉 4 点，下限 10；6 小时内视为刚吃饱
-const MOOD_DECAY_PER_HOUR = 4;
+// 心情衰减：每小时 10 点（满值约 10 小时见底）——一天总衰减 240，每次喂 +25，恰好一天 10 包
+const MOOD_DECAY_PER_HOUR = 10;
 const MOOD_FLOOR = 10;
 const deriveMood = pet => {
   if (!pet.lastFedAt) return 60;
@@ -157,16 +157,17 @@ const serializePet = (pet, event) => {
     feedTokens: effectiveTokens(pet),
     stepsToday: pet.stepsDayKey === dayKeyOf() ? (pet.stepsDay || 0) : 0,
     stepsCarry: pet.stepsDayKey === dayKeyOf() ? (pet.stepsCarry || 0) : 0,
+    tokensEarnedToday: pet.tokensEarnedKey === dayKeyOf() ? (pet.tokensEarnedDay || 0) : 0,
     createdAt: pet.createdAt
   };
 };
 
-// 步数经济：每 50 步兑 1 包饲料，每日计步封顶防刷
-const STEPS_PER_TOKEN = 50;
-const STEPS_DAILY_CAP = 30000;
+// 步数经济：每 500 步兑 1 包饲料；每天最多赚 15 包（当天赚满后步数攒着次日再兑）
+const STEPS_PER_TOKEN = 500;
+const TOKENS_DAILY_CAP = 15;
 const effectiveTokens = pet => (pet.feedTokens == null ? 3 : pet.feedTokens);
 
-// 上报本机计步：按日累计、封顶、兑饲料（carry 攒零头）
+// 上报本机计步：按日累计、按赚币上限发放（carry 攒零头，可跨日）
 const syncStepsForIdentity = async (req, stepsInput) => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
@@ -177,21 +178,22 @@ const syncStepsForIdentity = async (req, stepsInput) => {
   steps = Math.min(steps, 2000);
   const today = dayKeyOf();
   const sameDay = pet.stepsDayKey === today;
-  const prevDay = sameDay ? (pet.stepsDay || 0) : 0;
-  const credited = Math.min(prevDay + steps, STEPS_DAILY_CAP) - prevDay;
-  const carry = (sameDay ? (pet.stepsCarry || 0) : 0) + credited;
-  const tokens = effectiveTokens(pet) + Math.floor(carry / STEPS_PER_TOKEN);
-  const carryLeft = carry % STEPS_PER_TOKEN;
+  const earnedKeyToday = pet.tokensEarnedKey === today ? (pet.tokensEarnedDay || 0) : 0;
+  const carry = (sameDay ? (pet.stepsCarry || 0) : 0) + steps;
+  const earnLeft = Math.max(0, TOKENS_DAILY_CAP - earnedKeyToday);
+  const award = Math.min(Math.floor(carry / STEPS_PER_TOKEN), earnLeft);
+  const tokens = effectiveTokens(pet) + award;
+  const carryLeft = carry - award * STEPS_PER_TOKEN;
   const updated = await OutiePet.findOneAndUpdate(
     { _id: pet._id },
-    { $set: { stepsDayKey: today, stepsCarry: carryLeft, feedTokens: tokens }, $inc: { stepsDay: credited } },
+    { $set: { stepsDayKey: today, stepsCarry: carryLeft, feedTokens: tokens, tokensEarnedKey: today, tokensEarnedDay: earnedKeyToday + award }, $inc: { stepsDay: steps } },
     { new: true }
   );
   return {
     feedTokens: effectiveTokens(updated),
     stepsToday: updated.stepsDay || 0,
-    dailyCapped: prevDay + steps > STEPS_DAILY_CAP,
-    tokensAwarded: Math.floor(carry / STEPS_PER_TOKEN)
+    tokensAwarded: award,
+    earnCapped: earnedKeyToday + award >= TOKENS_DAILY_CAP
   };
 };
 

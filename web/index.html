@@ -84,6 +84,16 @@ a{color:inherit}svg{display:block}h1,h2,h3,p{margin:0}::selection{background:var
 .screen-badge{position:absolute;right:16px;bottom:16px;border:2px solid var(--ink);background:var(--paper);color:var(--ink);padding:7px 9px;font-size:9px;letter-spacing:.14em;font-weight:700;z-index:3}
 .screen-badge.hungry{background:var(--accent,#a3463c);color:#fcfaf0;animation:badge-blink 1.2s steps(2,end) infinite}
 @keyframes badge-blink{50%{opacity:.55}}
+/* 饿的分级动画：饱=弹跳 / 平常=呼吸 / 饿=垂头摇 / 濒饿=发抖 */
+.pet-canvas.mood-full .pet-svg{animation:pet-bounce 1.4s steps(5,end) infinite}
+.pet-canvas.mood-ok .pet-svg{animation:pet-idle 2.6s steps(6,end) infinite}
+.pet-canvas.mood-hungry .pet-svg{animation:pet-slouch 2.8s steps(7,end) infinite;transform-origin:50% 100%}
+.pet-canvas.mood-starving .pet-svg{animation:pet-tremble .45s steps(3,end) infinite}
+@keyframes pet-idle{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes pet-bounce{0%,100%{transform:translateY(0)}40%{transform:translateY(-5px)}70%{transform:translateY(-2px)}}
+@keyframes pet-slouch{0%,100%{transform:rotate(0deg)}50%{transform:rotate(-4deg) translateY(1px)}}
+@keyframes pet-tremble{0%,100%{transform:translateX(0)}25%{transform:translateX(-1.5px)}75%{transform:translateX(1.5px)}}
+@media (prefers-reduced-motion:reduce){.pet-canvas .pet-svg{animation:none!important}}
 .pet-caption{display:flex;align-items:center;justify-content:space-between;padding:15px 2px 4px;gap:12px}
 .pet-name{font-size:21px;font-weight:700;letter-spacing:.02em;overflow-wrap:anywhere}
 .pet-caption .look-label{display:block;font-size:11px;font-weight:400;color:var(--muted);margin-top:5px;letter-spacing:.06em}
@@ -1008,7 +1018,10 @@ function hero(welcome=false){
   /* 饿了徽标：没喂且心情低时在宠物屏幕上闪，提醒今天该来 */
   const hungry=!welcome&&mode==='api'&&pet&&!pet.fedToday&&(Number(pet.mood)||60)<70;
   const badge=hungry?'HUNGRY!':(look.id==='evolved'?'LIMITED':'GO OUT');
-  return `<div><section class="pet-card" aria-label="${welcome?'待领养的宠物':esc(state.name)+'，'+look.name}"><div class="pet-topline mono"><span>OUTIE PET DEVICE / ${look.label}</span><span class="pet-online"><span class="live-dot"></span>${welcome?'待领养':'已领养'}</span></div><div class="pet-canvas ${look.id}"><span class="canvas-id mono">${look.label}</span><span class="deco d1" aria-hidden="true">+</span><span class="deco d2" aria-hidden="true">+</span><div class="ground"></div><button class="pet-touch" type="button" data-action="pet" aria-label="${welcome?'宠物':esc(state.name)}">${petSVG(look.id,look.spec)}</button><span class="screen-badge mono${hungry?' hungry':''}">${badge}</span></div><div class="pet-caption"><div class="pet-name">${welcome?'未命名':esc(state.name)}<span class="look-label">${welcome?'原生形态 · 待领养':look.name+' · 当前形态'}</span></div><span class="look-chip mono">${welcome?'0/3 已收集':count()+'/3 已收集'}</span></div></section></div>`;
+  /* 饿的分级动画：饱=弹跳 / 平常=呼吸 / 饿=垂头摇 / 濒饿=发抖 */
+  const moodVal=(!welcome&&mode==='api'&&pet)?Math.max(10,Math.min(100,Number(pet.mood)||60)):null;
+  const moodCls=moodVal==null?'':(moodVal<20?'mood-starving':moodVal<40?'mood-hungry':(moodVal>=85&&pet.fedToday)?'mood-full':'mood-ok');
+  return `<div><section class="pet-card" aria-label="${welcome?'待领养的宠物':esc(state.name)+'，'+look.name}"><div class="pet-topline mono"><span>OUTIE PET DEVICE / ${look.label}</span><span class="pet-online"><span class="live-dot"></span>${welcome?'待领养':'已领养'}</span></div><div class="pet-canvas ${look.id}${moodCls?' '+moodCls:''}"><span class="canvas-id mono">${look.label}</span><span class="deco d1" aria-hidden="true">+</span><span class="deco d2" aria-hidden="true">+</span><div class="ground"></div><button class="pet-touch" type="button" data-action="pet" aria-label="${welcome?'宠物':esc(state.name)}">${petSVG(look.id,look.spec)}</button><span class="screen-badge mono${hungry?' hungry':''}">${badge}</span></div><div class="pet-caption"><div class="pet-name">${welcome?'未命名':esc(state.name)}<span class="look-label">${welcome?'原生形态 · 待领养':look.name+' · 当前形态'}</span></div><span class="look-chip mono">${welcome?'0/3 已收集':count()+'/3 已收集'}</span></div></section></div>`;
 }
 function renderWelcome(){
   const modeNote=mode==='api'?'':'<p class="form-foot">离线演示：进度只存在本机。</p>';
@@ -1100,18 +1113,21 @@ function feedMarkup(){
   const mood=Number(pet.mood)||60;
   const streak=Number(pet.feedStreak)||0;
   const tokens=Number(pet.feedTokens)||0;
+  const earned=Number(pet.tokensEarnedToday)||0;
   stepsLoad();
   const localSteps=Math.max(stepBuf.day===todayKey()?stepBuf.count:0,Number(pet.stepsToday)||0);
   const carry=Number(pet.stepsCarry)||0;
-  const toNext=Math.max(1,50-carry);
+  const toNext=Math.max(1,500-carry);
+  const earnLeft=Math.max(0,15-earned);
   const pedo=pedometerState==='on'
     ?'<span class="about-list mono" style="margin:0">计步中</span>'
     :`<button type="button" class="live-status-btn" data-action="pedometer">${pedometerState==='denied'?'重开计步':'开启计步'}</button>`;
   const feedBtn=tokens>0
     ?`<button type="button" class="btn ${mood<70?'btn-primary':'btn-dark'}" style="width:auto;min-height:0;padding:9px 18px" data-action="feed">喂食（-1 包）</button>`
     :'<span class="about-list mono" style="margin:0">没饲料了 · 走路赚</span>';
-  const moodText=pet.fedToday&&mood>=70?`今天状态不错（心情 ${mood}）`:`${esc(state.name)} 饿了（心情 ${mood}）`;
-  return `<section class="panel feed-panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span class="about-list mono" style="margin:0">饲料 x${tokens} · 今日 ${localSteps} 步${carry>0?` · 再走${toNext}步=1包`:''}</span>${pedo}</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px"><span class="about-list mono" style="margin:0">${moodText}${streak>0?` · 连喂 ${streak} 天`:''}</span>${feedBtn}</div></section>`;
+  const tierText=mood<20?'饿扁了':mood<40?'饿了':mood<70?'有点馋':'状态不错';
+  const earnNote=earnLeft<=0?' · 今日饲料已领满 15 包':carry>0?` · 再走${toNext}步=1包`:' · 500步=1包';
+  return `<section class="panel feed-panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span class="about-list mono" style="margin:0">饲料 x${tokens} · 今日 ${localSteps} 步${earnNote}</span>${pedo}</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px"><span class="about-list mono" style="margin:0">${tierText}（心情 ${mood}）${streak>0?` · 连喂 ${streak} 天`:''}</span>${feedBtn}</div></section>`;
 }
 function renderFeedPanelLive(){
   const panel=document.querySelector('.feed-panel');
