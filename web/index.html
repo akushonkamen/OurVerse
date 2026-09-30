@@ -491,9 +491,19 @@ function identityId(){
 }
 function authToken(){try{return localStorage.getItem('outie.auth-token')||'';}catch(e){return '';}}
 function authHeaders(){const h={'x-anonymous-id':identityId()};const t=authToken();if(t)h.Authorization='Bearer '+t;return h;}
+/* 错误文案：业务提示原样给用户；技术黑话只进日志，界面上说人话 */
+const ERR_SAFE_KEYS=['该地点不在打卡范围内','才能打卡','匿名打卡24小时后无法删除','每日最多只能上传','相距过远','无权删除这张照片','已被注册','密码至少','邮箱格式','用户名或密码错误','用户名和密码都是必需的','设备已注册','照片文件为空','照片数据校验失败','照片源文件已丢失','GitHub账号已绑定其他用户','未能获取你的位置'];
 function errText(error){
-  if(error&&error.name==='AbortError')return '请求超时，请检查网络后重试';
-  return (error&&error.message)?error.message:'请求失败，请重试';
+  const raw=error&&error.message?String(error.message):'';
+  if(raw)console.warn('[outie api]',raw);
+  if(error&&error.name==='AbortError')return '请求超时，请稍后重试';
+  if(ERR_SAFE_KEYS.some(k=>raw.includes(k)))return raw;
+  if(/定位|位置|坐标|高德/.test(raw))return '定位服务暂时不可用，请点地图右上角「刷新」重试';
+  if(/photo|upload|照片/i.test(raw))return '照片服务暂时不可用，请稍后重试';
+  if(/comment|评论/i.test(raw))return '评论暂时发不出去，请稍后重试';
+  if(/token|身份|登录|user not found/i.test(raw))return '登录状态已过期，请重新登录';
+  if(/github/i.test(raw))return 'GitHub 登录暂未开通，先用邮箱进入吧';
+  return '操作失败，请稍后重试';
 }
 async function apiFetch(path,options={},timeoutMs=12000){
   const controller=new AbortController();

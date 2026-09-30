@@ -127,17 +127,18 @@ const uploadPhoto = async (req, res) => {
       if (distanceToUser > config.maxDistanceVerification) {
         return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
       }
-    } else if (locationSource === 'amap') {
-      // 只接受高德地图定位
+    } else if (['amap', 'gps', 'ip'].includes(locationSource)) {
+      // 接受定位链路产出的真实坐标：amap=高德SDK，gps=浏览器定位，ip=服务端IP定位（website.html 的 IP 链路同此）
       if (!hasUserCoords) {
-        return res.status(400).json({ error: '请使用高德地图定位服务获取位置信息' });
+        return res.status(400).json({ error: '未能获取你的位置，请开启定位后重试' });
       }
       photoLat = parsedUserLat;
       photoLng = parsedUserLng;
       distanceToUser = 0;
     } else {
-      // 不允许任何降级处理，必须使用高德地图定位
-      return res.status(400).json({ error: '必须使用高德地图定位服务，请刷新页面重试' });
+      // 位置来源不明（unknown/缺失）：拒绝并记录，原始原因只在服务端日志
+      console.warn(`[upload] rejected photo with unknown locationSource=${locationSource}`);
+      return res.status(400).json({ error: '未能获取你的位置，请开启定位后重试' });
     }
 
     if (!Number.isFinite(photoLat) || !Number.isFinite(photoLng)) {
@@ -666,15 +667,16 @@ const uploadAnonymousPhoto = async (req, res) => {
       if (distanceToUser > config.maxDistanceVerification) {
         return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
       }
-    } else if (locationSource === 'amap') {
+    } else if (['amap', 'gps', 'ip'].includes(locationSource)) {
       if (!hasUserCoords) {
-        return res.status(400).json({ error: '请使用高德地图定位服务获取位置信息' });
+        return res.status(400).json({ error: '未能获取你的位置，请开启定位后重试' });
       }
       photoLat = parsedUserLat;
       photoLng = parsedUserLng;
       distanceToUser = 0;
     } else {
-      return res.status(400).json({ error: '必须使用高德地图定位服务，请刷新页面重试' });
+      console.warn(`[upload] rejected anonymous photo with unknown locationSource=${locationSource}`);
+      return res.status(400).json({ error: '未能获取你的位置，请开启定位后重试' });
     }
 
     if (!Number.isFinite(photoLat) || !Number.isFinite(photoLng)) {
