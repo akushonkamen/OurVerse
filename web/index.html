@@ -201,6 +201,7 @@ a.btn{text-decoration:none}
 .map-caption{font-size:9px;letter-spacing:.12em;color:var(--muted);font-weight:700;padding:0 2px;margin:-8px 0 18px}
 /* ---- real map (高德 JS API · 纸感灰调底图 + 像素标记) ---- */
 .map-holder{position:relative;aspect-ratio:1/1;height:min(88vw,340px);background:#ece8d6;overflow:hidden}
+.map-holder.map-off{display:flex;align-items:center;justify-content:center;text-align:center}
 .map-canvas{position:absolute;inset:0;z-index:1;filter:grayscale(.7) sepia(.1) brightness(1.02);background:#ece8d6}
 .map-canvas .amap-logo,.map-canvas .amap-copyright,.map-canvas .amap-lib-container{display:none!important}
 .map-canvas .map-marker{position:relative;left:auto;top:auto;transform:none}
@@ -435,7 +436,6 @@ function viewFromHash(){
 }
 let view=viewFromHash();
 let currentModal=null,lastFocused=null;
-const LIVE_CENTER={lat:31.2240,lng:121.4426,radius:5000,limit:30};
 const PHOTO_ORIGIN=API_ORIGIN;
 const main=document.getElementById('main');
 const dialog=document.getElementById('dialog');
@@ -446,7 +446,12 @@ function stateFromPet(p){
   clean.name=trimName(p&&p.name||'');
   clean.createdAt=typeof (p&&p.createdAt)==='string'?p.createdAt:null;
   const rewards=(p&&p.rewards)||{};
-  for(const spot of SPOTS){if(typeof rewards[spot.id]==='string')clean.rewards[spot.id]=rewards[spot.id];}
+  if(SPOTS.length){
+    for(const spot of SPOTS){if(typeof rewards[spot.id]==='string')clean.rewards[spot.id]=rewards[spot.id];}
+  }else{
+    /* 当前无进行中活动：不按点位过滤，保留宠物已有收集，避免活动下线后造型显示丢失 */
+    for(const k of Object.keys(rewards)){if(typeof rewards[k]==='string')clean.rewards[k]=rewards[k];}
+  }
   clean.evolved=Object.keys(clean.rewards).length===3&&p&&p.evolved===true;
   const allowed=['base',...Object.keys(clean.rewards),...(clean.evolved?['evolved']:[])];
   clean.equipped=allowed.includes(p&&p.equipped)?p.equipped:'base';
@@ -517,6 +522,14 @@ async function apiFetch(path,options={},timeoutMs=12000){
     let data={};
     try{data=await res.json();}catch(e){}
     if(!res.ok){
+      /* 悬空登录态自愈：token 无效或对应账号已不存在时清掉，立即匿名重试一次 */
+      const dangling=res.status===401||(res.status===404&&/user not found/i.test(String(data.error||'')));
+      if(dangling&&authToken()){
+        try{localStorage.removeItem('outie.auth-token');}catch(e){}
+        authUser=null;
+        clearTimeout(timer);
+        return apiFetch(path,options,timeoutMs);
+      }
       const error=new Error(data.error||('请求失败（HTTP '+res.status+'）'));
       error.status=res.status;error.payload=data;throw error;
     }
@@ -769,6 +782,7 @@ function startPhotoPost(presetEvent){
   input.addEventListener('change',async ()=>{
     photoInput=null;
     const file=input.files&&input.files[0];
+    input.remove();
     if(!file)return;
     try{
       toast('正在处理照片…');
@@ -1194,6 +1208,7 @@ function startLocate(){
     geo.state='ok';
     geo.via=(Number(coords.accuracy)||0)>1000?'ip':'gps';
     updateExploreDynamic();
+    updateWbLocTexts();
     loadNearStream(true);
     loadNearEvents(true);
     const acc=Math.round(geo.accuracy||0);
@@ -1210,7 +1225,9 @@ function startLocate(){
         geo.accuracy=Number(loc.accuracyRadiusMeters)>0?Number(loc.accuracyRadiusMeters):2000;
         geo.state='ok';
         updateExploreDynamic();
+        updateWbLocTexts();
         loadNearStream(true);
+        loadNearEvents(true);
         const cityText=[loc.province,loc.city].filter(Boolean).join(' ');
         const acc=Number(geo.accuracy)||0;
         const accText=acc>0?(acc>=1000?' • 约'+(acc/1000).toFixed(1)+'公里范围':' • 约'+acc+'米范围'):'';
@@ -1219,6 +1236,7 @@ function startLocate(){
       }
     }catch(e){/* IP 定位也不可用 */}
     geo.state='failed';render();
+    updateWbLocTexts();
     toast(err&&String(err.message).includes('PERMISSION_DENIED')?'定位权限已被拒绝：请在浏览器设置中允许位置权限，再点地图右上角刷新':'定位失败：点地图右上角刷新重试');
   });
 }
@@ -1249,12 +1267,14 @@ function initExploreMap(){
     destroyRealMap();
   }
   const token=++mapToken;
-  const c=streamCoords()||{lng:121.44635,lat:31.22465};
+  /* 视野中心：定位/活动未知时用全国视野，不假装用户在任何一个城市 */
+  const known=streamCoords();
+  const c=known||{lng:104.8,lat:36.8};
   const myContainer=container;
   const boot=(engine)=>{
     engine.load().then(()=>{
       if(token!==mapToken||!document.contains(myContainer))return;
-      realMap=engine.createMap(myContainer,c,fitZoomKm(myContainer,c.lat,500));
+      realMap=engine.createMap(myContainer,c,fitZoomKm(myContainer,c.lat,known?500:3600000));
       renderMapMarkers();
       engine.resize(realMap);
       watchMapSize(realMap,myContainer,3000);
@@ -1362,6 +1382,10 @@ function renderMapMarkers(){
   }
   if(realMap)mapEngine().nudge(realMap);
 }
+function cityMapSchematicMarkup(){
+  if(mode!=='api')return `<figure class="map-wrap"><div class="map-tag mono">CITY MAP</div><div class="map-holder map-off"><p class="about-list mono">离线模式 · 连接后可用</p></div></figure>`;
+  return `<figure class="map-wrap"><div class="map-tag mono">CITY MAP</div><button type="button" class="map-refresh mono" data-action="map-refresh" aria-label="重新加载地图与定位">刷新</button><div class="map-holder map-off"><p class="about-list mono">地图暂时加载失败<br>点「刷新」重试 · 定位与打卡不受影响</p></div><figcaption class="map-legend mono"><span class="legend-item"><span class="legend-swatch here"></span>你在这里</span><span class="legend-item"><span class="legend-swatch done"></span>附近照片</span></figcaption></figure>`;
+}
 function cityMapMarkup(){
   if(mode!=='api')return cityMapSchematicMarkup();
   if(mapRealFailed)return cityMapSchematicMarkup();
@@ -1385,7 +1409,7 @@ function renderEventPage(){
 }
 function spotCard(s){
   const done=Boolean(state.rewards[s.id]);
-  return `<article class="spot-card" id="spot-${s.id}"><div class="spot-art ${s.lookId||s.id}"><div class="dither-band" aria-hidden="true"></div><span class="spot-number mono">SPOT ${s.number}</span><div class="spot-word">${pixText(s.en,2,'#26241c')}</div>${petSVG(s.id,s.look)}${done?`<span class="claimed-flag">${pixIcon('check')}已打卡</span>`:''}</div><div class="spot-body"><div class="spot-headline"><h2>${s.name}</h2><span class="spot-zone mono">${s.zone}</span>${spotDistanceText(s)}</div><p class="spot-reward"><span>${done?'已获得':'打卡可得'} / </span>${s.reward}<br><span>${s.line}</span></p><button type="button" class="btn ${done?'btn-quiet':'btn-primary'}" data-action="${done?'look':'checkin'}" ${done?`data-look="${s.id}"`:`data-spot="${s.id}"`}>${done?'查看已得造型':'到场打卡'}</button></div></article>`;
+  return `<article class="spot-card" id="spot-${esc(s.id)}"><div class="spot-art ${esc(s.lookId||s.id)}"><div class="dither-band" aria-hidden="true"></div><span class="spot-number mono">SPOT ${esc(String(s.number))}</span><div class="spot-word">${pixText(s.en,2,'#26241c')}</div>${petSVG(s.id,s.look)}${done?`<span class="claimed-flag">${pixIcon('check')}已打卡</span>`:''}</div><div class="spot-body"><div class="spot-headline"><h2>${esc(s.name)}</h2><span class="spot-zone mono">${esc(s.zone)}</span>${spotDistanceText(s)}</div><p class="spot-reward"><span>${done?'已获得':'打卡可得'} / </span>${esc(s.reward)}<br><span>${esc(s.line)}</span></p><button type="button" class="btn ${done?'btn-quiet':'btn-primary'}" data-action="${done?'look':'checkin'}" ${done?`data-look="${esc(s.id)}"`:`data-spot="${esc(s.id)}"`}>${done?'查看已得造型':'到场打卡'}</button></div></article>`;
 }
 /* ---------- live photo feed (现场) ---------- */
 function photoAbsUrl(u){
@@ -1482,7 +1506,7 @@ function eventsBody(){
 }
 function eventCard(e){
   const cover=e.coverUrl?`<img class="event-cover" src="${esc(photoAbsUrl(e.coverUrl))}" alt="" loading="lazy">`:`<span class="event-cover event-cover-empty mono" aria-hidden="true">${pixText('EVENT',2,'#26241c')}</span>`;
-  return `<article class="panel event-card"><div class="event-cover-wrap">${cover}</div><div class="event-card-body"><h3>${esc(e.name)}</h3><p class="event-card-sub">${esc(e.subtitle||'')} · ${e.spots.length} 个点位 · ${fmtDistance(e.distanceMeters)}</p><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:9px 14px" data-action="event-open" data-event="${esc(e.key)}">查看活动</button></div></article>`;
+  return `<article class="panel event-card"><div class="event-cover-wrap">${cover}</div><div class="event-card-body"><h3>${esc(e.name)}</h3><p class="event-card-sub">${esc(e.subtitle||'')} · ${(e.spots&&e.spots.length)||0} 个点位 · ${fmtDistance(e.distanceMeters)}</p><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:9px 14px" data-action="event-open" data-event="${esc(e.key)}">查看活动</button></div></article>`;
 }
 function openEventDetail(key){
   if(mode!=='api'||!key)return;
@@ -1500,7 +1524,7 @@ function openEventDetail(key){
       }).join('');
       document.getElementById('event-detail').innerHTML=
         (e.coverUrl?`<div class="detail-photo"><img src="${esc(photoAbsUrl(e.coverUrl))}" alt=""></div>`:'')
-        +`<p class="modal-copy">${esc(e.subtitle||'')} · ${e.spots.length} 个点位</p>`
+        +`<p class="modal-copy">${esc(e.subtitle||'')} · ${(e.spots&&e.spots.length)||0} 个点位</p>`
         +`<div class="modal-actions" style="margin:12px 0 4px"><button type="button" class="btn btn-dark" data-action="photo-new" data-event='${esc(JSON.stringify({key:e.key,name:e.name}))}'>在这场活动拍一张</button></div>`
         +`<div class="evt-spots">${spots}</div>`
         +((data.promoPhotos||[]).length?`<h3 style="margin:14px 0 6px">现场宣传照</h3><div class="event-cards" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">${covers}</div>`:'');
@@ -1573,7 +1597,7 @@ async function openPhotoDetail(id){
       '<div class="detail-photo"><img src="'+url+'" alt="'+cap+'"></div>'
       +'<p class="modal-copy">'+(cap||'现场照片')+'<br><span class="mono muted">'+fmtClock(ph.createdAt)+'</span></p>'
       +delBtn
-      +'<div class="comment-block"><h3>评论</h3><div class="comment-list">'+items+'</div>'
+      +'<div class="comment-block"><h3>评论</h3><div class="comment-list" id="comment-list">'+items+'</div>'
       +'<form id="comment-form" class="comment-form"><input id="comment-input" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="说点什么…" maxlength="140" autocomplete="off"><button class="btn btn-primary" type="submit" style="width:auto;min-height:0;padding:10px 14px">发送</button></form></div>';
   }catch(error){
     const box=document.getElementById('photo-detail');
@@ -1584,6 +1608,19 @@ async function openPhotoDetail(id){
 function deletePhotoItem(ds){
   const id=ds.photo;if(!id)return;
   modal(`<p class="modal-eyebrow mono">DELETE</p><h2 id="dialog-title">删除这张照片？</h2><p class="modal-copy">删除后不可恢复。</p><div class="modal-actions"><button type="button" class="btn danger-btn" data-action="photo-del-confirm" data-photo="${esc(id)}" data-anon="${esc(ds.anon||'0')}">删除</button><button type="button" class="btn btn-dark" data-action="close">取消</button></div>`,'photo-del');
+}
+async function confirmDeletePhoto(id,anon){
+  if(!id){toast('找不到这张照片。');return;}
+  try{
+    await apiFetch(anon==='1'?'/photos/anonymous/'+encodeURIComponent(id):'/photos/'+encodeURIComponent(id),{method:'DELETE'});
+    closeModal();
+    minePhotos=null;mineStatus='idle';mineAlbumIdx=null;
+    nearPhotos=null;nearStatus='idle';
+    toast('已删除。');
+    if(view==='mine')loadMinePhotos(true);
+    else if(view==='explore')loadNearStream(true);
+    render();
+  }catch(error){toast('删除失败：'+errText(error));}
 }
 /* ---------- 我的：账号 + 我的所有照片 ---------- */
 let minePhotos=null,mineStatus='idle';
@@ -1644,6 +1681,15 @@ let mineAlbumIdx=null;
 function renderMineGrid(){
   const wrap=document.getElementById('mine-albums');
   if(!wrap)return;
+  if(mineStatus==='loading'){
+    wrap.innerHTML=`<div class="live-grid"><div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>正在加载…</p></div></div>`;
+    return;
+  }
+  if(mineStatus==='error'&&!minePhotos){
+    wrap.innerHTML=`<div class="live-grid"><div class="live-cell-empty" style="grid-column:1/-1"><span class="live-dither" aria-hidden="true"></span><p>照片加载失败。</p><button class="live-status-btn" type="button" data-action="mine-refresh">重试</button></div></div>`;
+    return;
+  }
+  if(!Array.isArray(minePhotos))return;
   if(mineAlbumIdx!==null){
     const albums=groupMinePhotos(minePhotos);
     const album=albums[mineAlbumIdx];
@@ -1713,15 +1759,32 @@ let devMode=(function(){try{return localStorage.getItem('outie.dev-mode')==='on'
 let myEvents=null,myEventsStatus='idle';
 let wbSpots=null,wbBusy=false;
 function wbDefaultSpots(){
-  const c=(geo.state==='ok'&&geo.coords)?geo.coords:(streamCoords()||{lat:31.224,lng:121.4426});
+  /* 坐标只来自真实定位：已定位则预填当前位置，未定位留空等待，绝无假坐标 */
+  const c=(geo.state==='ok'&&geo.coords)?geo.coords:null;
   return [0,1,2].map(i=>({
     name:'点位 '+(i+1),zone:'',rewardName:'',arrivalNote:'',
-    lng:Number((c.lng+(i-1)*0.003).toFixed(6)),
-    lat:Number((c.lat+(i%2)*0.002).toFixed(6)),
+    lng:c?Number(c.lng.toFixed(6)):null,
+    lat:c?Number(c.lat.toFixed(6)):null,
+    acc:c?Math.round(geo.accuracy||0):0,
+    setAt:c?Date.now():null,
     body:['#a3463c','#4a6c46','#41597e'][i],
     accent:['#a8842e','#41597e','#a3463c'][i],
     accessory:['headphones','glasses','crown'][i]
   }));
+}
+function wbLocText(sp){
+  if(sp.setAt)return '已锁定 · 精度约'+(sp.acc||0)+'米';
+  if(geo.state==='ok'&&geo.coords)return '跟随我的位置';
+  if(geo.state==='locating')return '正在定位…';
+  if(geo.state==='failed')return '定位失败，点「用我的位置」重试';
+  return '等待定位…';
+}
+function updateWbLocTexts(){
+  if(!wbSpots)return;
+  document.querySelectorAll('[data-loc]').forEach(el=>{
+    const sp=wbSpots[Number(el.dataset.loc)];
+    if(sp)el.textContent=wbLocText(sp);
+  });
 }
 function ensureWbSpots(){if(!wbSpots)wbSpots=wbDefaultSpots();return wbSpots;}
 function wbSpec(sp){return {name:sp.rewardName,body:sp.body,accent:sp.accent,accessory:sp.accessory};}
@@ -1744,15 +1807,18 @@ function renderMyEventsList(wrap){
   if(!myEvents||!myEvents.length){wrap.innerHTML='<p class="about-list">还没有发布过活动。</p>';return;}
   wrap.innerHTML=myEvents.map(e=>{
     const cover=e.coverUrl?`<img class="avatar-sq" style="width:44px;height:44px" src="${esc(photoAbsUrl(e.coverUrl))}" alt="">`:'<span class="avatar-sq" style="width:44px;height:44px"></span>';
-    return `<div class="wb-event">${cover}<div style="flex:1;min-width:0"><strong>${esc(e.name)}</strong><span class="about-list">${e.spots.length} 个点位 · ${e.active?'已上架':'未上架'}</span></div><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="wb-promo" data-event="${esc(e.key)}">传宣传照</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="event-open" data-event="${esc(e.key)}">查看</button></div>`;
+    return `<div class="wb-event">${cover}<div style="flex:1;min-width:0"><strong>${esc(e.name)}</strong><span class="about-list">${(e.spots&&e.spots.length)||0} 个点位 · ${e.active?'已上架':'未上架'}</span></div><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="wb-promo" data-event="${esc(e.key)}">传宣传照</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="event-open" data-event="${esc(e.key)}">查看</button></div>`;
   }).join('');
 }
 function renderWorkbench(){
   const wrap=document.getElementById('wb-panel');
   if(!wrap||!devMode)return;
+  if(mode==='api'&&geo.state==='idle')startLocate();
   const spots=ensureWbSpots();
-  const row=(sp,i)=>`<div class="wb-row"><div class="wb-head"><strong>点位 ${i+1}</strong><button type="button" class="live-status-btn" data-action="wb-use-loc" data-idx="${i}">用我的位置</button></div><div class="form-row"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="name" value="${esc(sp.name)}" placeholder="点位名" maxlength="12"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;width:110px" data-idx="${i}" data-f="rewardName" value="${esc(sp.rewardName)}" placeholder="奖励/装扮名" maxlength="12"></div><div class="form-row"><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:100px" data-idx="${i}" data-f="accessory">${['headphones','glasses','bag','crown','none'].map(a=>`<option value="${a}"${sp.accessory===a?' selected':''}>${{headphones:'耳机',glasses:'眼镜',bag:'背包',crown:'皇冠',none:'无'}[a]}</option>`).join('')}</select><input type="color" class="wb-in" data-idx="${i}" data-f="body" value="${sp.body}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)"><input type="color" class="wb-in" data-idx="${i}" data-f="accent" value="${sp.accent}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)"><span class="wb-preview" data-prev="${i}">${petSVG('wb'+i,wbSpec(sp))}</span></div><div class="form-row"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="lng" value="${sp.lng}" placeholder="lng"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="lat" value="${sp.lat}" placeholder="lat"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="arrivalNote" value="${esc(sp.arrivalNote)}" placeholder="到达说明" maxlength="20"></div></div>`;
-  wrap.innerHTML=`<form id="wb-form"><input id="wb-name" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:8px" placeholder="活动名称（必填）" maxlength="20"><input id="wb-subtitle" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:10px" placeholder="一句话介绍（可选）" maxlength="30">${spots.map(row).join('')}<label class="name-label" style="margin:10px 0 4px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="wb-active" checked>创建后立即上架</span></label><div class="modal-actions" style="margin-top:10px"><button type="submit" class="btn btn-primary"${wbBusy?' disabled':''}>发布活动</button></div></form><div class="setting-section"><h3>我发布的活动</h3><div id="wb-my-events"><p class="about-list">加载中…</p></div></div>`;
+  const row=(sp,i)=>`<div class="wb-row"><div class="wb-head"><strong>点位 ${i+1}</strong><button type="button" class="live-status-btn" data-action="wb-use-loc" data-idx="${i}">用我的位置</button></div><div class="form-row"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="name" value="${esc(sp.name)}" placeholder="点位名" maxlength="12"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;width:110px" data-idx="${i}" data-f="rewardName" value="${esc(sp.rewardName)}" placeholder="奖励/装扮名" maxlength="12"></div><div class="form-row"><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:100px" data-idx="${i}" data-f="accessory">${['headphones','glasses','bag','crown','none'].map(a=>`<option value="${a}"${sp.accessory===a?' selected':''}>${{headphones:'耳机',glasses:'眼镜',bag:'背包',crown:'皇冠',none:'无'}[a]}</option>`).join('')}</select><input type="color" class="wb-in" data-idx="${i}" data-f="body" value="${sp.body}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)"><input type="color" class="wb-in" data-idx="${i}" data-f="accent" value="${sp.accent}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)"><span class="wb-preview" data-prev="${i}">${petSVG('wb'+i,wbSpec(sp))}</span></div><div class="form-row"><span class="wb-loc mono" data-loc="${i}" style="flex:1;font-size:11px;align-self:center">${wbLocText(sp)}</span><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;flex:1.2" data-idx="${i}" data-f="arrivalNote" value="${esc(sp.arrivalNote)}" placeholder="到达说明" maxlength="20"></div></div>`;
+  /* 重建前保留商家已输入的名称/介绍/上架开关，防止点定位按钮后丢失 */
+  const prevName=document.getElementById('wb-name'),prevSub=document.getElementById('wb-subtitle'),prevActive=document.getElementById('wb-active');
+  wrap.innerHTML=`<form id="wb-form"><input id="wb-name" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:8px" placeholder="活动名称（必填）" maxlength="20" value="${esc(prevName?prevName.value:'')}"><input id="wb-subtitle" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:10px" placeholder="一句话介绍（可选）" maxlength="30" value="${esc(prevSub?prevSub.value:'')}">${spots.map(row).join('')}<label class="name-label" style="margin:10px 0 4px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="wb-active"${prevActive?(prevActive.checked?' checked':''):' checked'}>创建后立即上架</span></label><div class="modal-actions" style="margin-top:10px"><button type="submit" class="btn btn-primary"${wbBusy?' disabled':''}>发布活动</button></div></form><div class="setting-section"><h3>我发布的活动</h3><div id="wb-my-events"><p class="about-list">加载中…</p></div></div>`;
   loadMyEventsList();
 }
 async function submitWorkbench(){
@@ -1761,11 +1827,25 @@ async function submitWorkbench(){
   if(!name){toast('先给活动起个名字。');return;}
   const subtitle=document.getElementById('wb-subtitle').value.trim();
   const active=document.getElementById('wb-active').checked;
-  const payload={name,subtitle,active,spots:ensureWbSpots().map((sp,i)=>({
-    name:sp.name,zone:sp.zone,rewardName:sp.rewardName,arrivalNote:sp.arrivalNote,
-    lng:Number(sp.lng),lat:Number(sp.lat),
-    look:{name:sp.rewardName||sp.name,body:sp.body,accent:sp.accent,accessory:sp.accessory}
-  }))};
+  /* 坐标解析：锁定的用锁定值；未锁定的用当前定位；拿不到真实定位就明确拒绝，绝不造假坐标 */
+  const located=geo.state==='ok'&&geo.coords;
+  const spotsPayload=[];
+  for(let i=0;i<ensureWbSpots().length;i++){
+    const sp=wbSpots[i];
+    const lng=sp.setAt?sp.lng:(located?Number(geo.coords.lng.toFixed(6)):null);
+    const lat=sp.setAt?sp.lat:(located?Number(geo.coords.lat.toFixed(6)):null);
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)){
+      wbBusy=false;
+      toast('点位'+(i+1)+'还没有定位：走到点位旁点「用我的位置」。');
+      return;
+    }
+    spotsPayload.push({
+      name:sp.name,zone:sp.zone,rewardName:sp.rewardName,arrivalNote:sp.arrivalNote,
+      lng,lat,
+      look:{name:sp.rewardName||sp.name,body:sp.body,accent:sp.accent,accessory:sp.accessory}
+    });
+  }
+  const payload={name,subtitle,active,spots:spotsPayload};
   wbBusy=true;
   try{
     await apiFetch('/outie/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -1783,7 +1863,9 @@ async function refreshAuthState(){
       const data=await apiFetch('/auth/verify');
       authUser=data.user||null;
     }catch(error){
-      if(error.status===401){try{localStorage.removeItem('outie.auth-token');}catch(e){}}
+      if(error.status===401||(error.status===404&&/user not found/i.test(String(error.message||'')))){
+        try{localStorage.removeItem('outie.auth-token');}catch(e){}
+      }
     }
   }
   try{
@@ -1948,7 +2030,15 @@ function handleAction(button){
     }
     case 'github-login':location.href=API_BASE+'/auth/github';break;
     case 'login-open':openLoginModal('login');break;
-    case 'auth-toggle':openLoginModal(authMode==='login'?'register':'login');break;
+    case 'auth-toggle':{
+      const u=document.getElementById('login-username'),p=document.getElementById('login-password');
+      const uVal=u?u.value:'',pVal=p?p.value:'';
+      openLoginModal(authMode==='login'?'register':'login');
+      const nu=document.getElementById('login-username'),np=document.getElementById('login-password');
+      if(nu&&uVal)nu.value=uVal;
+      if(np&&pVal)np.value=pVal;
+      break;
+    }
     case 'logout':try{localStorage.removeItem('outie.auth-token');}catch(e){}authUser=null;(async()=>{
       await refreshAuthState();closeModal();render();
       if(view==='mine'){updateAccountState();}toast('已退出登录。');
@@ -1969,26 +2059,46 @@ function handleAction(button){
     case 'compose-photo':pickCompositePhoto(button.dataset.spot);break;
     case 'publish-live':publishLive(button.dataset.spot);break;
     case 'near-refresh':nearPhotos=null;nearStatus='idle';nearEvents=null;nearEventsStatus='idle';loadNearStream(true);loadNearEvents(true);break;
-    case 'near-tab':nearTab=button.dataset.tab==='events'?'events':'photos';renderNearGrid();break;
+    case 'near-tab':{
+      nearTab=button.dataset.tab==='events'?'events':'photos';
+      if(nearTab==='events'&&!nearEvents&&nearEventsStatus!=='loading')loadNearEvents();
+      if(nearTab==='photos'&&!nearPhotos&&nearStatus!=='loading')loadNearStream();
+      renderNearGrid();
+      break;
+    }
     case 'event-open':openEventDetail(button.dataset.event);break;
     case 'evt-checkin':(async()=>{
       const ev=button.dataset.event,sp=button.dataset.spot;
       if(geo.state!=='ok'||!geo.coords){toast('需要先定位成功，才能到场打卡。');return;}
+      button.disabled=true;
       try{
         const data=await apiFetch('/outie/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({eventKey:ev,spotKey:sp,userLat:geo.coords.lat,userLng:geo.coords.lng})});
         pet=data.pet;state=stateFromPet(pet);closeModal();
         if(data.newlyEvolved){showEvolutionPrompt();}
-        else{const rk=data.reward&&data.reward.lookId;toast(data.alreadyOwned?'该点位已打过卡。':'打卡成功，造型已收进「我的宠物」。');}
+        else{toast(data.alreadyOwned?'该点位已打过卡。':'打卡成功，造型已收进「我的宠物」。');}
         render();
-      }catch(error){toast(errText(error));}
+      }catch(error){button.disabled=false;toast(errText(error));}
     })();break;
-    case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';render();startLocate();break;
+    case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';mapRealFailed=false;destroyRealMap();render();startLocate();break;
     case 'photo-new':{let pe=null;try{pe=button.dataset.event?JSON.parse(button.dataset.event):null;}catch(e){}startPhotoPost(pe);break;}
     case 'dev-toggle':devMode=!devMode;try{localStorage.setItem('outie.dev-mode',devMode?'on':'off');}catch(e){}render();toast(devMode?'活动方模式已开启。':'活动方模式已关闭。');break;
     case 'wb-use-loc':{
-      const i=Number(button.dataset.idx);const c=(geo.state==='ok'&&geo.coords)?geo.coords:(streamCoords()||{lng:121.4426,lat:31.224});
-      ensureWbSpots()[i].lng=Number(c.lng.toFixed(6));ensureWbSpots()[i].lat=Number(c.lat.toFixed(6));
-      renderWorkbench();toast('已填入当前坐标。');break;
+      const i=Number(button.dataset.idx);
+      if(geo.state!=='ok'||!geo.coords){
+        geo.state='idle';startLocate();
+        toast(geo.state==='idle'?'正在定位，出结果后这里会自动更新。':'正在定位…');
+        break;
+      }
+      const sp=ensureWbSpots()[i];
+      if(sp){
+        sp.lng=Number(geo.coords.lng.toFixed(6));
+        sp.lat=Number(geo.coords.lat.toFixed(6));
+        sp.acc=Math.round(geo.accuracy||0);
+        sp.setAt=Date.now();
+      }
+      renderWorkbench();
+      toast('点位'+(i+1)+'已锁定到当前位置。');
+      break;
     }
     case 'wb-promo':{
       const ev=button.dataset.event;
@@ -2014,6 +2124,7 @@ function handleAction(button){
     case 'cluster-photo':openClusterPhoto(button.dataset.cluster,button.dataset.photo);break;
     case 'cluster-back':openClusterModal(button.dataset.cluster);break;
     case 'photo-del':deletePhotoItem(button.dataset);break;
+    case 'photo-del-confirm':{button.disabled=true;confirmDeletePhoto(button.dataset.photo,button.dataset.anon);break;}
     case 'mine-refresh':minePhotos=null;mineStatus='idle';mineAlbumIdx=null;loadMinePhotos(true);break;
     case 'album-open':mineAlbumIdx=Number(button.dataset.idx);renderMineGrid();break;
     case 'album-back':mineAlbumIdx=null;renderMineGrid();break;
@@ -2069,14 +2180,19 @@ document.addEventListener('submit',async event=>{
   if(event.target.id==='comment-form'){
     event.preventDefault();
     const input=document.getElementById('comment-input');
+    const submitBtn=event.target.querySelector('button[type="submit"]');
     const text=(input.value||'').trim();
     if(!text||!currentDetailId)return;
+    if(submitBtn)submitBtn.disabled=true;
     try{
       await apiFetch(`/photos/${currentDetailId}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment:text})});
+      input.value='';
       await loadPhotoComments(currentDetailId);
       const list=document.getElementById('comment-list');
       if(list)list.scrollTop=list.scrollHeight;
+      toast('评论已发送。');
     }catch(error){toast(errText(error));}
+    if(submitBtn)submitBtn.disabled=false;
     return;
   }
   if(event.target.id==='login-form'){
@@ -2089,6 +2205,8 @@ document.addEventListener('submit',async event=>{
     if(!username||!password){errEl.textContent='用户名和密码都要填。';return;}
     if(authMode==='register'&&password.length<6){errEl.textContent='密码至少 6 位。';return;}
     errEl.textContent='';
+    const submitBtn=event.target.querySelector('button[type="submit"]');
+    if(submitBtn)submitBtn.disabled=true;
     try{
       const payload=authMode==='register'
         ?{username,password,email:email||undefined}
@@ -2097,7 +2215,10 @@ document.addEventListener('submit',async event=>{
       try{localStorage.setItem('outie.auth-token',data.token);}catch(e){}
       authUser=data.user||null;
       await refreshAuthState();closeModal();render();toast(authMode==='register'?'注册成功，已登录。':'登录成功，进度已同步。');
-    }catch(error){errEl.textContent=errText(error);}
+    }catch(error){
+      errEl.textContent=errText(error);
+      if(submitBtn)submitBtn.disabled=false;
+    }
     return;
   }
   if(event.target.id==='rename-form'){
