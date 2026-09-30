@@ -1843,7 +1843,8 @@ function modal(content,type,wide){
 }
 function closeModal(){if(dialog.open)dialog.close();dialog.classList.remove('wide');currentModal=null;if(lastFocused&&document.contains(lastFocused))lastFocused.focus({preventScroll:true});else main.focus({preventScroll:true});}
 function showCheckin(id){
-  const s=SPOTS.find(s=>s.id===id);if(!s||!state.name)return;
+  const s=SPOTS.find(s=>s.id===id);if(!s)return;
+  if(!state.name){toast('先去「我的宠物」领养你的 OUTIE，再来打卡。');navigate('pet');return;}
   if(state.rewards[id]){showLook(id);return;}
   const frame=mode==='api'
     ?`<div class="checkin-frame"><span class="frame-note mono">${devSkipGeo?'DEV MODE<br>跳过定位校验':'GEO CHECK-IN<br>需靠近点位 '+s.radiusMeters+' 米内'}</span></div>`
@@ -1851,7 +1852,8 @@ function showCheckin(id){
   modal(`<p class="modal-eyebrow mono">CHECK-IN / SPOT ${s.number}</p><h2 id="dialog-title">到达${esc(s.name)}</h2>${frame}<p class="modal-copy">${s.zone?`区域：${esc(s.zone)}<br>`:''}本站造型：<strong>${esc(s.reward)}</strong><br>到达：${esc(s.line)}</p><div class="modal-actions"><button class="btn btn-primary" data-action="redeem" data-spot="${id}" type="button">打卡领取</button></div>`,'checkin');
 }
 function redeemOffline(id){
-  const s=SPOTS.find(s=>s.id===id);if(!s||!state.name)return;
+  const s=SPOTS.find(s=>s.id===id);if(!s)return;
+  if(!state.name){toast('先去「我的宠物」领养你的 OUTIE，再来打卡。');navigate('pet');return;}
   if(state.rewards[id]){showLook(id);toast('该站已领取过。');return;}
   state.rewards[id]=new Date().toISOString();save();render();showReward(id);confetti();
 }
