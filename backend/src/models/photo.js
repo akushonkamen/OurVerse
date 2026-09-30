@@ -40,6 +40,8 @@ const photoSchema = new mongoose.Schema({
   comments: [commentSchema],
   isAnonymous: { type: Boolean, default: false, index: true },
   anonymousId: { type: String, index: true, sparse: true },
+  eventKey: { type: String, default: '', index: true },
+  isPromo: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

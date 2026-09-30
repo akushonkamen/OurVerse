@@ -1,3 +1,4 @@
+const OutieEvent = require('../models/outie-event');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -207,6 +208,7 @@ const uploadPhoto = async (req, res) => {
       },
       exifLat: hasExifCoords ? photoLat : null,
       exifLng: hasExifCoords ? photoLng : null,
+      eventKey: eventKeyStamp,
       distanceToUser,
       locationInfo
     });
@@ -729,6 +731,13 @@ const uploadAnonymousPhoto = async (req, res) => {
       ? clusterAnchor.locationInfo
       : await buildPhotoLocationInfo(photoLat, photoLng);
 
+    let eventKeyStamp = '';
+    const requestedEventKey = String((req.body || {}).eventKey || '').trim().slice(0, 60);
+    if (requestedEventKey) {
+      const eventDoc = await OutieEvent.findOne({ key: requestedEventKey, active: true });
+      if (eventDoc) eventKeyStamp = eventDoc.key;
+    }
+
     const photo = new Photo({
       userId: null,
       isAnonymous: true,
@@ -743,6 +752,7 @@ const uploadAnonymousPhoto = async (req, res) => {
       },
       exifLat: hasExifCoords ? photoLat : null,
       exifLng: hasExifCoords ? photoLng : null,
+      eventKey: eventKeyStamp,
       distanceToUser,
       locationInfo
     });

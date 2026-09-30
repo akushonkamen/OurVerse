@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const OutieEvent = require('../models/outie-event');
 const OutiePet = require('../models/outie-pet');
+const Photo = require('../models/photo');
 const { calculateDistance } = require('../utils/geo-utils');
 const config = require('../config/env');
 
@@ -86,7 +87,13 @@ const serializeSpot = spot => ({
   name: spot.name,
   zone: spot.zone || '',
   rewardName: spot.rewardName || '',
-  lookId: spot.lookId,
+  lookId: spot.lookId || '',
+  look: spot.look ? {
+    name: spot.look.name || '',
+    body: spot.look.body || '#a3463c',
+    accent: spot.look.accent || '#41597e',
+    accessory: spot.look.accessory || 'none'
+  } : null,
   arrivalNote: spot.arrivalNote || '',
   amapPoiId: spot.amapPoiId || '',
   address: spot.address || '',
@@ -100,6 +107,8 @@ const serializeEvent = event => ({
   name: event.name,
   subtitle: event.subtitle || '',
   active: event.active,
+  coverUrl: event.coverUrl || '',
+  organizer: Boolean(event.organizerKey),
   spots: (event.spots || []).map(serializeSpot)
 });
 
@@ -194,7 +203,10 @@ const checkinAtSpot = async req => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
 
-  const event = await findActiveEvent();
+  const requestedEventKey = typeof (req.body || {}).eventKey === 'string' ? req.body.eventKey.trim() : '';
+  const event = requestedEventKey
+    ? await OutieEvent.findOne({ key: requestedEventKey, active: true })
+    : await findActiveEvent();
   if (!event) {
     throw new ServiceError(404, '当前没有进行中的活动');
   }
@@ -248,8 +260,9 @@ const checkinAtSpot = async req => {
   pet.rewards = { ...otherEvents, [event.key]: perEvent };
 
   const collected = Object.keys(perEvent).length;
+  const totalSpots = (event.spots || []).length || LOOK_IDS.length;
   let newlyEvolved = false;
-  if (collected >= LOOK_IDS.length && !pet.evolvedEvents.includes(event.key)) {
+  if (collected >= totalSpots && !pet.evolvedEvents.includes(event.key)) {
     pet.evolvedEvents.push(event.key);
     newlyEvolved = true;
   }
@@ -287,6 +300,133 @@ const saveCompositeFile = async (identityKey, file) => {
   await fs.promises.writeFile(path.join(absoluteDir, filename), file.buffer);
 
   return `/${path.posix.join(uploadsDirPosix, 'outie', ownerSegment, yearSegment, monthSegment, filename)}`;
+};
+
+const slug = () => crypto.randomBytes(5).toString('hex');
+
+// 活动方：创建活动（含装扮插件规范）
+const createEventForIdentity = async req => {
+  const identityKey = requireIdentity(req);
+  const body = req.body || {};
+  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 40) : '';
+  if (!name) throw new ServiceError(400, '活动名称必填');
+
+  const rawSpots = Array.isArray(body.spots) ? body.spots : [];
+  const spots = rawSpots.slice(0, 10).map((sp, i) => {
+    const lng = Number(sp.lng), lat = Number(sp.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+      throw new ServiceError(400, `点位 ${i + 1} 缺少有效坐标`);
+    }
+    const look = sp.look && typeof sp.look === 'object' ? {
+      name: String(sp.look.name || sp.rewardName || '').slice(0, 20),
+      body: /^#[0-9a-fA-F]{6}$/.test(String(sp.look.body)) ? sp.look.body : '#a3463c',
+      accent: /^#[0-9a-fA-F]{6}$/.test(String(sp.look.accent)) ? sp.look.accent : '#41597e',
+      accessory: ['none', 'headphones', 'glasses', 'bag', 'crown'].includes(sp.look.accessory) ? sp.look.accessory : 'none'
+    } : null;
+    return {
+      key: (typeof sp.key === 'string' && /^[a-z0-9_-]{1,20}$/i.test(sp.key)) ? sp.key : `s${i + 1}-${slug()}`,
+      name: String(sp.name || `点位 ${i + 1}`).slice(0, 20),
+      zone: String(sp.zone || '').slice(0, 12),
+      rewardName: String(sp.rewardName || '').slice(0, 20),
+      look,
+      arrivalNote: String(sp.arrivalNote || '').slice(0, 40),
+      address: String(sp.address || '').slice(0, 60),
+      lng, lat,
+      radiusMeters: Number(sp.radiusMeters) > 0 ? Math.min(Number(sp.radiusMeters), 1000) : DEFAULT_SPOT_RADIUS_METERS
+    };
+  });
+  if (!spots.length) throw new ServiceError(400, '至少需要一个活动点位');
+
+  const event = await OutieEvent.create({
+    key: 'evt-' + slug(),
+    name,
+    subtitle: String(body.subtitle || '').slice(0, 40),
+    active: body.active === true,
+    organizerKey: identityKey,
+    spots
+  });
+  return { success: true, event: serializeEvent(event) };
+};
+
+const listMyEvents = async req => {
+  const identityKey = requireIdentity(req);
+  const events = await OutieEvent.find({ organizerKey: identityKey }).sort({ createdAt: -1 }).limit(50);
+  return { events: events.map(serializeEvent) };
+};
+
+const eventCenter = event => {
+  const spots = (event.spots || []).filter(sp => Number.isFinite(sp.lng) && Number.isFinite(sp.lat));
+  if (!spots.length) return null;
+  return {
+    lng: spots.reduce((a, sp) => a + sp.lng, 0) / spots.length,
+    lat: spots.reduce((a, sp) => a + sp.lat, 0) / spots.length
+  };
+};
+
+const nearbyEvents = async (lat, lng, radiusMeters) => {
+  const events = await OutieEvent.find({ active: true }).sort({ createdAt: -1 }).limit(100);
+  const withDistance = [];
+  for (const event of events) {
+    const center = eventCenter(event);
+    if (!center) continue;
+    const distance = calculateDistance(lat, lng, center.lat, center.lng);
+    if (distance > radiusMeters) continue;
+    withDistance.push({
+      ...serializeEvent(event),
+      center,
+      distanceMeters: Math.round(distance)
+    });
+  }
+  withDistance.sort((a, b) => a.distanceMeters - b.distanceMeters);
+  return { events: withDistance };
+};
+
+const getEventByKey = async key => {
+  const event = await OutieEvent.findOne({ key: String(key || '').slice(0, 60) });
+  if (!event) throw new ServiceError(404, '活动不存在');
+  const center = eventCenter(event);
+  const promos = await Photo.find({ eventKey: event.key, isPromo: true }).sort({ createdAt: -1 }).limit(12);
+  return {
+    event: serializeEvent(event),
+    center,
+    promoPhotos: promos.map(ph => ({
+      id: String(ph._id),
+      url: ph.url,
+      caption: ph.caption,
+      createdAt: ph.createdAt
+    }))
+  };
+};
+
+const saveEventPromoPhoto = async req => {
+  const identityKey = requireIdentity(req);
+  const key = String((req.params || {}).key || '').slice(0, 60);
+  const event = await OutieEvent.findOne({ key });
+  if (!event) throw new ServiceError(404, '活动不存在');
+
+  const file = req.file;
+  if (req.fileValidationError) throw new ServiceError(400, req.fileValidationError);
+  if (!file || !file.buffer || !file.buffer.length) throw new ServiceError(400, '缺少照片文件');
+
+  const url = await saveCompositeFile(identityKey, file);
+  const center = eventCenter(event) || { lng: 0, lat: 0 };
+  const caption = String((req.body || {}).caption || '').trim().slice(0, 60) || `来自 ${event.name}`;
+  const photo = await Photo.create({
+    url,
+    caption,
+    lat: center.lat,
+    lng: center.lng,
+    location: { type: 'Point', coordinates: [center.lng, center.lat] },
+    isAnonymous: !req.userId,
+    anonymousId: req.userId ? null : (req.headers['x-anonymous-id'] || null),
+    eventKey: event.key,
+    isPromo: true
+  });
+  if (!event.coverUrl) {
+    event.coverUrl = url;
+    await event.save();
+  }
+  return { success: true, url, photoId: String(photo._id) };
 };
 
 const createCompositeRecord = async req => {
@@ -378,6 +518,11 @@ module.exports = {
   ServiceError,
   LOOK_IDS,
   getMapTile,
+  createEventForIdentity,
+  listMyEvents,
+  nearbyEvents,
+  getEventByKey,
+  saveEventPromoPhoto,
   resolveIdentityKey,
   serializeEvent,
   serializePet,

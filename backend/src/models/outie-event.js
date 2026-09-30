@@ -1,11 +1,21 @@
 const mongoose = require('mongoose');
 
+// 活动装扮插件规范：颜色 + 配件，由前端像素宠物引擎渲染
+const outieLookSpecSchema = new mongoose.Schema({
+  name: { type: String, default: '' },
+  body: { type: String, default: '#a3463c' },
+  accent: { type: String, default: '#41597e' },
+  accessory: { type: String, enum: ['none', 'headphones', 'glasses', 'bag', 'crown'], default: 'none' }
+}, { _id: false });
+
 const outieSpotSchema = new mongoose.Schema({
   key: { type: String, required: true },
   name: { type: String, required: true },
   zone: { type: String, default: '' },
   rewardName: { type: String, default: '' },
-  lookId: { type: String, enum: ['music', 'art', 'market'], required: true },
+  // 旧版内置造型（music/art/market）；新活动用 look 插件规范
+  lookId: { type: String, default: '' },
+  look: { type: outieLookSpecSchema, default: null },
   arrivalNote: { type: String, default: '' },
   amapPoiId: { type: String, default: '' },
   address: { type: String, default: '' },
@@ -19,6 +29,8 @@ const outieEventSchema = new mongoose.Schema({
   name: { type: String, required: true },
   subtitle: { type: String, default: '' },
   active: { type: Boolean, default: false },
+  organizerKey: { type: String, default: '', index: true },
+  coverUrl: { type: String, default: '' },
   spots: [outieSpotSchema],
   createdAt: { type: Date, default: Date.now }
 });

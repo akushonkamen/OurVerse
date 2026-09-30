@@ -68,6 +68,52 @@ const getMapTile = async (req, res) => {
   }
 };
 
+const createEvent = async (req, res) => {
+  try {
+    res.json(await outieService.createEventForIdentity(req));
+  } catch (error) {
+    handleError(res, error, '活动创建失败，请重试');
+  }
+};
+
+const listMyEvents = async (req, res) => {
+  try {
+    res.json(await outieService.listMyEvents(req));
+  } catch (error) {
+    handleError(res, error, '获取我的活动失败，请重试');
+  }
+};
+
+const nearbyEvents = async (req, res) => {
+  try {
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    const radius = Math.min(Math.max(Number(req.query.radius) || 1000, 100), 50000);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      return res.status(400).json({ error: '缺少有效坐标' });
+    }
+    res.json(await outieService.nearbyEvents(lat, lng, radius));
+  } catch (error) {
+    handleError(res, error, '获取附近活动失败，请重试');
+  }
+};
+
+const getEventDetail = async (req, res) => {
+  try {
+    res.json(await outieService.getEventByKey(req.params.key));
+  } catch (error) {
+    handleError(res, error, '获取活动详情失败，请重试');
+  }
+};
+
+const uploadEventPromo = async (req, res) => {
+  try {
+    res.json(await outieService.saveEventPromoPhoto(req));
+  } catch (error) {
+    handleError(res, error, '宣传照上传失败，请重试');
+  }
+};
+
 const staticMap = async (req, res) => {
   let upstream;
   try {
@@ -108,5 +154,10 @@ module.exports = {
   createComposite,
   staticMap,
   getMapTile,
+  createEvent,
+  listMyEvents,
+  nearbyEvents,
+  getEventDetail,
+  uploadEventPromo,
   amapConfig
 };
