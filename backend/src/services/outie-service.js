@@ -158,7 +158,7 @@ const serializePet = (pet, event) => {
   };
 };
 
-// 每天一次喂食：连击记录 + 回访钩子。重复喂当天返回 alreadyFed
+// 每天一次喂食：连击记录 + 回访钩子。以 lastFeedDay 做原子条件更新，并发重复喂不会重复计数
 const feedPetForIdentity = async req => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
@@ -170,13 +170,18 @@ const feedPetForIdentity = async req => {
     return { pet: serializePet(pet, event), alreadyFed: true };
   }
   const yesterday = dayKeyOf(new Date(Date.now() - 86400000));
-  pet.feedStreak = pet.lastFeedDay === yesterday ? (pet.feedStreak || 0) + 1 : 1;
-  pet.feedTotal = (pet.feedTotal || 0) + 1;
-  pet.lastFeedDay = today;
-  pet.lastFedAt = new Date();
-  await pet.save();
+  const streakNext = pet.lastFeedDay === yesterday ? (pet.feedStreak || 0) + 1 : 1;
+  const updated = await OutiePet.findOneAndUpdate(
+    { _id: pet._id, lastFeedDay: { $ne: today } },
+    { $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext }, $inc: { feedTotal: 1 } },
+    { new: true }
+  );
+  if (!updated) {
+    const event = await findActiveEvent();
+    return { pet: serializePet(pet, event), alreadyFed: true };
+  }
   const event = await findActiveEvent();
-  return { pet: serializePet(pet, event), alreadyFed: false };
+  return { pet: serializePet(updated, event), alreadyFed: false };
 };
 
 // 全部进行中活动：定位失败/附近为空时，用户仍能看到可去的地方

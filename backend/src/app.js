@@ -153,12 +153,27 @@ if (fs.existsSync(outieManifestPath)) {
 
 app.use('/api', routes);
 
+// /api 未匹配路由一律回 JSON，别让前端收到 HTML 的 Cannot GET
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: '接口不存在' });
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
+});
+
+// 全局错误兜底放最后：/api 出错统一 JSON（multer/中间件抛错此前会漏成 HTML 500）
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('[app] unhandled error:', err && err.message);
+  if (req.path.startsWith('/api') || req.headers.accept?.includes('application/json')) {
+    return res.status(err.status || 500).json({ error: err.status ? err.message : '服务开小差了，请稍后重试' });
+  }
+  res.status(500).send('Internal Server Error');
 });
 
 module.exports = app;
