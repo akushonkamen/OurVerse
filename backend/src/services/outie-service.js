@@ -90,8 +90,10 @@ const serializeSpot = spot => ({
   lookId: spot.lookId || '',
   look: spot.look ? {
     name: spot.look.name || '',
+    shape: spot.look.shape || 'blob',
     body: spot.look.body || '#a3463c',
     accent: spot.look.accent || '#41597e',
+    pattern: spot.look.pattern || 'solid',
     accessory: spot.look.accessory || 'none'
   } : null,
   arrivalNote: spot.arrivalNote || '',
@@ -319,9 +321,11 @@ const createEventForIdentity = async req => {
     }
     const look = sp.look && typeof sp.look === 'object' ? {
       name: String(sp.look.name || sp.rewardName || '').slice(0, 20),
+      shape: ['blob', 'cat', 'bear', 'bunny'].includes(sp.look.shape) ? sp.look.shape : 'blob',
       body: /^#[0-9a-fA-F]{6}$/.test(String(sp.look.body)) ? sp.look.body : '#a3463c',
       accent: /^#[0-9a-fA-F]{6}$/.test(String(sp.look.accent)) ? sp.look.accent : '#41597e',
-      accessory: ['none', 'headphones', 'glasses', 'bag', 'crown'].includes(sp.look.accessory) ? sp.look.accessory : 'none'
+      pattern: ['solid', 'spots', 'stripes'].includes(sp.look.pattern) ? sp.look.pattern : 'solid',
+      accessory: ['none', 'headphones', 'glasses', 'bag', 'crown', 'bow', 'scarf', 'cap', 'flower', 'bell'].includes(sp.look.accessory) ? sp.look.accessory : 'none'
     } : null;
     return {
       key: (typeof sp.key === 'string' && /^[a-z0-9_-]{1,20}$/i.test(sp.key)) ? sp.key : `s${i + 1}-${slug()}`,

@@ -1,11 +1,17 @@
 const mongoose = require('mongoose');
 
-// 活动装扮插件规范：颜色 + 配件，由前端像素宠物引擎渲染
+// 活动装扮插件规范：体形 + 颜色 + 花纹 + 配件，由前端像素宠物引擎渲染
 const outieLookSpecSchema = new mongoose.Schema({
   name: { type: String, default: '' },
+  shape: { type: String, enum: ['blob', 'cat', 'bear', 'bunny'], default: 'blob' },
   body: { type: String, default: '#a3463c' },
   accent: { type: String, default: '#41597e' },
-  accessory: { type: String, enum: ['none', 'headphones', 'glasses', 'bag', 'crown'], default: 'none' }
+  pattern: { type: String, enum: ['solid', 'spots', 'stripes'], default: 'solid' },
+  accessory: {
+    type: String,
+    enum: ['none', 'headphones', 'glasses', 'bag', 'crown', 'bow', 'scarf', 'cap', 'flower', 'bell'],
+    default: 'none'
+  }
 }, { _id: false });
 
 const outieSpotSchema = new mongoose.Schema({

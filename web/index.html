@@ -628,7 +628,8 @@ function pixText(text,size=2,color='currentColor'){
 }
 
 /* ---------- pixel pet sprites (22 x 16) ---------- */
-const PET_BASE=[
+/* 体形库：22×16 网格，第 4-9 行（脸区）四套完全一致，保证饰品通用 */
+const PET_BASE_BLOB=[
 '......KK......KK......',
 '.....KSSK....KSSK.....',
 '.....KSSK....KSSK.....',
@@ -646,12 +647,74 @@ const PET_BASE=[
 '...KKFFFFFFFFFFFFKK...',
 '.....KKK......KKK.....'
 ];
+const PET_BASE_CAT=[
+'.......K......K.......',
+'......KSK.....KSK.....',
+'.....KSSK....KSSK.....',
+'.....KSSK....KSSK.....',
+'...KKKKKKKKKKKKKKKK...',
+'..KFFFFFFFFFFFFFFFFK..',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFhhFFFFFFFFFFFFhhFK.',
+'.KFFFFFFFFKKFFFFFFFFK.',
+'.KFFFFFFFFFFFFFFFFAAK.',
+'.KFFFFFFFFFFFFFFFFAAK.',
+'..KFFFFFFFFFFFFFFFFK..',
+'...KKFFFFFFFFFFFFKK...',
+'.....KKK......KKK.....'
+];
+const PET_BASE_BEAR=[
+'......................',
+'....KKK........KKK....',
+'...KSSKK......KKSSK...',
+'...KSSKKKKKKKKKKSSK...',
+'...KKKKKKKKKKKKKKKK...',
+'..KFFFFFFFFFFFFFFFFK..',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFhhFFFFFFFFFFFFhhFK.',
+'.KFFFFFFFFKKFFFFFFFFK.',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'KFFFFFFFFFFFFFFFFFFFFK',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'..KKFFFFFFFFFFFFFFKK..',
+'...KKK..........KKK...'
+];
+const PET_BASE_BUNNY=[
+'......KSK....KSK......',
+'......KSK....KSK......',
+'.....KSSK....KSSK.....',
+'.....KSSK....KSSK.....',
+'...KKKKKKKKKKKKKKKK...',
+'..KFFFFFFFFFFFFFFFFK..',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFFEEFFFFFFFFFEEFFFK.',
+'.KFhhFFFFFFFFFFFFhhFK.',
+'.KFFFFFFFFKKFFFFFFFFK.',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'.KFFFFFFFFFFFFFFFFFFK.',
+'..KFFFFFFFFFFFFFFFFK..',
+'...KKFFFFFFFFFFFFKK...',
+'....KKKK......KKKK....'
+];
+const PET_BASES={blob:PET_BASE_BLOB,cat:PET_BASE_CAT,bear:PET_BASE_BEAR,bunny:PET_BASE_BUNNY};
 const PET_OVER={
 music:['....AAAAAAAAAAAAAA....','....AAAAAAAAAAAAAA....','....AAAAAAAAAAAAAA....','AAAA..............AAAA','AAA................AAA','AAA................AAA','AAA................AAA','KKK................KKK'],
 art:['','','','','','','...KKKKK......KKKKK...','KK.KLLLK.KKKK.KLLLK.KK','KK.KLLLK.KKKK.KLLLK.KK','...KKKKK......KKKKK...'],
 market:['','','','','','..................AA..','...................AAA','...................AAA','...................ABA','...................AAA','...................AAA','...................KKK'],
-evolved:['........A.A.A.........','.......AAAAAAA........','..........BB..........','','','A.........BB.........A','AA..................AA','AA..................AA','A....................A']
+evolved:['........A.A.A.........','.......AAAAAAA........','..........BB..........','','','A.........BB.........A','AA..................AA','AA..................AA','A....................A'],
+bow:['','','........KK..KK........','........KAKKAK........','.........KAAK.........'],
+scarf:['','','','','','','','','','','........KAAAAK........','........KAAK..........'],
+cap:['','','.........KKKK.........','........KAAAAK........','...KKKKKKAAAAKKKKKK...'],
+flower:['','','..KK..................','.KAAK.................','..KK..................'],
+bell:['','','','','','','','','','','..........KBBK........','...........KK.........']
 };
+const PET_SHADES={blob:'团子',cat:'猫猫',bear:'熊崽',bunny:'兔兔'};
+const PET_PATTERN_NAMES={solid:'纯色',spots:'斑点',stripes:'条纹'};
 function shadeHex(hex,p){
   const n=parseInt(hex.slice(1),16);
   let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
@@ -659,22 +722,30 @@ function shadeHex(hex,p){
   r=Math.round(r+(t-r)*a);g=Math.round(g+(t-g)*a);b=Math.round(b+(t-b)*a);
   return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
 }
-const ACC_ROWS={headphones:'music',glasses:'art',bag:'market',crown:'evolved'};
+const ACC_ROWS={headphones:'music',glasses:'art',bag:'market',crown:'evolved',bow:'bow',scarf:'scarf',cap:'cap',flower:'flower',bell:'bell'};
+const SPOT_CELLS=[[6,6],[15,6],[11,8],[5,11],[16,11],[9,13],[12,13]];
+function applyPattern(grid,pattern){
+  if(pattern==='spots'){for(const[x,y]of SPOT_CELLS){if(grid[y]&&grid[y][x]==='F')grid[y][x]='B';}}
+  else if(pattern==='stripes'){for(const y of[11,13]){if(!grid[y])continue;for(let x=0;x<grid[y].length;x++){if(grid[y][x]==='F')grid[y][x]='B';}}}
+  return grid;
+}
 function petSVG(variant='base',spec){
   const id='px'+(++svgId);
-  let acc,acc2,over,bodyFill='#fcfaf0';
+  let acc,acc2,over,bodyFill='#fcfaf0',base=PET_BASE_BLOB,pattern='solid';
   if(spec&&spec.body){
     acc=spec.accent||'#41597e';
     acc2=shadeHex(acc,35);
+    base=PET_BASES[spec.shape]||PET_BASE_BLOB;
+    pattern=spec.pattern||'solid';
     over=(spec.accessory&&spec.accessory!=='none'&&PET_OVER[ACC_ROWS[spec.accessory]])||null;
     bodyFill=shadeHex(spec.body,74);
   }else{
     acc=ACC[variant]||ACC.base;acc2=ACC2[variant]||ACC2.base;over=PET_OVER[variant]||null;
   }
-  const h=PET_BASE.length,w=PET_BASE[0].length;
-  const grid=PET_BASE.map((row,y)=>row.split('').map((c,x)=>{
-    const o=(over&&over[y]&&over[y][x])?over[y][x]:c;return o;
-  }));
+  const h=base.length,w=base[0].length;
+  const grid=base.map(row=>row.split(''));
+  if(pattern!=='solid')applyPattern(grid,pattern);
+  if(over){for(let y=0;y<over.length&&y<h;y++){const row=over[y];if(!row)continue;for(let x=0;x<row.length&&x<w;x++){if(row[x])grid[y][x]=row[x];}}}
   const uses={S:false,h:false,L:false};
   const rects=[];
   for(let y=0;y<h;y++){
@@ -1761,15 +1832,20 @@ let wbSpots=null,wbBusy=false;
 function wbDefaultSpots(){
   /* 坐标只来自真实定位：已定位则预填当前位置，未定位留空等待，绝无假坐标 */
   const c=(geo.state==='ok'&&geo.coords)?geo.coords:null;
+  const presets=[
+    {shape:'cat',pattern:'spots',accessory:'bow'},
+    {shape:'bear',pattern:'stripes',accessory:'scarf'},
+    {shape:'bunny',pattern:'solid',accessory:'flower'}
+  ];
   return [0,1,2].map(i=>({
     name:'点位 '+(i+1),zone:'',rewardName:'',arrivalNote:'',
     lng:c?Number(c.lng.toFixed(6)):null,
     lat:c?Number(c.lat.toFixed(6)):null,
     acc:c?Math.round(geo.accuracy||0):0,
     setAt:c?Date.now():null,
+    shape:presets[i].shape,pattern:presets[i].pattern,accessory:presets[i].accessory,
     body:['#a3463c','#4a6c46','#41597e'][i],
-    accent:['#a8842e','#41597e','#a3463c'][i],
-    accessory:['headphones','glasses','crown'][i]
+    accent:['#a8842e','#41597e','#a3463c'][i]
   }));
 }
 function wbLocText(sp){
@@ -1787,7 +1863,7 @@ function updateWbLocTexts(){
   });
 }
 function ensureWbSpots(){if(!wbSpots)wbSpots=wbDefaultSpots();return wbSpots;}
-function wbSpec(sp){return {name:sp.rewardName,body:sp.body,accent:sp.accent,accessory:sp.accessory};}
+function wbSpec(sp){return {name:sp.rewardName,shape:sp.shape,body:sp.body,accent:sp.accent,pattern:sp.pattern,accessory:sp.accessory};}
 async function loadMyEventsList(force){
   if(mode!=='api')return;
   if(myEventsStatus==='loading')return;
@@ -1815,7 +1891,7 @@ function renderWorkbench(){
   if(!wrap||!devMode)return;
   if(mode==='api'&&geo.state==='idle')startLocate();
   const spots=ensureWbSpots();
-  const row=(sp,i)=>`<div class="wb-row"><div class="wb-head"><strong>点位 ${i+1}</strong><button type="button" class="live-status-btn" data-action="wb-use-loc" data-idx="${i}">用我的位置</button></div><div class="form-row"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="name" value="${esc(sp.name)}" placeholder="点位名" maxlength="12"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;width:110px" data-idx="${i}" data-f="rewardName" value="${esc(sp.rewardName)}" placeholder="奖励/装扮名" maxlength="12"></div><div class="form-row"><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:100px" data-idx="${i}" data-f="accessory">${['headphones','glasses','bag','crown','none'].map(a=>`<option value="${a}"${sp.accessory===a?' selected':''}>${{headphones:'耳机',glasses:'眼镜',bag:'背包',crown:'皇冠',none:'无'}[a]}</option>`).join('')}</select><input type="color" class="wb-in" data-idx="${i}" data-f="body" value="${sp.body}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)"><input type="color" class="wb-in" data-idx="${i}" data-f="accent" value="${sp.accent}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)"><span class="wb-preview" data-prev="${i}">${petSVG('wb'+i,wbSpec(sp))}</span></div><div class="form-row"><span class="wb-loc mono" data-loc="${i}" style="flex:1;font-size:11px;align-self:center">${wbLocText(sp)}</span><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;flex:1.2" data-idx="${i}" data-f="arrivalNote" value="${esc(sp.arrivalNote)}" placeholder="到达说明" maxlength="20"></div></div>`;
+  const row=(sp,i)=>`<div class="wb-row"><div class="wb-head"><strong>点位 ${i+1}</strong><button type="button" class="live-status-btn" data-action="wb-use-loc" data-idx="${i}">用我的位置</button></div><div class="form-row"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="name" value="${esc(sp.name)}" placeholder="点位名" maxlength="12"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;width:110px" data-idx="${i}" data-f="rewardName" value="${esc(sp.rewardName)}" placeholder="奖励/装扮名" maxlength="12"></div><div class="form-row"><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:88px" data-idx="${i}" data-f="shape">${Object.entries(PET_SHADES).map(([v,label])=>`<option value="${v}"${sp.shape===v?' selected':''}>${label}</option>`).join('')}</select><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:88px" data-idx="${i}" data-f="pattern">${Object.entries(PET_PATTERN_NAMES).map(([v,label])=>`<option value="${v}"${(sp.pattern||'solid')===v?' selected':''}>${label}</option>`).join('')}</select><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:88px" data-idx="${i}" data-f="accessory">${[['none','无'],['headphones','耳机'],['glasses','眼镜'],['bag','背包'],['crown','皇冠'],['bow','蝴蝶结'],['scarf','围巾'],['cap','帽子'],['flower','小花'],['bell','铃铛']].map(([v,label])=>`<option value="${v}"${sp.accessory===v?' selected':''}>${label}</option>`).join('')}</select><input type="color" class="wb-in" data-idx="${i}" data-f="body" value="${sp.body}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)" title="身体颜色"><input type="color" class="wb-in" data-idx="${i}" data-f="accent" value="${sp.accent}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)" title="点缀颜色"><span class="wb-preview" data-prev="${i}">${petSVG('wb'+i,wbSpec(sp))}</span></div><div class="form-row"><span class="wb-loc mono" data-loc="${i}" style="flex:1;font-size:11px;align-self:center">${wbLocText(sp)}</span><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;flex:1.2" data-idx="${i}" data-f="arrivalNote" value="${esc(sp.arrivalNote)}" placeholder="到达说明" maxlength="20"></div></div>`;
   /* 重建前保留商家已输入的名称/介绍/上架开关，防止点定位按钮后丢失 */
   const prevName=document.getElementById('wb-name'),prevSub=document.getElementById('wb-subtitle'),prevActive=document.getElementById('wb-active');
   wrap.innerHTML=`<form id="wb-form"><input id="wb-name" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:8px" placeholder="活动名称（必填）" maxlength="20" value="${esc(prevName?prevName.value:'')}"><input id="wb-subtitle" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:10px" placeholder="一句话介绍（可选）" maxlength="30" value="${esc(prevSub?prevSub.value:'')}">${spots.map(row).join('')}<label class="name-label" style="margin:10px 0 4px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="wb-active"${prevActive?(prevActive.checked?' checked':''):' checked'}>创建后立即上架</span></label><div class="modal-actions" style="margin-top:10px"><button type="submit" class="btn btn-primary"${wbBusy?' disabled':''}>发布活动</button></div></form><div class="setting-section"><h3>我发布的活动</h3><div id="wb-my-events"><p class="about-list">加载中…</p></div></div>`;
@@ -1842,7 +1918,7 @@ async function submitWorkbench(){
     spotsPayload.push({
       name:sp.name,zone:sp.zone,rewardName:sp.rewardName,arrivalNote:sp.arrivalNote,
       lng,lat,
-      look:{name:sp.rewardName||sp.name,body:sp.body,accent:sp.accent,accessory:sp.accessory}
+      look:{name:sp.rewardName||sp.name,shape:sp.shape,body:sp.body,accent:sp.accent,pattern:sp.pattern||'solid',accessory:sp.accessory}
     });
   }
   const payload={name,subtitle,active,spots:spotsPayload};
