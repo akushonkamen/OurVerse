@@ -24,9 +24,10 @@ stop_services() {
     echo "  - 停止MongoDB Docker容器..."
     docker stop ourverse-mongodb 2>/dev/null || true
 
-    # 停止Node.js服务器
-    echo "  - 停止Node.js服务器..."
-    pkill -f "node server.js" 2>/dev/null || true
+    # 停止Node.js服务器：后端由 PM2 托管（应用名 ourverse）
+    # 必须走 pm2 stop —— 直接 pkill 会被 PM2 秒级 respawn，脚本自己的 npm start 必然 EADDRINUSE
+    echo "  - 停止Node.js服务器（PM2 托管）..."
+    sudo -u ubuntu HOME=/home/ubuntu pm2 stop ourverse >/dev/null 2>&1 || pkill -f "node server.js" 2>/dev/null || true
 
     # 等待端口真正释放（最多12秒），消灭重启竞态 EADDRINUSE
     for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
@@ -82,18 +83,25 @@ start_services() {
         fi
     fi
 
-    # 启动Node.js服务器
-    echo "  - 启动Node.js服务器..."
-    cd "$BACKEND_DIR"
-    nohup npm start > server.log 2>&1 &
-    sleep 5
+    # 启动Node.js服务器：走 PM2（已注册则 restart，未注册则首次注册），不再裸拉 npm start
+    echo "  - 启动Node.js服务器（PM2 托管）..."
+    if sudo -u ubuntu HOME=/home/ubuntu pm2 pid ourverse >/dev/null 2>&1; then
+        sudo -u ubuntu HOME=/home/ubuntu pm2 restart ourverse --update-env >/dev/null 2>&1
+    else
+        sudo -u ubuntu HOME=/home/ubuntu pm2 start npm --name ourverse --cwd "$BACKEND_DIR" -- start >/dev/null 2>&1
+    fi
 
-    # 验证Node.js服务器是否启动成功
-    if lsof -i :8444 >/dev/null 2>&1; then
-        echo "✅ Node.js服务器启动成功 (端口8444)"
+    # 验证：用真实 HTTP 探活而不是只看端口
+    node_ok=""
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        if curl -sf http://127.0.0.1:8444/health >/dev/null 2>&1; then node_ok=1; break; fi
+        sleep 1
+    done
+    if [ -n "$node_ok" ]; then
+        echo "✅ Node.js服务器启动成功 (端口8444，健康检查通过)"
     else
         echo "❌ Node.js服务器启动失败，检查日志..."
-        tail -20 server.log
+        tail -20 "$BACKEND_DIR/server.log" 2>/dev/null || tail -20 /home/ubuntu/.pm2/logs/*.log 2>/dev/null
         exit 1
     fi
 
