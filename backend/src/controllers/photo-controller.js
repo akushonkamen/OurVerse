@@ -63,9 +63,7 @@ const uploadPhoto = async (req, res) => {
       return res.status(400).json({ error: 'No photo provided' });
     }
 
-    if (!caption) {
-      return res.status(400).json({ error: 'Caption required' });
-    }
+    const finalCaption = (caption || '').trim() || '现场留影';
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -199,7 +197,7 @@ const uploadPhoto = async (req, res) => {
     const photo = new Photo({
       userId: req.userId,
       url: imageUrl,
-      caption,
+      caption: finalCaption,
       lat: photoLat,
       lng: photoLng,
       location: {
@@ -605,9 +603,7 @@ const uploadAnonymousPhoto = async (req, res) => {
       return res.status(400).json({ error: 'No photo provided' });
     }
 
-    if (!caption) {
-      return res.status(400).json({ error: 'Caption required' });
-    }
+    const finalCaption = (caption || '').trim() || '现场留影';
 
     if (!req.anonymousId) {
       req.anonymousId = getOrCreateAnonymousId(req);
@@ -743,7 +739,7 @@ const uploadAnonymousPhoto = async (req, res) => {
       isAnonymous: true,
       anonymousId: req.anonymousId,
       url: imageUrl,
-      caption,
+      caption: finalCaption,
       lat: photoLat,
       lng: photoLng,
       location: {
