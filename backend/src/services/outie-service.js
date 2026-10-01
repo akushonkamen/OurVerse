@@ -220,6 +220,31 @@ const syncStepsForIdentity = async (req, stepsInput) => {
   };
 };
 
+// 评论通知（拉取式）：我照片上别人留的新评论数（since 由前端 localStorage 维护）
+const myCommentActivity = async req => {
+  const since = new Date(Number(req.query.since) || (Date.now() - 7 * 86400000));
+  const mine = req.userId
+    ? { userId: req.userId }
+    : { anonymousId: req.anonymousId || '' };
+  const photos = await Photo.find({ ...mine, comments: { $ne: [] } }, { caption: 1, comments: 1 }).sort({ createdAt: -1 }).limit(50);
+  let unread = 0;
+  let latest = null;
+  for (const ph of photos) {
+    for (const c of ph.comments || []) {
+      const at = new Date(c.createdAt).getTime();
+      if (at <= since.getTime()) continue;
+      const commenterKey = c.userId ? `u:${c.userId}` : (c.anonymousId ? `a:${c.anonymousId}` : '');
+      const myKey = req.userId ? `u:${req.userId}` : `a:${req.anonymousId || ''}`;
+      if (commenterKey === myKey) continue;
+      unread += 1;
+      if (!latest || at > latest.at) {
+        latest = { at, photoId: String(ph._id), caption: String(ph.caption || '').slice(0, 30), text: String(c.text || '').slice(0, 40) };
+      }
+    }
+  }
+  return { unread, latest };
+};
+
 // 摸头：每日前 5 次、每次心情 +1（把 lastFedAt 提前 6 分钟=抵消 1 点衰减），服务端持久
 const touchPetForIdentity = async req => {
   const identityKey = requireIdentity(req);
@@ -252,14 +277,17 @@ const feedPetForIdentity = async req => {
   const firstToday = pet.lastFeedDay !== today;
   const yesterday = dayKeyOf(new Date(Date.now() - 86400000));
   const streakNext = firstToday ? (pet.lastFeedDay === yesterday ? (pet.feedStreak || 0) + 1 : 1) : (pet.feedStreak || 0);
+  // 连击里程碑实体化：3/7/14/30/60/100 天首次到达 +5 包（正向奖励，不只 toast）
+  const MILESTONES = [3, 7, 14, 30, 60, 100];
+  const milestoneHit = firstToday && MILESTONES.includes(streakNext) ? streakNext : 0;
   const updated = await OutiePet.findOneAndUpdate(
     { _id: pet._id, $or: [{ feedTokens: { $gt: 0 } }, { feedTokens: null }] },
-    { $inc: { feedTokens: -1, feedTotal: 1 }, $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext } },
+    { $inc: { feedTokens: -1 + (milestoneHit ? 5 : 0), feedTotal: 1 }, $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext } },
     { new: true }
   );
   if (!updated) throw new ServiceError(400, '饲料不够了：开着 OUTIE 走路，500 步换 1 包');
   const event = await findActiveEvent();
-  return { pet: serializePet(updated, event), alreadyFed: !firstToday, firstToday };
+  return { pet: serializePet(updated, event), alreadyFed: !firstToday, firstToday, milestone: milestoneHit };
 };
 
 // 全部进行中活动：定位失败/附近为空时，用户仍能看到可去的地方
@@ -430,10 +458,16 @@ const checkinAtSpot = async req => {
     throw new ServiceError(400, '缺少定位坐标，请允许定位后重试');
   }
 
-  const otherEvents = { ...(pet.rewards || {}) };
-  delete otherEvents[event.key];
-  const perEvent = { ...eventRewardsOf(pet, event.key) };
-  if (perEvent[spotKey]) {
+  // 原子首打卡：rewards 里该点位已存在则返回已拥有（并发双发只结算一次）
+  const spotPath = `rewards.${event.key}.${spotKey}`;
+  const isSelfPlay = event.organizerKey === identityKey;
+  const tokenBonus = isSelfPlay ? 0 : 3;
+  const updated = await OutiePet.findOneAndUpdate(
+    { _id: pet._id, [spotPath]: { $exists: false } },
+    { $set: { [spotPath]: new Date() }, $inc: { feedTokens: tokenBonus } },
+    { new: true }
+  );
+  if (!updated) {
     return {
       success: true,
       alreadyOwned: true,
@@ -443,35 +477,41 @@ const checkinAtSpot = async req => {
     };
   }
 
-  perEvent[spotKey] = new Date();
-  pet.rewards = { ...otherEvents, [event.key]: perEvent };
-
+  const perEvent = eventRewardsOf(updated, event.key) || {};
   const collected = Object.keys(perEvent).length;
   const totalSpots = (event.spots || []).length || LOOK_IDS.length;
   let newlyEvolved = false;
-  if (collected >= totalSpots && !pet.evolvedEvents.includes(event.key)) {
-    pet.evolvedEvents.push(event.key);
-    newlyEvolved = true;
+  let petAfter = updated;
+  if (collected >= totalSpots && !updated.evolvedEvents.includes(event.key)) {
+    // 集齐：追加 +8 包与进化（低频路径，允许二次写）
+    const evolved = await OutiePet.findOneAndUpdate(
+      { _id: updated._id, evolvedEvents: { $ne: event.key } },
+      { $inc: { feedTokens: isSelfPlay ? 0 : 5 }, $push: { evolvedEvents: event.key } },
+      { new: true }
+    );
+    petAfter = evolved || updated;
+    newlyEvolved = Boolean(evolved);
   }
 
-  // 打卡接入养成经济：每站首打卡 +3 包，集齐活动再 +8 包；发布者打自己的活动不发奖（防自建活动刷币）
-  const isSelfPlay = event.organizerKey === identityKey;
-  const tokenBonus = isSelfPlay ? 0 : (newlyEvolved ? 8 : 3);
-  pet.feedTokens = (pet.feedTokens == null ? 3 : pet.feedTokens) + tokenBonus;
+  // 心情保底拉回不低于 85（lastFedAt 提前到 1.5 小时前）
   const minFresh = Date.now() - 1.5 * 3600000;
-  if (!pet.lastFedAt || new Date(pet.lastFedAt).getTime() < minFresh) {
-    pet.lastFedAt = new Date(minFresh);
+  if (!petAfter.lastFedAt || new Date(petAfter.lastFedAt).getTime() < minFresh) {
+    petAfter = await OutiePet.findOneAndUpdate({ _id: petAfter._id }, { $set: { lastFedAt: new Date(minFresh) } }, { new: true }) || petAfter;
   }
 
-  await pet.save();
+  // 同场共鸣：此地累计到场的独立训练家数
+  const spotVisitors = await OutiePet.countDocuments({ [spotPath]: { $exists: true } });
+  const petFinal = petAfter;
 
+  const totalBonus = tokenBonus + (newlyEvolved ? 5 : 0);
   return {
     success: true,
     alreadyOwned: false,
+    spotVisitors,
     newlyEvolved,
     tokenBonus,
     reward: { spotKey, lookId: spot.lookId, rewardName: spot.rewardName || '' },
-    pet: serializePet(pet, event)
+    pet: serializePet(petFinal, event)
   };
 };
 
@@ -769,6 +809,7 @@ module.exports = {
   listActiveEvents,
   feedPetForIdentity,
   touchPetForIdentity,
+  myCommentActivity,
   syncStepsForIdentity,
   getEventByKey,
   saveEventPromoPhoto,

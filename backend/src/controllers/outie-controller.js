@@ -92,6 +92,14 @@ const listAllEvents = async (req, res) => {
   }
 };
 
+const commentActivity = async (req, res) => {
+  try {
+    res.json(await outieService.myCommentActivity(req));
+  } catch (error) {
+    handleError(res, error, '获取评论动态失败');
+  }
+};
+
 const touchPet = async (req, res) => {
   try {
     res.json(await outieService.touchPetForIdentity(req));
@@ -185,6 +193,7 @@ module.exports = {
   checkin,
   feedPet,
   touchPet,
+  commentActivity,
   syncSteps,
   createComposite,
   staticMap,
