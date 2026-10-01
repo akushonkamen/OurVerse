@@ -394,9 +394,9 @@ const upsertPetForIdentity = async req => {
   let invitedBy = '';
   if (invitedByRaw) {
     const inviterPet = await OutiePet.findById(invitedByRaw).catch(() => null);
-    if (inviterPet && inviterPet.identityKey !== identityKey) {
+    if (inviterPet && inviterPet.identityKey !== identityKey && (inviterPet.invitedCount || 0) < 5) {
       invitedBy = inviterPet.identityKey;
-      await OutiePet.updateOne({ _id: inviterPet._id }, { $inc: { feedTokens: 2 } });
+      await OutiePet.updateOne({ _id: inviterPet._id }, { $inc: { feedTokens: 2, invitedCount: 1 } });
     }
   }
   const newPet = await OutiePet.create({

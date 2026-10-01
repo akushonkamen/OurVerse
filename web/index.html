@@ -1036,7 +1036,7 @@ function render(){
   for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=false;nav.innerHTML=navMarkup();}
   document.getElementById('footer-local').textContent=eventKeyText();
   main.innerHTML=(view==='pet'&&!state.name)?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='event'?renderEventPage():view==='mine'?renderMinePage():renderWelcome();
-  if(view==='mine'){updateAccountState();(minePhotos?renderMineGrid():loadMinePhotos());if(devMode)renderWorkbench();}
+  if(view==='mine'){updateAccountState();(minePhotos?renderMineGrid():loadMinePhotos());loadMyVouchers();if(devMode)renderWorkbench();}
   updateAccountHeader();
   if(view==='explore'){initExploreMap();}
   else destroyRealMap();
@@ -2179,12 +2179,20 @@ async function updateAccountState(){
 let myVoucherList=null;
 async function loadMyVouchers(){
   if(mode!=='api')return;
-  try{const d=await apiFetch('/outie/vouchers/mine');myVoucherList=Array.isArray(d.vouchers)?d.vouchers:[];}catch(e){myVoucherList=[];}
+  try{
+    const d=await apiFetch('/outie/vouchers/mine');
+    myVoucherList=Array.isArray(d.vouchers)?d.vouchers:[];
+  }catch(e){
+    myVoucherList=null; /* null=失败态：显示重试而不是假装没凭证 */
+    renderVoucherList(true);
+    return;
+  }
   renderVoucherList();
 }
-function renderVoucherList(){
+function renderVoucherList(failed){
   const el=document.getElementById('voucher-list');
   if(!el)return;
+  if(failed){el.innerHTML='<p class="about-list">凭证加载失败。<button type="button" class="live-status-btn" data-action="voucher-retry">重试</button></p>';return;}
   if(!myVoucherList){el.innerHTML='<p class="about-list">加载中…</p>';return;}
   if(!myVoucherList.length){el.innerHTML='<p class="about-list">还没有凭证。开启凭证的活动现场打卡就能拿到，出示给店员领权益。</p>';return;}
   el.innerHTML=myVoucherList.map(v=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:2px solid var(--ink);padding:8px 10px;margin-bottom:6px;background:var(--panel)"><div><span style="font:700 18px/1 ui-monospace,monospace;letter-spacing:.18em">${esc(v.code)}</span><br><span class="about-list mono" style="margin:0">${esc(v.eventName)}</span></div><span class="small-meta mono">未核销</span></div>`).join('');
@@ -2513,6 +2521,7 @@ function handleAction(button){
           :'又喂了一口，'+(pet.name||'它')+' 心情 +25。剩 '+((Number(pet.feedTokens)||0))+' 包。');
       }catch(error){button.disabled=false;toast(errText(error));}
     })();break;
+    case 'voucher-retry':loadMyVouchers();break;
     case 'wb-redeem':{
       const ev=button.dataset.event;
       const input=document.getElementById('redeem-'+ev);
@@ -2660,7 +2669,9 @@ document.addEventListener('submit',async event=>{
     if(mode==='api'){
       try{
         let ref='';try{ref=localStorage.getItem('outie.ref')||'';}catch(e){}
-        await adoptApi(name,ref);flashNext=true;navigate('pet');toast(name+' 已加入。');
+        await adoptApi(name,ref);
+        try{localStorage.removeItem('outie.ref');}catch(e){}
+        flashNext=true;navigate('pet');toast(name+' 已加入。');
       }catch(error){
         document.getElementById('name-error').textContent=errText(error);
       }
@@ -2821,7 +2832,7 @@ function applyTitle(){
   document.title=`${unread}${hungry}OUTIE — 到现场打卡，收集造型`;
 }
 function markCommentsSeen(){
-  try{lastCommentSeen=Date.now();unreadComments=0;localStorage.setItem('outie.cmt-seen',String(lastCommentSeen));document.title='OUTIE — 到现场打卡，收集造型';document.querySelectorAll('.cmt-dot').forEach(d=>d.remove());const b=document.getElementById('cmt-banner');if(b)b.remove();}catch(e){}
+  try{lastCommentSeen=Date.now();unreadComments=0;localStorage.setItem('outie.cmt-seen',String(lastCommentSeen));document.querySelectorAll('.cmt-dot').forEach(d=>d.remove());const b=document.getElementById('cmt-banner');if(b)b.remove();applyTitle();}catch(e){}
 }
 let reconnectTimer=null;
 function scheduleReconnect(){

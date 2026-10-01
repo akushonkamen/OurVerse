@@ -21,6 +21,7 @@ const outiePetSchema = new mongoose.Schema({
   tokensEarnedKey: { type: String, default: '' },
   lastStepSyncAt: { type: Date, default: null },
   invitedBy: { type: String, default: '' },
+  invitedCount: { type: Number, default: 0 },
   stepsCarry: { type: Number, default: 0 },
   stepsDay: { type: Number, default: 0 },
   stepsDayKey: { type: String, default: '' },
