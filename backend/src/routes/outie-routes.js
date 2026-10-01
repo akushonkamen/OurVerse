@@ -9,6 +9,7 @@ const {
   feedPet,
   touchPet,
   commentActivity,
+  myVouchers,
   redeemVoucher,
   syncSteps,
   createComposite,
@@ -40,6 +41,7 @@ router.post('/pet/feed', optionalAuth, feedPet);
 router.post('/pet/touch', optionalAuth, touchPet);
 router.post('/steps/sync', optionalAuth, syncSteps);
 router.get('/comments/activity', optionalAuth, commentActivity);
+router.get('/vouchers/mine', optionalAuth, myVouchers);
 router.post('/vouchers/redeem', optionalAuth, redeemVoucher);
 router.get('/me', optionalAuth, getMe);
 router.post('/checkin', optionalAuth, checkin);

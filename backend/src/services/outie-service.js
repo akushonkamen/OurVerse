@@ -220,6 +220,23 @@ const syncStepsForIdentity = async (req, stepsInput) => {
   };
 };
 
+// 我的凭证：未核销列表（刷新后码不丢）
+const myVouchers = async req => {
+  const identityKey = requireIdentity(req);
+  const Voucher = require('../models/voucher');
+  const list = await Voucher.find({ identityKey, redeemedAt: null }).sort({ createdAt: -1 }).limit(20);
+  const events = await OutieEvent.find({ key: { $in: list.map(v => v.eventKey) } }, { key: 1, name: 1 });
+  const nameOf = new Map(events.map(e => [e.key, e.name]));
+  return {
+    vouchers: list.map(v => ({
+      code: v.code,
+      eventKey: v.eventKey,
+      eventName: nameOf.get(v.eventKey) || v.eventKey,
+      createdAt: v.createdAt
+    }))
+  };
+};
+
 // 商家核销：活动发布者按码核销
 const redeemVoucher = async req => {
   const identityKey = requireIdentity(req);
@@ -483,13 +500,6 @@ const checkinAtSpot = async req => {
     { $set: { [spotPath]: new Date() }, $inc: { feedTokens: tokenBonus } },
     { new: true }
   );
-  // 打卡即券：活动启用到店凭证时，首打卡签发 6 位核销码（存活动文档侧便于商家对账）
-  let voucherCode = null;
-  if (event.voucherEnabled && !isSelfPlay) {
-    voucherCode = String(crypto.randomBytes(3).toString('hex')).toUpperCase();
-    const Voucher = require('../models/voucher');
-    await Voucher.create({ code: voucherCode, eventKey: event.key, spotKey, identityKey, petName: pet.name || '' });
-  }
   if (!updated) {
     return {
       success: true,
@@ -498,6 +508,21 @@ const checkinAtSpot = async req => {
       reward: { spotKey, lookId: spot.lookId, rewardName: spot.rewardName || '' },
       pet: serializePet(pet, event)
     };
+  }
+
+  // 打卡即券：活动启用到店凭证时，真实首打卡签发 6 位核销码（每身份每活动上限 5 张，防刷）
+  let voucherCode = null;
+  if (event.voucherEnabled && !isSelfPlay) {
+    const Voucher = require('../models/voucher');
+    const mineCount = await Voucher.countDocuments({ eventKey: event.key, identityKey });
+    if (mineCount < 5) {
+      voucherCode = String(crypto.randomBytes(3).toString('hex')).toUpperCase();
+      try {
+        await Voucher.create({ code: voucherCode, eventKey: event.key, spotKey, identityKey, petName: pet.name || '' });
+      } catch (e) {
+        voucherCode = null; // 码冲突极小概率：放弃这张不阻塞打卡
+      }
+    }
   }
 
   const perEvent = eventRewardsOf(updated, event.key) || {};
@@ -702,9 +727,19 @@ const getEventByKey = async key => {
   if (!event) throw new ServiceError(404, '活动不存在');
   const center = eventCenter(event);
   const promos = await Photo.find({ eventKey: event.key, isPromo: true }).sort({ createdAt: -1 }).limit(12);
+  // 每个点位的到场训练家名字（社交证据常驻化：谁来过可回看）
+  const Voucher = require('../models/voucher');
+  const spotNames = await Promise.all((event.spots || []).map(async sp => {
+    const path = `rewards.${event.key}.${sp.key}`;
+    const pets = await OutiePet.find({ [path]: { $exists: true } }, { name: 1 }).sort({ createdAt: -1 }).limit(6);
+    const visitors = await OutiePet.countDocuments({ [path]: { $exists: true } });
+    return { key: sp.key, visitors, names: pets.map(x => x.name || '神秘训练家') };
+  }));
   return {
     event: serializeEvent(event),
     center,
+    voucherEnabled: Boolean(event.voucherEnabled),
+    spotVisitors: spotNames,
     promoPhotos: promos.map(ph => ({
       id: String(ph._id),
       url: ph.url,
@@ -845,6 +880,7 @@ module.exports = {
   feedPetForIdentity,
   touchPetForIdentity,
   myCommentActivity,
+  myVouchers,
   redeemVoucher,
   syncStepsForIdentity,
   getEventByKey,

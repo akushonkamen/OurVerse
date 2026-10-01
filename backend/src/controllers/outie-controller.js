@@ -92,6 +92,14 @@ const listAllEvents = async (req, res) => {
   }
 };
 
+const myVouchers = async (req, res) => {
+  try {
+    res.json(await outieService.myVouchers(req));
+  } catch (error) {
+    handleError(res, error, '获取凭证失败');
+  }
+};
+
 const redeemVoucher = async (req, res) => {
   try {
     res.json(await outieService.redeemVoucher(req));
@@ -202,6 +210,7 @@ module.exports = {
   feedPet,
   touchPet,
   commentActivity,
+  myVouchers,
   redeemVoucher,
   syncSteps,
   createComposite,
