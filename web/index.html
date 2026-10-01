@@ -627,7 +627,7 @@ async function checkinApi(spotId){
     pet=data.pet;state=stateFromPet(pet);render();
     if(data.alreadyOwned){showLook(spotId);toast('该站已领取过。');return;}
     if(data.newlyEvolved&&!prevEvolved)pendingEvolution=true;
-    showReward(spotId,data.tokenBonus);confetti();
+    showReward(spotId,data.tokenBonus,data.spotVisitors||0,data.visitorNames||[]);confetti();
     maybeNudgeLogin();
   };
   if(devSkipGeo){
@@ -1056,7 +1056,7 @@ function progressMarkup(){
 }
 function goalMarkup(){
   const n=count(),complete=n===SPOTS.length;
-  const heading=state.evolved?'限定形态已解锁':complete?'三个地点，全部集齐':n===0?'今天有 3 个地点':'已收集 '+n+' 个地点';
+  const heading=state.evolved?'限定形态已解锁':complete?'全部地点，已经集齐':n===0?`今天有 ${SPOTS.length} 个地点`:`已收集 ${n} 个地点`;
   const copy=state.evolved?'':complete?'可以解锁活动限定形态了。':'每站打卡得一套造型，集齐解锁限定形态。';
   const action=complete&&!state.evolved?{act:'evolve-prompt',label:'解锁限定形态'}:{act:'nav',label:n===0?'去拿新造型':state.evolved?'去哪儿看看':'继续打卡'};
   return `<section class="goal-panel panel"><h2>${heading}</h2>${copy?`<p class="goal-copy">${copy}</p>`:''}${progressMarkup()}<button class="btn ${complete&&!state.evolved?'btn-primary':'btn-dark'}" type="button" data-action="${action.act}" ${action.act==='nav'?'data-view="explore"':''}>${action.label}</button></section>`;
@@ -1073,7 +1073,7 @@ function pastCollectionMarkup(){
   return `<div class="setting-section" style="border-top:2px dashed var(--line);margin-top:12px;padding-top:10px"><h3>往期收藏</h3><div class="looks-grid">${cards}</div><p class="collection-note">${esc(past.map(c=>c.eventName).join(' · '))} 的造型可以继续穿。${evolved?` 其中 ${evolved} 场已解锁过限定形态。`:''}</p></div>`;
 }
 function collectionMarkup(){
-  return `<section class="panel collection"><div class="section-top"><h2>我的造型</h2><span class="small-meta mono">${LOOKS.filter(l=>unlocked(l.id)).length} / ${LOOKS.length} 已解锁</span></div><div class="looks-grid">${LOOKS.map(l=>`<button type="button" class="look-option ${!unlocked(l.id)?'locked':''} ${state.equipped===l.id?'active':''}" data-action="${unlocked(l.id)?'equip-inline':'look'}" data-look="${l.id}" aria-label="${l.name}，${state.equipped===l.id?'正在穿戴':unlocked(l.id)?'已解锁，点击换上':l.id==='evolved'&&count()===3?'可解锁':'未解锁'}" aria-pressed="${state.equipped===l.id}"><span class="look-thumb ${l.id}">${petSVG(l.id,l.spec)}${state.equipped===l.id?`<span class="wear-pin">${pixIcon('check')}</span>`:!unlocked(l.id)?`<span class="lock-pin">${pixIcon(l.id==='evolved'&&count()===3?'star':'lock')}</span>`:''}</span><span class="look-name">${l.short}</span></button>`).join('')}</div><p class="collection-note">点击造型即可换上，可反复更换。</p>${pastCollectionMarkup()}</section>`;
+  return `<section class="panel collection"><div class="section-top"><h2>我的造型</h2><span class="small-meta mono">${LOOKS.filter(l=>unlocked(l.id)).length} / ${LOOKS.length} 已解锁</span></div><div class="looks-grid">${LOOKS.map(l=>`<button type="button" class="look-option ${!unlocked(l.id)?'locked':''} ${state.equipped===l.id?'active':''}" data-action="${unlocked(l.id)?'equip-inline':'look'}" data-look="${l.id}" aria-label="${l.name}，${state.equipped===l.id?'正在穿戴':unlocked(l.id)?'已解锁，点击换上':l.id==='evolved'&&count()===SPOTS.length?'可解锁':'未解锁'}" aria-pressed="${state.equipped===l.id}"><span class="look-thumb ${l.id}">${petSVG(l.id,l.spec)}${state.equipped===l.id?`<span class="wear-pin">${pixIcon('check')}</span>`:!unlocked(l.id)?`<span class="lock-pin">${pixIcon(l.id==='evolved'&&count()===SPOTS.length?'star':'lock')}</span>`:''}</span><span class="look-name">${l.short}</span></button>`).join('')}</div><p class="collection-note">点击造型即可换上，可反复更换。</p>${pastCollectionMarkup()}</section>`;
 }
 /* 进度保命：没登录且已收集两站时，一次性提醒登录（成果只在本机存着=流失隐患） */
 function maybeNudgeLogin(){
@@ -1692,7 +1692,7 @@ async function loadNearStream(force){
 function nearCell(p){
   const url=esc(photoAbsUrl(p.url));
   const cap=esc(String(p.caption||'').trim());
-  const cmts=Array.isArray(p.comments)?p.comments.length:0;
+  const cmts=typeof p.comments==='number'?p.comments:(Array.isArray(p.comments)?p.comments.length:0);
   return `<figure class="live-frame"><button type="button" class="photo-hit" data-action="photo-open" data-photo="${esc(p.id)}" aria-label="查看照片与评论"><img src="${url}" alt="${cap||'现场照片'}" loading="lazy" decoding="async">${cmts?`<span class="cmt-chip mono">💬${cmts}</span>`:''}</button><figcaption class="live-meta mono"><span class="live-cap">${cap||'现场照片'}</span><span>${fmtClock(p.createdAt)} / ${fmtDistance(p.distance)}</span></figcaption></figure>`;
 }
 function nearBody(){
@@ -2067,8 +2067,9 @@ function renderMyEventsList(wrap){
   wrap.innerHTML=myEvents.map(e=>{
     const cover=e.coverUrl?`<img class="avatar-sq" style="width:44px;height:44px" src="${esc(photoAbsUrl(e.coverUrl))}" alt="">`:'<span class="avatar-sq" style="width:44px;height:44px"></span>';
     const st=stats.find(x=>x.key===e.key);
-    const dataLine=st?`<span class="about-list mono">到场 ${st.visitors} 人 · 打卡 ${st.checkins} 次 · 现场照 ${st.photos} 张${st.completed?` · 集齐 ${st.completed} 人`:''}</span>`:'';
-    return `<div class="wb-event">${cover}<div style="flex:1;min-width:0"><strong>${esc(e.name)}</strong><span class="about-list">${(e.spots&&e.spots.length)||0} 个点位 · ${e.active?'已上架':'未上架'}</span>${dataLine}</div><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="wb-promo" data-event="${esc(e.key)}">传宣传照</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="event-open" data-event="${esc(e.key)}">查看</button></div>`;
+    const dataLine=st?`<span class="about-list mono">到场 ${st.visitors} 人 · 打卡 ${st.checkins} 次 · 现场照 ${st.photos} 张${st.completed?` · 集齐 ${st.completed} 人`:''}${st.voucherEnabled?` · 核销 ${st.vouchersRedeemed||0}`:''}</span>`:'';
+    const redeemBox=st&&st.voucherEnabled?`<div style="display:flex;gap:6px;margin-top:6px"><input id="redeem-${esc(e.key)}" class="name-input" style="min-height:0;padding:6px 8px;font-size:12px;width:110px;text-transform:uppercase" placeholder="核销码" maxlength="6"><button type="button" class="live-status-btn" data-action="wb-redeem" data-event="${esc(e.key)}">核销</button></div>`:'';
+    return `<div class="wb-event">${cover}<div style="flex:1;min-width:0"><strong>${esc(e.name)}</strong><span class="about-list">${(e.spots&&e.spots.length)||0} 个点位 · ${e.active?'已上架':'未上架'}</span>${dataLine}</div><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="wb-promo" data-event="${esc(e.key)}">传宣传照</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="event-open" data-event="${esc(e.key)}">查看</button>${redeemBox}</div>`;
   }).join('');
 }
 function renderWorkbench(){
@@ -2078,8 +2079,8 @@ function renderWorkbench(){
   const spots=ensureWbSpots();
   const row=(sp,i)=>`<div class="wb-row"><div class="wb-head"><strong>点位 ${i+1}</strong><span style="display:flex;gap:6px">${spots.length>1?`<button type="button" class="live-status-btn" data-action="wb-del" data-idx="${i}">删</button>`:''}<button type="button" class="live-status-btn" data-action="wb-use-loc" data-idx="${i}">用我的位置</button></span></div><div class="form-row"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px" data-idx="${i}" data-f="name" value="${esc(sp.name)}" placeholder="点位名" maxlength="12"><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;width:110px" data-idx="${i}" data-f="rewardName" value="${esc(sp.rewardName)}" placeholder="奖励/装扮名" maxlength="12"></div><div class="form-row"><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:88px" data-idx="${i}" data-f="shape">${Object.entries(PET_SHADES).map(([v,label])=>`<option value="${v}"${sp.shape===v?' selected':''}>${label}</option>`).join('')}</select><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:88px" data-idx="${i}" data-f="pattern">${Object.entries(PET_PATTERN_NAMES).map(([v,label])=>`<option value="${v}"${(sp.pattern||'solid')===v?' selected':''}>${label}</option>`).join('')}</select><select class="name-input wb-in" style="min-height:0;padding:8px;font-size:12px;flex:none;width:88px" data-idx="${i}" data-f="accessory">${[['none','无'],['headphones','耳机'],['glasses','眼镜'],['bag','背包'],['crown','皇冠'],['bow','蝴蝶结'],['scarf','围巾'],['cap','帽子'],['flower','小花'],['bell','铃铛']].map(([v,label])=>`<option value="${v}"${sp.accessory===v?' selected':''}>${label}</option>`).join('')}</select><input type="color" class="wb-in" data-idx="${i}" data-f="body" value="${sp.body}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)" title="身体颜色"><input type="color" class="wb-in" data-idx="${i}" data-f="accent" value="${sp.accent}" style="width:36px;height:34px;padding:0;border:2px solid var(--ink)" title="点缀颜色"><span class="wb-preview" data-prev="${i}">${petSVG('wb'+i,wbSpec(sp))}</span></div><div class="form-row"><span class="wb-loc mono" data-loc="${i}" style="flex:1;font-size:11px;align-self:center">${wbLocText(sp)}</span><input class="name-input wb-in" style="min-height:0;padding:8px 10px;font-size:12px;flex:1.2" data-idx="${i}" data-f="arrivalNote" value="${esc(sp.arrivalNote)}" placeholder="到达说明" maxlength="20"></div></div>`;
   /* 重建前保留商家已输入的名称/介绍/上架开关，防止点定位按钮后丢失 */
-  const prevName=document.getElementById('wb-name'),prevSub=document.getElementById('wb-subtitle'),prevActive=document.getElementById('wb-active');
-  wrap.innerHTML=`<form id="wb-form"><input id="wb-name" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:8px" placeholder="活动名称（必填）" maxlength="20" value="${esc(prevName?prevName.value:'')}"><input id="wb-subtitle" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:10px" placeholder="一句话介绍（可选）" maxlength="30" value="${esc(prevSub?prevSub.value:'')}">${spots.map(row).join('')}<div style="margin:4px 0 8px">${spots.length<10?`<button type="button" class="live-status-btn" data-action="wb-add">+ 加一个点位（最多 10 个）</button>`:'<span class="about-list mono" style="margin:0">已达 10 个点位上限。</span>'}</div><label class="name-label" style="margin:10px 0 4px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="wb-active"${prevActive?(prevActive.checked?' checked':''):' checked'}>创建后立即上架</span></label><div class="modal-actions" style="margin-top:10px"><button type="submit" class="btn btn-primary"${wbBusy?' disabled':''}>发布活动</button></div></form><div class="setting-section"><h3>我发布的活动</h3><div id="wb-my-events"><p class="about-list">加载中…</p></div></div>`;
+  const prevName=document.getElementById('wb-name'),prevSub=document.getElementById('wb-subtitle'),prevActive=document.getElementById('wb-active'),prevVoucher=document.getElementById('wb-voucher');
+  wrap.innerHTML=`<form id="wb-form"><input id="wb-name" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:8px" placeholder="活动名称（必填）" maxlength="20" value="${esc(prevName?prevName.value:'')}"><input id="wb-subtitle" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px;margin-bottom:10px" placeholder="一句话介绍（可选）" maxlength="30" value="${esc(prevSub?prevSub.value:'')}">${spots.map(row).join('')}<div style="margin:4px 0 8px">${spots.length<10?`<button type="button" class="live-status-btn" data-action="wb-add">+ 加一个点位（最多 10 个）</button>`:'<span class="about-list mono" style="margin:0">已达 10 个点位上限。</span>'}</div><label class="name-label" style="margin:10px 0 4px"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="wb-active"${prevActive?(prevActive.checked?' checked':''):' checked'}>创建后立即上架</span></label><label class="name-label" style="margin:4px 0"><span style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="wb-voucher"${prevVoucher&&prevVoucher.checked?' checked':''}>启用到店凭证（打卡发核销码，店员对码给权益）</span></label><div class="modal-actions" style="margin-top:10px"><button type="submit" class="btn btn-primary"${wbBusy?' disabled':''}>发布活动</button></div></form><div class="setting-section"><h3>我发布的活动</h3><div id="wb-my-events"><p class="about-list">加载中…</p></div></div>`;
   loadMyEventsList();
 }
 async function submitWorkbench(){
@@ -2088,6 +2089,7 @@ async function submitWorkbench(){
   if(!name){toast('先给活动起个名字。');return;}
   const subtitle=document.getElementById('wb-subtitle').value.trim();
   const active=document.getElementById('wb-active').checked;
+  const voucherEnabled=Boolean(document.getElementById('wb-voucher')&&document.getElementById('wb-voucher').checked);
   /* 坐标解析：锁定的用锁定值；未锁定的用当前定位；拿不到真实定位就明确拒绝，绝不造假坐标 */
   const located=geo.state==='ok'&&geo.coords;
   const spotsPayload=[];
@@ -2106,7 +2108,7 @@ async function submitWorkbench(){
       look:{name:sp.rewardName||sp.name,shape:sp.shape,body:sp.body,accent:sp.accent,pattern:sp.pattern||'solid',accessory:sp.accessory}
     });
   }
-  const payload={name,subtitle,active,spots:spotsPayload};
+  const payload={name,subtitle,active,voucherEnabled,spots:spotsPayload};
   wbBusy=true;
   try{
     await apiFetch('/outie/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
@@ -2185,7 +2187,7 @@ function navigate(target,focusSpot=null){
   try{history.replaceState(null,'','#/'+view);}catch(e){}
   render();window.scrollTo(0,0);
   if(view==='mine'){updateAccountState();loadMinePhotos();
-    if(unreadComments>0){lastCommentSeen=Date.now();unreadComments=0;document.title='OUTIE — 到现场打卡，收集造型';document.querySelectorAll('.cmt-dot').forEach(d=>d.remove());try{localStorage.setItem('outie.cmt-seen',String(lastCommentSeen));}catch(e){}}}
+    if(unreadComments>0)markCommentsSeen();}
   if(focusSpot){const card=document.getElementById('spot-'+focusSpot);card?.classList.add('focus-spot');card?.scrollIntoView({block:'center',behavior:reduceMotion.matches?'auto':'smooth'});setTimeout(()=>card?.classList.remove('focus-spot'),1800);}
 }
 function toast(message){const el=document.getElementById('toast');clearTimeout(toastTimer);el.textContent=message;el.classList.add('visible');toastTimer=setTimeout(()=>el.classList.remove('visible'),2600);}
@@ -2217,17 +2219,17 @@ function rewardStage(id,label='NEW LOOK',stamp='COLLECTED'){
   const cls=lk.spec?'spec':'';
   return `<div class="reward-stage ${id} ${cls}"><span class="stage-label mono">${label}</span>${petSVG(id,lk.spec)}<span class="reward-stamp mono">${stamp}</span></div>`;
 }
-function showReward(id,tokenBonus=0,spotVisitors=0){
+function showReward(id,tokenBonus=0,spotVisitors=0,visitorNames=[],voucher=null){
   const s=SPOTS.find(s=>s.id===id);const all=count()===SPOTS.length;
-  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡${spotVisitors>1?`<br><span>此地已有 <strong>${spotVisitors}</strong> 位训练家到场</span>`:''}${tokenBonus?`<br><span style="color:var(--accent,#a3463c);font-weight:700">+${tokenBonus} 包饲料已入账 · 现存 ${Number(pet.feedTokens)||0} 包</span>`:''}<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="photo-new"${pet&&pet.eventKey?` data-event='${esc(JSON.stringify({key:pet.eventKey,name:eventKeyText()}))}'`:''} type="button">拍一张，发到现场</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
+  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡${spotVisitors>1?`<br><span>此地已有 <strong>${spotVisitors}</strong> 位训练家到场${visitorNames&&visitorNames.length?'：'+esc(visitorNames.slice(0,4).join('、'))+(visitorNames.length>4?' 等':''):''}</span><button type="button" class="live-status-btn" style="margin-left:6px" data-action="photo-new">给这个点位拍一张</button>`:''}${voucher?`<br><span style="color:var(--accent,#a3463c);font-weight:700">到店凭证：<strong>${esc(voucher.code)}</strong>（出示给店员核销 · ${esc(voucher.spotName||'')}）</span>`:''}${tokenBonus?`<br><span style="color:var(--accent,#a3463c);font-weight:700">+${tokenBonus} 包饲料已入账 · 现存 ${Number(pet.feedTokens)||0} 包</span>`:''}<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="photo-new"${pet&&pet.eventKey?` data-event='${esc(JSON.stringify({key:pet.eventKey,name:eventKeyText()}))}'`:''} type="button">拍一张，发到现场</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
 }
 function showLook(id){
-  const look=lookFor(id);if(id==='evolved'&&!state.evolved&&count()===3){showEvolutionPrompt();return;}
+  const look=lookFor(id);if(id==='evolved'&&!state.evolved&&count()===SPOTS.length){showEvolutionPrompt();return;}
   if(unlocked(id)){
-    modal(`<p class="modal-eyebrow mono">LOOK / ${look.label}</p><h2 id="dialog-title">${look.name}</h2><p class="modal-copy">${id==='base'?'领养时的初始形态。':id==='evolved'?'集齐三个地点解锁的活动限定形态。':'已获得的造型，可随时换上。'}</p>${rewardStage(id,'UNLOCKED',state.equipped===id?'WEARING':'OWNED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="${id}">${state.equipped===id?'正在穿戴':'换上'}</button></div>`,'look');
+    modal(`<p class="modal-eyebrow mono">LOOK / ${look.label}</p><h2 id="dialog-title">${look.name}</h2><p class="modal-copy">${id==='base'?'领养时的初始形态。':id==='evolved'?`集齐全部 ${SPOTS.length} 个地点解锁的活动限定形态。`:'已获得的造型，可随时换上。'}</p>${rewardStage(id,'UNLOCKED',state.equipped===id?'WEARING':'OWNED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="${id}">${state.equipped===id?'正在穿戴':'换上'}</button></div>`,'look');
   }else{
     const s=SPOTS.find(s=>s.id===id);
-    modal(`<p class="modal-eyebrow mono">LOCKED</p><h2 id="dialog-title">${look.name}</h2><p class="modal-copy">${s?'到'+s.name+'（'+s.line+'）打卡获得。':'集齐三个地点后解锁。'}</p>${rewardStage(id,'LOCKED','未解锁')}<div class="modal-actions"><button class="btn btn-primary" data-action="goto-spot" data-spot="${s?s.id:''}" type="button">${s?'去'+s.zone:'去收集'}</button></div>`,'locked');
+    modal(`<p class="modal-eyebrow mono">LOCKED</p><h2 id="dialog-title">${look.name}</h2><p class="modal-copy">${s?'到'+s.name+'（'+s.line+'）打卡获得。':`集齐全部 ${SPOTS.length} 个地点后解锁。`}</p>${rewardStage(id,'LOCKED','未解锁')}<div class="modal-actions"><button class="btn btn-primary" data-action="goto-spot" data-spot="${s?s.id:''}" type="button">${s?'去'+s.zone:'去收集'}</button></div>`,'locked');
   }
 }
 function wear(id){
@@ -2243,9 +2245,9 @@ function wear(id){
   state.equipped=id;save();closeModal();flashNext=true;navigate('pet');toast('已换上「'+lookFor(id).name+'」。');
 }
 function showEvolutionPrompt(){
-  if(!state.name||count()!==SPOTS.length){toast('先集齐三个地点。');return;}
+  if(!state.name||count()!==SPOTS.length){toast(`先集齐全部 ${SPOTS.length} 个地点。`);return;}
   if(state.evolved){showLook('evolved');return;}
-  modal(`<p class="modal-eyebrow mono">EVENT COMPLETE</p><h2 id="dialog-title">三个地点，全部集齐</h2><p class="modal-copy">${esc(state.name)} 可以解锁活动限定形态「出逃星人」。</p><div class="reward-stage evolved hidden-look"><span class="stage-label mono">A NEW FORM</span>${petSVG('evolved')}<span class="reward-stamp mono">READY</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="evolve" type="button">解锁</button><button class="text-btn" type="button" data-action="close">稍后</button></div>`,'evolution-ready');
+  modal(`<p class="modal-eyebrow mono">EVENT COMPLETE</p><h2 id="dialog-title">全部地点，集齐！</h2><p class="modal-copy">${esc(state.name)} 可以解锁活动限定形态「出逃星人」。</p><div class="reward-stage evolved hidden-look"><span class="stage-label mono">A NEW FORM</span>${petSVG('evolved')}<span class="reward-stamp mono">READY</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="evolve" type="button">解锁</button><button class="text-btn" type="button" data-action="close">稍后</button></div>`,'evolution-ready');
 }
 function showEvolutionDone(){
   modal(`<span class="success-chip">${pixIcon('check')}UNLOCKED</span><h2 id="dialog-title">解锁：出逃星人</h2><p class="modal-copy">活动限定形态。五套造型全部收集完成，可随时更换。</p>${rewardStage('evolved','NO.005','LIMITED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="evolved">穿上</button><button class="btn btn-dark" type="button" data-action="share-moment">分享这张卡</button></div>`,'evolution-done');
@@ -2478,6 +2480,20 @@ function handleAction(button){
           :'又喂了一口，'+(pet.name||'它')+' 心情 +25。剩 '+((Number(pet.feedTokens)||0))+' 包。');
       }catch(error){button.disabled=false;toast(errText(error));}
     })();break;
+    case 'wb-redeem':{
+      const ev=button.dataset.event;
+      const input=document.getElementById('redeem-'+ev);
+      const code=input?input.value:'';
+      if(!code){toast('先输入客人出示的核销码。');break;}
+      button.disabled=true;
+      try{
+        const d=await apiFetch('/outie/vouchers/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+        toast('核销成功：'+(d.petName||'游客')+' 的凭证。');blip('wear');
+        if(input)input.value='';
+        loadMyEventsList(true);
+      }catch(error){button.disabled=false;toast(errText(error));}
+      break;
+    }
     case 'wb-add':{
       ensureWbSpots();
       if(wbSpots.length>=10){toast('最多 10 个点位。');break;}
@@ -2743,6 +2759,19 @@ async function pollCommentActivity(){
     const d=await apiFetch('/outie/comments/activity?since='+encodeURIComponent(lastCommentSeen||0));
     unreadComments=d.unread||0;
     document.title=unreadComments>0?`(${unreadComments}) OUTIE — 到现场打卡，收集造型`:'OUTIE — 到现场打卡，收集造型';
+    /* 通知横幅：可点直达那张照片 */
+    let banner=document.getElementById('cmt-banner');
+    if(unreadComments>0&&d.latest&&d.latest.photoId){
+      if(!banner){
+        banner=document.createElement('button');
+        banner.id='cmt-banner';banner.type='button';
+        banner.style.cssText='position:fixed;left:12px;right:12px;bottom:74px;z-index:60;background:#26241c;color:#efecdf;border:2px solid #26241c;padding:10px 14px;font:700 12px/1.5 ui-monospace,monospace;text-align:left';
+        banner.addEventListener('click',()=>{markCommentsSeen();closeModal();openPhotoDetail(banner.dataset.photo);banner.remove();});
+        document.body.appendChild(banner);
+      }
+      banner.dataset.photo=d.latest.photoId;
+      banner.textContent=`💬 有人评论了你的照片：「${(d.latest.text||'').slice(0,24)}」— 点看`;
+    } else if(banner) banner.remove();
     const navBtn=document.getElementById('mobile-nav')?.querySelector('[data-view="mine"],[data-view="explore"]');
     document.querySelectorAll('[data-view="mine"]').forEach(b=>{
       let dot=b.querySelector('.cmt-dot');
@@ -2750,6 +2779,9 @@ async function pollCommentActivity(){
       else if(dot)dot.remove();
     });
   }catch(e){}
+}
+function markCommentsSeen(){
+  try{lastCommentSeen=Date.now();unreadComments=0;localStorage.setItem('outie.cmt-seen',String(lastCommentSeen));document.title='OUTIE — 到现场打卡，收集造型';document.querySelectorAll('.cmt-dot').forEach(d=>d.remove());const b=document.getElementById('cmt-banner');if(b)b.remove();}catch(e){}
 }
 let reconnectTimer=null;
 function scheduleReconnect(){

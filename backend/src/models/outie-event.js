@@ -35,6 +35,7 @@ const outieEventSchema = new mongoose.Schema({
   name: { type: String, required: true },
   subtitle: { type: String, default: '' },
   active: { type: Boolean, default: false },
+  voucherEnabled: { type: Boolean, default: false },
   organizerKey: { type: String, default: '', index: true },
   coverUrl: { type: String, default: '' },
   spots: [outieSpotSchema],

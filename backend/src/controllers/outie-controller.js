@@ -92,6 +92,14 @@ const listAllEvents = async (req, res) => {
   }
 };
 
+const redeemVoucher = async (req, res) => {
+  try {
+    res.json(await outieService.redeemVoucher(req));
+  } catch (error) {
+    handleError(res, error, '核销失败');
+  }
+};
+
 const commentActivity = async (req, res) => {
   try {
     res.json(await outieService.myCommentActivity(req));
@@ -194,6 +202,7 @@ module.exports = {
   feedPet,
   touchPet,
   commentActivity,
+  redeemVoucher,
   syncSteps,
   createComposite,
   staticMap,
