@@ -320,7 +320,7 @@ const feedPetForIdentity = async req => {
   const MILESTONES = [3, 7, 14, 30, 60, 100];
   const milestoneHit = firstToday && MILESTONES.includes(streakNext) ? streakNext : 0;
   const updated = await OutiePet.findOneAndUpdate(
-    { _id: pet._id, $or: [{ feedTokens: { $gt: 0 } }, { feedTokens: null }] },
+    { _id: pet._id, lastFeedDay: { $ne: today }, $or: [{ feedTokens: { $gt: 0 } }, { feedTokens: null }] },
     { $inc: { feedTokens: -1 + (milestoneHit ? 5 : 0), feedTotal: 1 }, $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext } },
     { new: true }
   );
@@ -394,9 +394,13 @@ const upsertPetForIdentity = async req => {
   let invitedBy = '';
   if (invitedByRaw) {
     const inviterPet = await OutiePet.findById(invitedByRaw).catch(() => null);
-    if (inviterPet && inviterPet.identityKey !== identityKey && (inviterPet.invitedCount || 0) < 5) {
-      invitedBy = inviterPet.identityKey;
-      await OutiePet.updateOne({ _id: inviterPet._id }, { $inc: { feedTokens: 2, invitedCount: 1 } });
+    if (inviterPet && inviterPet.identityKey !== identityKey) {
+      // 原子上限门：invitedCount<5 才发（并发领养不会绕过）
+      const bumped = await OutiePet.findOneAndUpdate(
+        { _id: inviterPet._id, $or: [{ invitedCount: null }, { invitedCount: { $lt: 5 } }] },
+        { $inc: { feedTokens: 2, invitedCount: 1 } }
+      );
+      if (bumped) invitedBy = inviterPet.identityKey;
     }
   }
   const newPet = await OutiePet.create({
