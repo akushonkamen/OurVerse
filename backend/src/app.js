@@ -151,6 +151,31 @@ if (fs.existsSync(outieManifestPath)) {
   });
 }
 
+// 分享落地页 /s/:photoId —— 照片出站分享的回流入口（OG 卡让聊天工具里显示大图）
+const Photo = require('./models/photo');
+const escapeHtml = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+app.get('/s/:photoId', async (req, res) => {
+  try {
+    const photo = await Photo.findById(req.params.photoId).catch(() => null);
+    if (!photo) return res.status(404).send('Not found');
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const img = photo.url.startsWith('http') ? photo.url : origin + photo.url;
+    const caption = escapeHtml(String(photo.caption || '').trim().slice(0, 60) || '现场照片');
+    const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${caption} · OUTIE</title>
+<meta property="og:title" content="${caption} · OUTIE 到现场打卡，收集造型">
+<meta property="og:description" content="我在 OUTIE 现场拍下了这一刻——来看看，然后领养你的宠物去打卡。">
+<meta property="og:image" content="${escapeHtml(img)}">
+<meta name="twitter:card" content="summary_large_image">
+<style>body{margin:0;background:#efecdf;font-family:ui-monospace,monospace;display:flex;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px}img{max-width:min(92vw,560px);border:3px solid #26241c;image-rendering:auto}p{color:#26241c;font-size:13px;margin:0}a{background:#26241c;color:#efecdf;text-decoration:none;padding:12px 22px;font-weight:700;font-size:14px;border:2px solid #26241c}</style></head>
+<body><img src="${escapeHtml(img)}" alt="${caption}"><p>${caption}</p><a href="${origin}/">领养宠物 · 去现场打卡</a></body></html>`;
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.type('html').send(html);
+  } catch (e) {
+    res.status(500).send('Error');
+  }
+});
+
 app.use('/api', routes);
 
 // /api 未匹配路由一律回 JSON，别让前端收到 HTML 的 Cannot GET

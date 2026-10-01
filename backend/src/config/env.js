@@ -124,7 +124,8 @@ const config = {
     isRailway: Boolean(process.env.RAILWAY)
   },
   outie: {
-    devSkipGeo: process.env.OUTIE_DEV_SKIP_GEO === 'true',
+    // 生产环境强制关闭定位旁路（防 curl 无坐标打卡刷奖励）
+    devSkipGeo: process.env.NODE_ENV === 'production' ? false : process.env.OUTIE_DEV_SKIP_GEO === 'true',
     autoSeed: process.env.OUTIE_AUTOSEED === 'true'
   }
 };

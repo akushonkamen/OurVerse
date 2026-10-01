@@ -491,7 +491,19 @@ const getPhotoDetails = async (req, res) => {
   }
 };
 
+// 评论频控（进程内简版：同身份 10s/条）
+const commentRateLimiter = new Map();
 const addPhotoComment = async (req, res) => {
+  // 垃圾防护：评论截断到 140 字；同身份 10 秒内只允许 1 条
+  const commentText = String((req.body || {}).comment || '').trim().slice(0, 140);
+  if (!commentText) return res.status(400).json({ error: '评论内容不能为空' });
+  {
+    const who = String(req.userId || req.anonymousId || req.ip);
+    const now = Date.now();
+    const last = commentRateLimiter.get(who) || 0;
+    if (now - last < 10000) return res.status(429).json({ error: '评论发太快了，歇一下' });
+    commentRateLimiter.set(who, now);
+  }
   try {
     const { comment } = req.body;
 
@@ -528,7 +540,7 @@ const addPhotoComment = async (req, res) => {
       anonymousId,
       username,
       avatar,
-      text: comment
+      text: commentText
     });
 
     await photo.save();

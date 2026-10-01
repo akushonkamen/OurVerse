@@ -124,13 +124,28 @@ const collectedSpotKeys = pet => {
 
 const eventRewardsOf = (pet, eventKey) => (pet.rewards && pet.rewards[eventKey]) || {};
 
-// 心情衰减：每小时 10 点（满值约 10 小时见底）——一天总衰减 240，每次喂 +25，恰好一天 10 包
-const MOOD_DECAY_PER_HOUR = 10;
+// 心情衰减分时制（旅行青蛙模型）：夜间宠物睡觉不衰减，白天匀速掉
+// 推演：22:00 喂满 100 → 晨 8:30 约 84（不进饥饿态）→ 17:00 约 35 触发「饿了」→ 晚间二次喂食，日耗 2 包
 const MOOD_FLOOR = 10;
 const deriveMood = pet => {
   if (!pet.lastFedAt) return 60;
-  const hours = (Date.now() - new Date(pet.lastFedAt).getTime()) / 3600000;
-  return Math.max(MOOD_FLOOR, Math.min(100, Math.round(100 - hours * MOOD_DECAY_PER_HOUR)));
+  let minutes = (Date.now() - new Date(pet.lastFedAt).getTime()) / 60000;
+  let decayed = 0;
+  // 逐时段累计衰减（东八区）：0-7 点 0/时，7-10 点 6/时，其余 8/时
+  let cursor = new Date(pet.lastFedAt).getTime();
+  const SEGMENTS = [[0, 7, 0], [7, 10, 6], [10, 24, 8]];
+  while (minutes > 0) {
+    const local = new Date(cursor + 8 * 3600000);
+    const hour = local.getUTCHours() + local.getUTCMinutes() / 60;
+    const seg = SEGMENTS.find(([a, b]) => hour >= a && hour < b) || SEGMENTS[2];
+    const hourEnd = cursor + ((seg[1] - hour) * 3600000);
+    const spanMin = Math.min(minutes, (hourEnd - cursor) / 60000);
+    decayed += (spanMin / 60) * seg[2];
+    cursor += spanMin * 60000;
+    minutes -= spanMin;
+    if (decayed >= 90) break;
+  }
+  return Math.max(MOOD_FLOOR, Math.min(100, Math.round(100 - decayed)));
 };
 // 东八区日期串，喂食以自然日为界
 const dayKeyOf = (d = new Date()) => {
@@ -167,7 +182,7 @@ const STEPS_PER_TOKEN = 500;
 const TOKENS_DAILY_CAP = 15;
 const effectiveTokens = pet => (pet.feedTokens == null ? 3 : pet.feedTokens);
 
-// 上报本机计步：按日累计、按赚币上限发放（carry 攒零头，可跨日）
+// 上报本机计步：$inc 原子发放（防与喂食并发时的铸币竞态）；速率闸与日赚上限防刷；零头跨日保留
 const syncStepsForIdentity = async (req, stepsInput) => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
@@ -175,18 +190,26 @@ const syncStepsForIdentity = async (req, stepsInput) => {
   if (!pet) throw new ServiceError(400, '先领养一只宠物，步数才有用处');
   let steps = Math.floor(Number(stepsInput));
   if (!Number.isFinite(steps) || steps <= 0) throw new ServiceError(400, '步数不对');
-  steps = Math.min(steps, 2000);
+  steps = Math.min(steps, 600);
+  // 速率闸：步行生理上限约 150 步/分，超速部分按 150 步/分折算
+  const now = Date.now();
+  const lastAt = pet.lastStepSyncAt ? new Date(pet.lastStepSyncAt).getTime() : 0;
+  const gapMin = lastAt ? Math.min(Math.max((now - lastAt) / 60000, 0.5), 1440) : 1440;
+  if (now - lastAt < 15000) throw new ServiceError(429, '步数同步太频繁，稍等一下');
+  const maxByRate = Math.ceil(gapMin * 150);
+  const credited = Math.min(steps, maxByRate);
+
   const today = dayKeyOf();
   const sameDay = pet.stepsDayKey === today;
+  const carryIn = sameDay ? (pet.stepsCarry || 0) : (pet.stepsCarry || 0); // 零头跨日保留（上限 2000）
   const earnedKeyToday = pet.tokensEarnedKey === today ? (pet.tokensEarnedDay || 0) : 0;
-  const carry = (sameDay ? (pet.stepsCarry || 0) : 0) + steps;
+  const carry = Math.min(carryIn + credited, 2000);
   const earnLeft = Math.max(0, TOKENS_DAILY_CAP - earnedKeyToday);
   const award = Math.min(Math.floor(carry / STEPS_PER_TOKEN), earnLeft);
-  const tokens = effectiveTokens(pet) + award;
   const carryLeft = carry - award * STEPS_PER_TOKEN;
   const updated = await OutiePet.findOneAndUpdate(
     { _id: pet._id },
-    { $set: { stepsDayKey: today, stepsCarry: carryLeft, feedTokens: tokens, tokensEarnedKey: today, tokensEarnedDay: earnedKeyToday + award }, $inc: { stepsDay: steps } },
+    { $set: { stepsDayKey: today, stepsCarry: carryLeft, tokensEarnedKey: today, tokensEarnedDay: earnedKeyToday + award, lastStepSyncAt: new Date(now) }, $inc: { stepsDay: credited, feedTokens: award } },
     { new: true }
   );
   return {
@@ -206,7 +229,7 @@ const feedPetForIdentity = async req => {
   const today = dayKeyOf();
   const startingTokens = effectiveTokens(pet);
   if (startingTokens < 1) {
-    throw new ServiceError(400, '饲料不够了：带着手机出门走走，50 步换 1 包');
+    throw new ServiceError(400, '饲料不够了：开着 OUTIE 走路，500 步换 1 包');
   }
   const firstToday = pet.lastFeedDay !== today;
   const yesterday = dayKeyOf(new Date(Date.now() - 86400000));
@@ -216,7 +239,7 @@ const feedPetForIdentity = async req => {
     { $inc: { feedTokens: -1, feedTotal: 1 }, $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext } },
     { new: true }
   );
-  if (!updated) throw new ServiceError(400, '饲料不够了：带着手机出门走走，50 步换 1 包');
+  if (!updated) throw new ServiceError(400, '饲料不够了：开着 OUTIE 走路，500 步换 1 包');
   const event = await findActiveEvent();
   return { pet: serializePet(updated, event), alreadyFed: !firstToday, firstToday };
 };
@@ -281,12 +304,21 @@ const upsertPetForIdentity = async req => {
     throw new ServiceError(400, '先起一个名字');
   }
 
+  // 邀请归因：带 ?ref= 领养时，被邀者 3+2 包，邀请人宠物 +2 包（双向奖励）
+  const invitedByRaw = typeof (req.body || {}).invitedBy === 'string' ? req.body.invitedBy.slice(0, 64) : '';
+  let invitedBy = '';
+  if (invitedByRaw && invitedByRaw !== identityKey) {
+    invitedBy = invitedByRaw;
+    await OutiePet.updateOne({ identityKey: invitedBy }, { $inc: { feedTokens: 2 } });
+  }
   const newPet = await OutiePet.create({
     identityKey,
     name: trimmedName,
     rewards: {},
     evolvedEvents: [],
-    equipped: 'base'
+    equipped: 'base',
+    feedTokens: invitedBy ? 5 : 3,
+    invitedBy
   });
 
   return { success: true, created: true, pet: serializePet(newPet, event), event: event ? serializeEvent(event) : null };
@@ -367,7 +399,9 @@ const checkinAtSpot = async req => {
   const hasCoords = Number.isFinite(viewerLng) && Number.isFinite(viewerLat);
 
   if (hasCoords) {
-    const radius = spot.radiusMeters || DEFAULT_SPOT_RADIUS_METERS;
+    // 围栏按上报精度放宽：GPS 城市峡谷误差不该惩罚到场的人（accuracy*1.5 与固定半径取大者）
+    const claimedAcc = Math.max(0, Math.min(Number((req.body || {}).accuracy) || 0, 500));
+    const radius = Math.max(spot.radiusMeters || DEFAULT_SPOT_RADIUS_METERS, claimedAcc * 1.5);
     const distance = calculateDistance(viewerLat, viewerLng, spot.lat, spot.lng);
     if (distance > radius) {
       throw new ServiceError(400, `距离 ${spot.name} ${Math.round(distance)} 米，需靠近 ${radius} 米内才能打卡`, {
@@ -402,8 +436,9 @@ const checkinAtSpot = async req => {
     newlyEvolved = true;
   }
 
-  // 打卡接入养成经济：每站首打卡 +3 包，集齐活动再 +5 包，并把心情拉回不低于 85
-  const tokenBonus = newlyEvolved ? 8 : 3;
+  // 打卡接入养成经济：每站首打卡 +3 包，集齐活动再 +8 包；发布者打自己的活动不发奖（防自建活动刷币）
+  const isSelfPlay = event.organizerKey === identityKey;
+  const tokenBonus = isSelfPlay ? 0 : (newlyEvolved ? 8 : 3);
   pet.feedTokens = (pet.feedTokens == null ? 3 : pet.feedTokens) + tokenBonus;
   const minFresh = Date.now() - 1.5 * 3600000;
   if (!pet.lastFedAt || new Date(pet.lastFedAt).getTime() < minFresh) {
@@ -454,6 +489,15 @@ const createEventForIdentity = async req => {
   const body = req.body || {};
   const name = typeof body.name === 'string' ? body.name.trim().slice(0, 40) : '';
   if (!name) throw new ServiceError(400, '活动名称必填');
+  // 防刷限额：单身份进行中活动 ≤3、每日新建 ≤2（防自建活动刷打卡奖励）
+  const activeCount = await OutieEvent.countDocuments({ organizerKey: identityKey, active: true });
+  const todayCount = await OutieEvent.countDocuments({ organizerKey: identityKey, createdAt: { $gte: new Date(Date.now() - 86400000) } });
+  if (body.active !== false && activeCount >= 3) {
+    throw new ServiceError(400, '进行中的活动最多 3 场，先下架一场再发布');
+  }
+  if (todayCount >= 2) {
+    throw new ServiceError(400, '每天最多发布 2 场活动，明天再来');
+  }
 
   const rawSpots = Array.isArray(body.spots) ? body.spots : [];
   const spots = rawSpots.slice(0, 10).map((sp, i) => {
@@ -494,10 +538,43 @@ const createEventForIdentity = async req => {
   return { success: true, event: serializeEvent(event) };
 };
 
+// 商家数据面板：每个自有活动的客流证据（独立打卡用户/打卡次数/现场照片数）
+const myEventStats = async identityKey => {
+  const events = await OutieEvent.find({ organizerKey: identityKey }).sort({ createdAt: -1 }).limit(50);
+  if (!events.length) return [];
+  const stats = await Promise.all(events.map(async event => {
+    const rewardsPath = `rewards.${event.key}`;
+    // 独立打卡用户：rewards 里有这个活动分组的宠物数
+    const visitors = await OutiePet.countDocuments({ [rewardsPath]: { $exists: true, $ne: {} } });
+    // 打卡次数：这些宠物在该活动下的点位条目总和（小数据量直接算）
+    let checkins = 0;
+    if (visitors) {
+      const pets = await OutiePet.find({ [rewardsPath]: { $exists: true, $ne: {} } }, { [`rewards.${event.key}`]: 1 });
+      for (const p of pets) {
+        const per = eventRewardsOf(p, event.key) || {};
+        checkins += Object.keys(per).length;
+      }
+    }
+    const photos = await Photo.countDocuments({ eventKey: event.key, isPromo: { $ne: true } });
+    const spots = (event.spots || []).length;
+    return {
+      key: event.key,
+      name: event.name,
+      active: Boolean(event.active),
+      spotCount: spots,
+      visitors,
+      checkins,
+      photos,
+      completed: visitors ? await OutiePet.countDocuments({ [rewardsPath]: { $exists: true }, $expr: { $gte: [{ $size: { $objectToArray: `$${rewardsPath}` } }, spots] } }) : 0
+    };
+  }));
+  return stats;
+};
+
 const listMyEvents = async req => {
   const identityKey = requireIdentity(req);
   const events = await OutieEvent.find({ organizerKey: identityKey }).sort({ createdAt: -1 }).limit(50);
-  return { events: events.map(serializeEvent) };
+  return { events: events.map(serializeEvent), stats: await myEventStats(identityKey) };
 };
 
 const eventCenter = event => {

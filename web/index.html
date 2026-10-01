@@ -6,6 +6,12 @@
 <meta name="theme-color" content="#efecdf">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 8 8%27%3E%3Crect width=%278%27 height=%278%27 fill=%27%23efecdf%27/%3E%3Crect x=%271%27 y=%271%27 width=%276%27 height=%276%27 fill=%27%2326241c%27/%3E%3Crect x=%272%27 y=%272%27 width=%272%27 height=%272%27 fill=%27%23a3463c%27/%3E%3Crect x=%274%27 y=%274%27 width=%272%27 height=%272%27 fill=%27%23efecdf%27/%3E%3C/svg%3E">
 <meta name="description" content="OUTIE：到现场打卡，收集宠物造型。">
+<meta property="og:title" content="OUTIE — 到现场打卡，收集像素宠物">
+<meta property="og:description" content="拿着手机走到点位，打卡收集限定造型。你的宠物靠你走的每一步长大。">
+<meta property="og:image" content="/icons/og-card.png">
+<meta property="og:url" content="https://our-verse.com/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
 <title>OUTIE — 到现场打卡，收集造型</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -606,19 +612,21 @@ function applyEvent(ev){
   }));
   rebuildLooks();
 }
-async function adoptApi(name){
-  const data=await apiFetch('/outie/pet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+async function adoptApi(name,invitedBy){
+  const body={name};
+  if(invitedBy)body.invitedBy=String(invitedBy);
+  const data=await apiFetch('/outie/pet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   pet=data.pet;state=stateFromPet(pet);
 }
 async function checkinApi(spotId){
   const prevEvolved=state.evolved;
-  const doPost=coords=>apiFetch('/outie/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(coords?{spotKey:spotId,...coords}:{spotKey:spotId})});
+  const doPost=coords=>apiFetch('/outie/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(coords?{spotKey:spotId,...coords,accuracy:geo.accuracy||0}:{spotKey:spotId})});
   const handle=data=>{
     pet=data.pet;state=stateFromPet(pet);render();
     if(data.alreadyOwned){showLook(spotId);toast('该站已领取过。');return;}
     if(data.newlyEvolved&&!prevEvolved)pendingEvolution=true;
-    if(data.tokenBonus)toast(`获赠 ${data.tokenBonus} 包饲料！`);
-    showReward(spotId);confetti();
+    showReward(spotId,data.tokenBonus);confetti();
+    maybeNudgeLogin();
   };
   if(devSkipGeo){
     try{handle(await doPost(null));}catch(error){toast(errText(error));}
@@ -1070,7 +1078,7 @@ function maybeNudgeLogin(){
   if(mode!=='api'||authToken())return;
   let nudged=false;
   try{nudged=Boolean(localStorage.getItem('outie.saver-nudged'));}catch(e){}
-  if(nudged||count()<2)return;
+  if(nudged||(count()<2&&!pastCollection.length))return;
   try{localStorage.setItem('outie.saver-nudged','1');}catch(e){}
   modal(`<p class="modal-eyebrow mono">SAVE / 进度保命</p><h2 id="dialog-title">你已经收集到两站了</h2><p class="modal-copy">现在的进度只存在这台手机里，换设备或清理浏览器就没了。<br>登录一下，宠物和造型永远跟着你走。</p><div class="modal-actions"><button type="button" class="btn btn-primary" data-action="login-open">登录 / 注册</button><button type="button" class="text-btn" data-action="close">先用着</button></div>`,'saver');
 }
@@ -1118,7 +1126,7 @@ async function syncSteps(){
 }
 function enablePedometer(){
   const D=window.DeviceMotionEvent;
-  if(!D){pedometerState='unsupported';render();toast('这台设备不支持计步，用打卡赚不了饲料但还能正常喂。');return;}
+  if(!D){pedometerState='unsupported';try{localStorage.setItem('outie.pedometer','unsupported');}catch(e){}render();toast('这台设备不支持计步，去现场打卡也能赚饲料。');return;}
   const start=()=>{
     window.addEventListener('devicemotion',onMotion);
     pedometerState='on';
@@ -1144,8 +1152,10 @@ function feedMarkup(){
   const carry=Number(pet.stepsCarry)||0;
   const toNext=Math.max(1,500-carry);
   const earnLeft=Math.max(0,15-earned);
-  const pedo=pedometerState==='on'
-    ?'<span class="about-list mono" style="margin:0">计步中</span>'
+  const pedo=pedometerState==='unsupported'
+    ?'<span class="about-list mono" style="margin:0">本设备不支持计步 · 去现场打卡也能赚</span>'
+    :pedometerState==='on'
+    ?'<span class="about-list mono" style="margin:0">计步中（开着页面走才算）</span>'
     :`<button type="button" class="live-status-btn" data-action="pedometer">${pedometerState==='denied'?'重开计步':'开启计步'}</button>`;
   const feedBtn=tokens>0
     ?`<button type="button" class="btn ${mood<70?'btn-primary':'btn-dark'}" style="width:auto;min-height:0;padding:9px 18px" data-action="feed">喂食（-1 包）</button>`
@@ -1157,7 +1167,11 @@ function feedMarkup(){
 function renderFeedPanelLive(){
   const panel=document.querySelector('.feed-panel');
   if(!panel)return;
-  panel.outerHTML=feedMarkup();
+  const tmp=document.createElement('div');tmp.innerHTML=feedMarkup();
+  const next=tmp.firstElementChild;
+  if(!next)return;
+  /* 只替换文本，按钮保持原位：走路时喂食按钮不会被重建吞掉 tap */
+  panel.querySelectorAll('span').forEach((sp,i)=>{const ns=next.querySelectorAll('span')[i];if(ns&&sp.textContent!==ns.textContent)sp.textContent=ns.textContent;});
 }
 function renderPetPage(){
   return `<div class="page-intro"><div><h1>我的宠物</h1></div><span class="intro-mark mono">${state.evolved?'FORM 5/5':'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/5'}</span></div><div class="main-grid">${hero()}<div class="side-stack">${feedMarkup()}${mode==='api'&&!eventData?`<section class="panel goal-panel"><h2>当前没有进行中的活动</h2><p class="goal-copy">新的活动上线后，这里会自动出现。</p></section>`:goalMarkup()}${collectionMarkup()}</div></div>`;
@@ -1989,7 +2003,7 @@ function openLoginModal(mode){
 }
 /* ---------- 开发者模式（活动方） ---------- */
 let devMode=(function(){try{return localStorage.getItem('outie.dev-mode')==='on';}catch(e){return false;}})();
-let myEvents=null,myEventsStatus='idle';
+let myEvents=null,myEventsStats=null,myEventsStatus='idle';
 let wbSpots=null,wbBusy=false;
 function wbDefaultSpots(){
   /* 坐标只来自真实定位：已定位则预填当前位置，未定位留空等待，绝无假坐标 */
@@ -2035,6 +2049,7 @@ async function loadMyEventsList(force){
   try{
     const data=await apiFetch('/outie/my-events');
     myEvents=Array.isArray(data.events)?data.events:[];
+    myEventsStats=Array.isArray(data.stats)?data.stats:[];
     myEventsStatus='ready';
   }catch(e){myEventsStatus='error';}
   if(wrap)renderMyEventsList(wrap);
@@ -2043,9 +2058,12 @@ function renderMyEventsList(wrap){
   if(myEventsStatus==='loading'){wrap.innerHTML='<p class="about-list">加载中…</p>';return;}
   if(myEventsStatus==='error'){wrap.innerHTML='<p class="about-list">加载失败。</p>';return;}
   if(!myEvents||!myEvents.length){wrap.innerHTML='<p class="about-list">还没有发布过活动。</p>';return;}
+  const stats=Array.isArray(myEventsStats)?myEventsStats:[];
   wrap.innerHTML=myEvents.map(e=>{
     const cover=e.coverUrl?`<img class="avatar-sq" style="width:44px;height:44px" src="${esc(photoAbsUrl(e.coverUrl))}" alt="">`:'<span class="avatar-sq" style="width:44px;height:44px"></span>';
-    return `<div class="wb-event">${cover}<div style="flex:1;min-width:0"><strong>${esc(e.name)}</strong><span class="about-list">${(e.spots&&e.spots.length)||0} 个点位 · ${e.active?'已上架':'未上架'}</span></div><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="wb-promo" data-event="${esc(e.key)}">传宣传照</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="event-open" data-event="${esc(e.key)}">查看</button></div>`;
+    const st=stats.find(x=>x.key===e.key);
+    const dataLine=st?`<span class="about-list mono">到场 ${st.visitors} 人 · 打卡 ${st.checkins} 次 · 现场照 ${st.photos} 张${st.completed?` · 集齐 ${st.completed} 人`:''}</span>`:'';
+    return `<div class="wb-event">${cover}<div style="flex:1;min-width:0"><strong>${esc(e.name)}</strong><span class="about-list">${(e.spots&&e.spots.length)||0} 个点位 · ${e.active?'已上架':'未上架'}</span>${dataLine}</div><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="wb-promo" data-event="${esc(e.key)}">传宣传照</button><button type="button" class="btn btn-quiet" style="width:auto;min-height:0;padding:8px 10px;font-size:11px" data-action="event-open" data-event="${esc(e.key)}">查看</button></div>`;
   }).join('');
 }
 function renderWorkbench(){
@@ -2193,9 +2211,9 @@ function rewardStage(id,label='NEW LOOK',stamp='COLLECTED'){
   const cls=lk.spec?'spec':'';
   return `<div class="reward-stage ${id} ${cls}"><span class="stage-label mono">${label}</span>${petSVG(id,lk.spec)}<span class="reward-stamp mono">${stamp}</span></div>`;
 }
-function showReward(id){
+function showReward(id,tokenBonus=0){
   const s=SPOTS.find(s=>s.id===id);const all=count()===SPOTS.length;
-  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="photo-new"${pet&&pet.eventKey?` data-event='${esc(JSON.stringify({key:pet.eventKey,name:eventKeyText()}))}'`:''} type="button">拍一张，发到现场</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
+  modal(`<p class="modal-eyebrow mono">NEW LOOK / 造型入手</p><h2 id="dialog-title">获得：${s.reward}</h2><p class="modal-copy">来自${s.name}（${s.zone}）</p>${rewardStage(id)}<div class="reward-progress"><strong>${count()} / ${SPOTS.length}</strong> 个地点已打卡${tokenBonus?`<br><span style="color:var(--accent,#a3463c);font-weight:700">+${tokenBonus} 包饲料已入账 · 现存 ${Number(pet.feedTokens)||0} 包</span>`:''}<br><span class="muted">${all?'已集齐，可解锁活动限定形态。':'还差 '+(SPOTS.length-count())+' 个地点解锁限定形态。'}</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="wear-reward" data-look="${id}" type="button">穿上</button><button class="btn btn-dark" data-action="photo-new"${pet&&pet.eventKey?` data-event='${esc(JSON.stringify({key:pet.eventKey,name:eventKeyText()}))}'`:''} type="button">拍一张，发到现场</button><button class="text-btn" type="button" data-action="close">稍后再说</button></div>`,'reward');
 }
 function showLook(id){
   const look=lookFor(id);if(id==='evolved'&&!state.evolved&&count()===3){showEvolutionPrompt();return;}
@@ -2211,7 +2229,7 @@ function wear(id){
   if(mode==='api'){
     state.equipped=id;
     apiFetch('/outie/pet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({equipped:id})})
-      .then(data=>{pet=data.pet;state=stateFromPet(pet);render();})
+      .then(data=>{pet=data.pet;state=stateFromPet(pet);render();blip('wear');})
       .catch(error=>toast('换装未保存：'+errText(error)));
     closeModal();flashNext=true;navigate('pet');toast('已换上「'+lookFor(id).name+'」。');
     return;
@@ -2224,7 +2242,7 @@ function showEvolutionPrompt(){
   modal(`<p class="modal-eyebrow mono">EVENT COMPLETE</p><h2 id="dialog-title">三个地点，全部集齐</h2><p class="modal-copy">${esc(state.name)} 可以解锁活动限定形态「出逃星人」。</p><div class="reward-stage evolved hidden-look"><span class="stage-label mono">A NEW FORM</span>${petSVG('evolved')}<span class="reward-stamp mono">READY</span></div><div class="modal-actions"><button class="btn btn-primary" data-action="evolve" type="button">解锁</button><button class="text-btn" type="button" data-action="close">稍后</button></div>`,'evolution-ready');
 }
 function showEvolutionDone(){
-  modal(`<span class="success-chip">${pixIcon('check')}UNLOCKED</span><h2 id="dialog-title">解锁：出逃星人</h2><p class="modal-copy">活动限定形态。五套造型全部收集完成，可随时更换。</p>${rewardStage('evolved','NO.005','LIMITED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="evolved">穿上</button></div>`,'evolution-done');
+  modal(`<span class="success-chip">${pixIcon('check')}UNLOCKED</span><h2 id="dialog-title">解锁：出逃星人</h2><p class="modal-copy">活动限定形态。五套造型全部收集完成，可随时更换。</p>${rewardStage('evolved','NO.005','LIMITED')}<div class="modal-actions"><button class="btn btn-primary" type="button" data-action="wear" data-look="evolved">穿上</button><button class="btn btn-dark" type="button" data-action="share-moment">分享这张卡</button></div>`,'evolution-done');
   confetti();
 }
 function evolve(){
@@ -2250,6 +2268,79 @@ function feedHearts(){
   for(let i=0;i<7;i++){const p=document.createElement('i');p.style.cssText=`--x:${12+(i*17)%76}%;--c:${colors[i%3]};--d:${(i%4)*.12}s`;layer.appendChild(p);}
   host.appendChild(layer);setTimeout(()=>layer.remove(),1800);
 }
+/* ---------- 分享出站：canvas 合成卡 + 三级出口（share面板→剪贴板→存图） ---------- */
+function petSvgString(id,spec,scale){
+  return petSVG(id,spec).replace('<svg ',`<svg xmlns="http://www.w3.org/2000/svg" width="${22*scale}" height="${16*scale}" `);
+}
+function loadSvgImage(svg){
+  return new Promise((resolve,reject)=>{
+    const img=new Image();
+    img.onload=()=>resolve(img);
+    img.onerror=reject;
+    img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+  });
+}
+async function composeShareCard(opts){
+  const {photo,lookId,spec,title,sub}=opts;
+  const W=1080,H=1440,c=document.createElement('canvas');c.width=W;c.height=H;
+  const g=c.getContext('2d');g.imageSmoothingEnabled=false;
+  g.fillStyle='#efecdf';g.fillRect(0,0,W,H);
+  if(photo){
+    try{
+      const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=photo;});
+      const s=Math.max(W/img.width,H/img.height)*0.86;
+      const w=img.width*s,h=img.height*s;
+      g.drawImage(img,(W-w)/2,(H-h)/2-40,w,h);
+    }catch(e){g.fillStyle='#e2ddc8';g.fillRect(60,180,W-120,H-460);}
+  }else{g.fillStyle='#e2ddc8';g.fillRect(60,180,W-120,H-460);}
+  /* 像素墨框（产品视觉签名） */
+  g.fillStyle='#26241c';
+  [0,W-16].forEach(x=>g.fillRect(x,120,16,H-240));
+  [120,H-136].forEach(y=>g.fillRect(16,y,W-32,16));
+  /* 点阵标题：活动名/日期 */
+  try{
+    const tSvg=pixText(String(title||'OUTIE'),8,'#26241c').replace('<svg ',`<svg xmlns="http://www.w3.org/2000/svg" width="${W-160}" height="200" `);
+    const tImg=await loadSvgImage(tSvg);
+    g.drawImage(tImg,80,60);
+  }catch(e){g.fillStyle='#26241c';g.font='bold 72px monospace';g.fillText(String(title||'OUTIE'),80,160);}
+  g.fillStyle='#26241c';g.font='bold 40px monospace';g.fillText(String(sub||''),80,H-210);
+  /* 宠物立绘 */
+  try{
+    const pImg=await loadSvgImage(petSvgString(lookId||'base',spec,30));
+    g.drawImage(pImg,(W-660)/2,H-760,660,480);
+  }catch(e){}
+  g.fillStyle='#7c7867';g.font='28px monospace';g.fillText('OUTIE · 到现场打卡，收集造型',80,H-80);
+  return await new Promise(res=>c.toBlob(res,'image/jpeg',0.9));
+}
+async function shareCard(blob,text){
+  const nav=navigator;
+  try{
+    if(nav.canShare&&nav.canShare({files:[blob]})){
+      await nav.share({files:[blob],text:text||'我在 OUTIE 打卡收集到了这个',url:location.origin+'/?ref='+(pet&&pet.id||'')});
+      return 'shared';
+    }
+  }catch(e){if(e&&e.name==='AbortError')return 'cancelled';}
+  try{
+    if(navigator.clipboard&&navigator.clipboard.write){
+      await navigator.clipboard.write([new ClipboardItem({'image/jpeg':blob})]);
+      return 'copied';
+    }
+  }catch(e){}
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='outie-card.jpg';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  return 'saved';
+}
+async function shareMomentCard(lookId,spec,title,sub){
+  toast('正在生成分享卡…');
+  try{
+    const blob=await composeShareCard({photo:null,lookId,spec,title,sub:sub||'到现场打卡，收集造型'});
+    const how=await shareCard(blob,title+' · OUTIE');
+    if(how==='shared')toast('分享面板已打开，发给朋友吧！');
+    else if(how==='copied')toast('卡片已复制，去粘贴给朋友吧！');
+    else toast('卡片已保存到相册/下载。');
+    blip('wear');
+  }catch(e){toast('分享卡生成失败，再试一次。');}
+}
 /* 像素音效：方波短音，「我的」页可关 */
 let audioCtx=null;
 function blip(kind){
@@ -2257,7 +2348,7 @@ function blip(kind){
     if(localStorage.getItem('outie.mute')==='1'||reduceMotion.matches)return;
     audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();
     if(audioCtx.state==='suspended')audioCtx.resume();
-    const seq={feed:[[660,.07],[880,.11]],checkin:[[523,.07],[659,.07],[784,.13]],evolve:[[523,.07],[659,.07],[784,.07],[1046,.18]]}[kind];
+    const seq={feed:[[660,.07],[880,.11]],checkin:[[523,.07],[659,.07],[784,.13]],evolve:[[523,.07],[659,.07],[784,.07],[1046,.18]],pet:[[660,.04]],wear:[[880,.06]]}[kind];
     if(!seq)return;
     let t=audioCtx.currentTime+.01;
     for(const[f,d]of seq){
@@ -2349,9 +2440,10 @@ function handleAction(button){
     case 'evt-checkin':(async()=>{
       const ev=button.dataset.event,sp=button.dataset.spot;
       if(geo.state!=='ok'||!geo.coords){toast('需要先定位成功，才能到场打卡。');return;}
+      if(geo.via==='ip'){toast('当前只有城市级定位，到点位旁点地图右上角「刷新」重新定位。');return;}
       button.disabled=true;
       try{
-        const data=await apiFetch('/outie/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({eventKey:ev,spotKey:sp,userLat:geo.coords.lat,userLng:geo.coords.lng})});
+        const data=await apiFetch('/outie/checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({eventKey:ev,spotKey:sp,userLat:geo.coords.lat,userLng:geo.coords.lng,accuracy:geo.accuracy||0})});
         pet=data.pet;state=stateFromPet(pet);closeModal();
         if(data.newlyEvolved){blip('evolve');showEvolutionPrompt();}
         else if(!data.alreadyOwned){blip('checkin');toast('打卡成功，造型已收进「我的宠物」。'+(data.tokenBonus?` 获赠 ${data.tokenBonus} 包饲料！`:''));}
@@ -2376,6 +2468,11 @@ function handleAction(button){
       }catch(error){button.disabled=false;toast(errText(error));}
     })();break;
     case 'pedometer':enablePedometer();break;
+    case 'share-moment':{
+      const lk=lookFor(state.equipped==='evolved'?'evolved':state.equipped);
+      shareMomentCard(lk.id,lk.spec,eventKeyText(),(state.name||'')+' 的限定形态 · '+new Date().toLocaleDateString('zh-CN'));
+      break;
+    }
     case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';mapRealFailed=false;destroyRealMap();render();startLocate();break;
     case 'photo-new':{let pe=null;try{pe=button.dataset.event?JSON.parse(button.dataset.event):null;}catch(e){}startPhotoPost(pe);break;}
     case 'dev-toggle':devMode=!devMode;try{localStorage.setItem('outie.dev-mode',devMode?'on':'off');}catch(e){}render();toast(devMode?'活动方模式已开启。':'活动方模式已关闭。');break;
@@ -2432,7 +2529,18 @@ function handleAction(button){
     case 'reset-prompt':resetPrompt();break;
     case 'reset-confirm':reset();break;
     case 'pet':{
-      button.classList.remove('hop');void button.offsetWidth;button.classList.add('hop');break;
+      button.classList.remove('hop');void button.offsetWidth;button.classList.add('hop');
+      blip('pet');
+      try{
+        const today=todayKey();
+        const st=JSON.parse(localStorage.getItem('outie.petpet')||'{}');
+        const rec=st.day===today?st:{day:today,n:0,total:0};
+        rec.day=today;rec.n=(rec.n||0)+1;rec.total=(rec.total||0)+1;
+        localStorage.setItem('outie.petpet',JSON.stringify(rec));
+        if(rec.total===100)toast((state.name||'它')+' 已经被摸了 100 下！它假装不喜欢。');
+        if(rec.n<=5&&mode==='api'&&pet)pet.mood=Math.min(100,(Number(pet.mood)||60)+1);
+      }catch(e){}
+      break;
     }
   }
 }
@@ -2456,7 +2564,8 @@ document.addEventListener('submit',async event=>{
     const submitButton=document.getElementById('adopt-button');submitButton.disabled=true;
     if(mode==='api'){
       try{
-        await adoptApi(name);flashNext=true;navigate('pet');toast(name+' 已加入。');
+        let ref='';try{ref=localStorage.getItem('outie.ref')||'';}catch(e){}
+        await adoptApi(name,ref);flashNext=true;navigate('pet');toast(name+' 已加入。');
       }catch(error){
         document.getElementById('name-error').textContent=errText(error);
       }
@@ -2479,7 +2588,7 @@ document.addEventListener('submit',async event=>{
     const input=document.getElementById('comment-input');
     const submitBtn=event.target.querySelector('button[type="submit"]');
     const text=(input.value||'').trim();
-    if(!text||!currentDetailId)return;
+    if(!text||!currentDetailId){if(!text){input.style.borderColor='var(--accent,#a3463c)';input.placeholder='先写点什么…';setTimeout(()=>{input.style.borderColor='';input.placeholder='说点什么…';},1500);}return;}
     if(submitBtn)submitBtn.disabled=true;
     try{
       await apiFetch(`/photos/${currentDetailId}/comments`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({comment:text})});
@@ -2538,6 +2647,14 @@ dialog.addEventListener('cancel',event=>{if(postingPhoto){event.preventDefault()
 window.addEventListener('resize',()=>{if(view==='explore'&&realMap)engine_resizeSafe();});
 window.addEventListener('hashchange',()=>{if(!state.name)return;closeModal();view=viewFromHash();render();});
 window.addEventListener('storage',event=>{if(mode==='offline'&&event.key===STORAGE_KEY){state=loadState();closeModal();render();}});
+/* 邀请归因：落地 URL 带 ?ref=<宠物id> 时记下，领养时上报（双方各得饲料） */
+function captureRef(){
+  try{
+    const u=new URL(location.href);
+    const ref=u.searchParams.get('ref');
+    if(ref)localStorage.setItem('outie.ref',ref.slice(0,64));
+  }catch(e){}
+}
 function captureAuthFromUrl(){
   try{
     const url=new URL(location.href);
@@ -2594,6 +2711,7 @@ if(pedometerState==='on'&&window.DeviceMotionEvent&&typeof window.DeviceMotionEv
 setInterval(()=>{stepsLoad();syncSteps();},30000);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)syncSteps();});
 window.addEventListener('pagehide',()=>syncSteps());
+captureRef();
 /* iOS 加到主屏的一次性引导：装成图标才有回访入口 */
 (function(){
   try{
