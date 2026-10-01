@@ -7,6 +7,7 @@ const {
   getMe,
   checkin,
   feedPet,
+  touchPet,
   syncSteps,
   createComposite,
   staticMap,
@@ -34,6 +35,7 @@ router.get('/events/:key', getEventDetail);
 router.post('/events/:key/promo', optionalAuth, uploadSinglePhoto, uploadEventPromo);
 router.post('/pet', optionalAuth, upsertPet);
 router.post('/pet/feed', optionalAuth, feedPet);
+router.post('/pet/touch', optionalAuth, touchPet);
 router.post('/steps/sync', optionalAuth, syncSteps);
 router.get('/me', optionalAuth, getMe);
 router.post('/checkin', optionalAuth, checkin);

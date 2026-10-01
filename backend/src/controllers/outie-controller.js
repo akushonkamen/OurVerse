@@ -92,6 +92,14 @@ const listAllEvents = async (req, res) => {
   }
 };
 
+const touchPet = async (req, res) => {
+  try {
+    res.json(await outieService.touchPetForIdentity(req));
+  } catch (error) {
+    handleError(res, error, '操作失败，请重试');
+  }
+};
+
 const syncSteps = async (req, res) => {
   try {
     res.json(await outieService.syncStepsForIdentity(req, req.body && req.body.steps));
@@ -176,6 +184,7 @@ module.exports = {
   getMe,
   checkin,
   feedPet,
+  touchPet,
   syncSteps,
   createComposite,
   staticMap,

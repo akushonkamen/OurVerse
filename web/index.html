@@ -1840,9 +1840,11 @@ async function openPhotoDetail(id){
     const delBtn=ph.canDelete===true
       ?'<button type="button" class="btn danger-btn" style="width:auto" data-action="photo-del" data-photo="'+esc(currentDetailId)+'" data-anon="'+(ph.userId?'0':'1')+'">删除</button>'
       :'';
+    const shareBtn='<button type="button" class="btn btn-dark" style="width:auto" data-action="photo-share" data-photo="'+esc(currentDetailId)+'">分享</button>';
     document.getElementById('photo-detail').innerHTML=
       '<div class="detail-photo"><img src="'+url+'" alt="'+cap+'"></div>'
       +'<p class="modal-copy">'+(cap||'现场照片')+'<br><span class="mono muted">'+fmtClock(ph.createdAt)+'</span></p>'
+      +'<div class="modal-actions" style="margin:0 0 8px">'+shareBtn+'</div>'
       +delBtn
       +'<div class="comment-block"><h3>评论</h3><div class="comment-list" id="comment-list">'+items+'</div>'
       +'<form id="comment-form" class="comment-form"><input id="comment-input" class="name-input" style="min-height:0;padding:10px 12px;font-size:13px" placeholder="说点什么…" maxlength="140" autocomplete="off"><button class="btn btn-primary" type="submit" style="width:auto;min-height:0;padding:10px 14px">发送</button></form></div>';
@@ -2330,10 +2332,10 @@ async function shareCard(blob,text){
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   return 'saved';
 }
-async function shareMomentCard(lookId,spec,title,sub){
+async function shareMomentCard(lookId,spec,title,sub,photoUrl){
   toast('正在生成分享卡…');
   try{
-    const blob=await composeShareCard({photo:null,lookId,spec,title,sub:sub||'到现场打卡，收集造型'});
+    const blob=await composeShareCard({photo:photoUrl||null,lookId,spec,title,sub:sub||'到现场打卡，收集造型'});
     const how=await shareCard(blob,title+' · OUTIE');
     if(how==='shared')toast('分享面板已打开，发给朋友吧！');
     else if(how==='copied')toast('卡片已复制，去粘贴给朋友吧！');
@@ -2470,7 +2472,8 @@ function handleAction(button){
     case 'pedometer':enablePedometer();break;
     case 'share-moment':{
       const lk=lookFor(state.equipped==='evolved'?'evolved':state.equipped);
-      shareMomentCard(lk.id,lk.spec,eventKeyText(),(state.name||'')+' 的限定形态 · '+new Date().toLocaleDateString('zh-CN'));
+      const ph=(Array.isArray(nearPhotos)&&nearPhotos[0]&&nearPhotos[0].url)?photoAbsUrl(nearPhotos[0].url):null;
+      shareMomentCard(lk.id,lk.spec,eventKeyText(),(state.name||'')+' 的限定形态 · '+new Date().toLocaleDateString('zh-CN'),ph);
       break;
     }
     case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';mapRealFailed=false;destroyRealMap();render();startLocate();break;
@@ -2517,7 +2520,22 @@ function handleAction(button){
     case 'cluster-open':openClusterModal(button.dataset.cluster);break;
     case 'cluster-photo':openClusterPhoto(button.dataset.cluster,button.dataset.photo);break;
     case 'cluster-back':openClusterModal(button.dataset.cluster);break;
-    case 'photo-del':deletePhotoItem(button.dataset);break;
+    case 'photo-share':{
+      const pid=button.dataset.photo;
+      const link=location.origin+'/s/'+pid;
+      (async()=>{
+        try{
+          if(navigator.share){
+            await navigator.share({title:'OUTIE 现场照片',text:'我在 OUTIE 拍下了这一刻——到现场打卡，收集造型',url:link});
+            toast('已打开分享面板。');
+            return;
+          }
+          await navigator.clipboard.writeText(link);
+          toast('链接已复制，发给朋友吧！');
+        }catch(e){if(e&&e.name==='AbortError')return;try{await navigator.clipboard.writeText(link);toast('链接已复制。');}catch(e2){toast('分享失败：'+link);}}
+      })();
+      break;
+    }
     case 'photo-del-confirm':{button.disabled=true;confirmDeletePhoto(button.dataset.photo,button.dataset.anon);break;}
     case 'mine-refresh':minePhotos=null;mineStatus='idle';mineAlbumIdx=null;loadMinePhotos(true);break;
     case 'album-open':mineAlbumIdx=Number(button.dataset.idx);renderMineGrid();break;
@@ -2538,7 +2556,10 @@ function handleAction(button){
         rec.day=today;rec.n=(rec.n||0)+1;rec.total=(rec.total||0)+1;
         localStorage.setItem('outie.petpet',JSON.stringify(rec));
         if(rec.total===100)toast((state.name||'它')+' 已经被摸了 100 下！它假装不喜欢。');
-        if(rec.n<=5&&mode==='api'&&pet)pet.mood=Math.min(100,(Number(pet.mood)||60)+1);
+        if(rec.n<=5&&mode==='api'&&pet){
+          pet.mood=Math.min(100,(Number(pet.mood)||60)+1);
+          apiFetch('/outie/pet/touch',{method:'POST'}).then(d=>{if(pet&&Number.isFinite(d.mood))pet.mood=d.mood;}).catch(()=>{});
+        }
       }catch(e){}
       break;
     }

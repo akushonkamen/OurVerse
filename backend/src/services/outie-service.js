@@ -220,6 +220,24 @@ const syncStepsForIdentity = async (req, stepsInput) => {
   };
 };
 
+// 摸头：每日前 5 次、每次心情 +1（把 lastFedAt 提前 6 分钟=抵消 1 点衰减），服务端持久
+const touchPetForIdentity = async req => {
+  const identityKey = requireIdentity(req);
+  await maybeMigrateAnonymousPet(req);
+  const pet = await findLatestPet(identityKey);
+  if (!pet) throw new ServiceError(400, '先领养一只宠物');
+  const today = dayKeyOf();
+  const n = pet.pettedDay === today ? (pet.pettedN || 0) : 0;
+  if (n >= 5) return { mood: deriveMood(pet), capped: true };
+  const base = pet.lastFedAt ? new Date(pet.lastFedAt).getTime() : null;
+  const updated = await OutiePet.findOneAndUpdate(
+    { _id: pet._id },
+    { $set: { pettedDay: today, pettedN: n + 1, ...(base ? { lastFedAt: new Date(base - 6 * 60000) } : {}) } },
+    { new: true }
+  );
+  return { mood: deriveMood(updated), capped: false };
+};
+
 // 喂食：消耗 1 包饲料（心情 +25），当天首次喂计连击；饲料不足明确拒绝
 const feedPetForIdentity = async req => {
   const identityKey = requireIdentity(req);
@@ -750,6 +768,7 @@ module.exports = {
   nearbyEvents,
   listActiveEvents,
   feedPetForIdentity,
+  touchPetForIdentity,
   syncStepsForIdentity,
   getEventByKey,
   saveEventPromoPhoto,
