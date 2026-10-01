@@ -292,6 +292,36 @@ const upsertPetForIdentity = async req => {
   return { success: true, created: true, pet: serializePet(newPet, event), event: event ? serializeEvent(event) : null };
 };
 
+// 收藏馆：跨活动汇总已收集的造型（含 look spec），让往期活动成果可展示可穿戴
+const collectionOf = async pet => {
+  const eventKeys = Object.keys(pet.rewards || {}).filter(key => Object.keys(pet.rewards[key] || {}).length);
+  if (!eventKeys.length) return [];
+  const events = await OutieEvent.find({ key: { $in: eventKeys } });
+  const byKey = new Map(events.map(e => [e.key, e]));
+  return eventKeys.map(key => {
+    const e = byKey.get(key);
+    const per = pet.rewards[key] || {};
+    const spots = (e ? e.spots || [] : []).filter(sp => per[sp.key]).map(sp => ({
+      key: sp.key,
+      name: sp.name || '',
+      rewardName: sp.rewardName || '',
+      look: sp.look ? {
+        name: sp.look.name || '', shape: sp.look.shape || 'blob', body: sp.look.body || '#a3463c',
+        accent: sp.look.accent || '#41597e', pattern: sp.look.pattern || 'solid', accessory: sp.look.accessory || 'none'
+      } : null,
+      lookId: sp.lookId || '',
+      at: per[sp.key] instanceof Date ? per[sp.key].toISOString() : String(per[sp.key] || '')
+    }));
+    return {
+      eventKey: key,
+      eventName: e ? e.name : key,
+      active: e ? Boolean(e.active) : false,
+      evolved: (pet.evolvedEvents || []).includes(key),
+      spots
+    };
+  }).filter(entry => entry.spots.length);
+};
+
 const getPetState = async req => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
@@ -301,7 +331,7 @@ const getPetState = async req => {
     return { pet: null };
   }
   const event = await findActiveEvent();
-  return { pet: serializePet(pet, event) };
+  return { pet: serializePet(pet, event), collection: await collectionOf(pet) };
 };
 
 const checkinAtSpot = async req => {
@@ -372,12 +402,21 @@ const checkinAtSpot = async req => {
     newlyEvolved = true;
   }
 
+  // 打卡接入养成经济：每站首打卡 +3 包，集齐活动再 +5 包，并把心情拉回不低于 85
+  const tokenBonus = newlyEvolved ? 8 : 3;
+  pet.feedTokens = (pet.feedTokens == null ? 3 : pet.feedTokens) + tokenBonus;
+  const minFresh = Date.now() - 1.5 * 3600000;
+  if (!pet.lastFedAt || new Date(pet.lastFedAt).getTime() < minFresh) {
+    pet.lastFedAt = new Date(minFresh);
+  }
+
   await pet.save();
 
   return {
     success: true,
     alreadyOwned: false,
     newlyEvolved,
+    tokenBonus,
     reward: { spotKey, lookId: spot.lookId, rewardName: spot.rewardName || '' },
     pet: serializePet(pet, event)
   };
@@ -510,6 +549,10 @@ const saveEventPromoPhoto = async req => {
   const key = String((req.params || {}).key || '').slice(0, 60);
   const event = await OutieEvent.findOne({ key });
   if (!event) throw new ServiceError(404, '活动不存在');
+  // 越权修复：只有发布者本人能传宣传照（旧活动无 organizerKey 也一律拒绝，防止抢占封面）
+  if (!event.organizerKey || event.organizerKey !== identityKey) {
+    throw new ServiceError(403, '只有发布者本人能上传这场活动的宣传照');
+  }
 
   const file = req.file;
   if (req.fileValidationError) throw new ServiceError(400, req.fileValidationError);
