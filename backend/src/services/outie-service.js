@@ -287,13 +287,19 @@ const touchPetForIdentity = async req => {
   const today = dayKeyOf();
   const n = pet.pettedDay === today ? (pet.pettedN || 0) : 0;
   if (n >= 5) return { mood: deriveMood(pet), capped: true };
+  // 饲料 sink：前 3 次免费，第 4-5 次各耗 1 包（没包就只给前 3 次）
+  const cost = n >= 3 ? 1 : 0;
+  const startTokens = effectiveTokens(pet);
+  if (cost && startTokens < 1) return { mood: deriveMood(pet), capped: true, needToken: true };
   const base = pet.lastFedAt ? new Date(pet.lastFedAt).getTime() : null;
+  const legacyNull = pet.feedTokens == null;
   const updated = await OutiePet.findOneAndUpdate(
     { _id: pet._id },
-    { $set: { pettedDay: today, pettedN: n + 1, ...(base ? { lastFedAt: new Date(base - 6 * 60000) } : {}) } },
+    { $set: { pettedDay: today, pettedN: n + 1, ...(base ? { lastFedAt: new Date(base - 6 * 60000) } : {}), ...(legacyNull ? { feedTokens: startTokens - cost } : {}) }, ...(cost && !legacyNull ? { $inc: { feedTokens: -1 } } : {}) },
     { new: true }
   );
-  return { mood: deriveMood(updated), capped: false };
+  if (!updated) return { mood: deriveMood(pet), capped: true, needToken: cost > 0 };
+  return { mood: deriveMood(updated), capped: false, spent: cost };
 };
 
 // 喂食：消耗 1 包饲料（心情 +25），当天首次喂计连击；饲料不足明确拒绝
@@ -383,12 +389,15 @@ const upsertPetForIdentity = async req => {
     throw new ServiceError(400, '先起一个名字');
   }
 
-  // 邀请归因：带 ?ref= 领养时，被邀者 3+2 包，邀请人宠物 +2 包（双向奖励）
+  // 邀请归因：ref=邀请人的宠物 _id → 找到其 identityKey，邀请人宠物 +2 包（双向奖励）
   const invitedByRaw = typeof (req.body || {}).invitedBy === 'string' ? req.body.invitedBy.slice(0, 64) : '';
   let invitedBy = '';
-  if (invitedByRaw && invitedByRaw !== identityKey) {
-    invitedBy = invitedByRaw;
-    await OutiePet.updateOne({ identityKey: invitedBy }, { $inc: { feedTokens: 2 } });
+  if (invitedByRaw) {
+    const inviterPet = await OutiePet.findById(invitedByRaw).catch(() => null);
+    if (inviterPet && inviterPet.identityKey !== identityKey) {
+      invitedBy = inviterPet.identityKey;
+      await OutiePet.updateOne({ _id: inviterPet._id }, { $inc: { feedTokens: 2 } });
+    }
   }
   const newPet = await OutiePet.create({
     identityKey,
@@ -731,7 +740,7 @@ const getEventByKey = async key => {
   const Voucher = require('../models/voucher');
   const spotNames = await Promise.all((event.spots || []).map(async sp => {
     const path = `rewards.${event.key}.${sp.key}`;
-    const pets = await OutiePet.find({ [path]: { $exists: true } }, { name: 1 }).sort({ createdAt: -1 }).limit(6);
+    const pets = await OutiePet.find({ [path]: { $exists: true } }, { name: 1 }).sort({ [path]: -1 }).limit(6);
     const visitors = await OutiePet.countDocuments({ [path]: { $exists: true } });
     return { key: sp.key, visitors, names: pets.map(x => x.name || '神秘训练家') };
   }));
