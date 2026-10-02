@@ -1037,20 +1037,20 @@ function renderHelp(){
   const row=(k,v)=>`<div class="help-row"><span class="help-key mono">${k}</span><p>${v}</p></div>`;
   return `<div class="page-intro"><div><h1>玩法说明</h1></div><span class="intro-mark mono">MANUAL</span></div>
   <section class="panel help-panel">
-    ${row('领养','起一个名字，它就是你的化身。')}
-    ${row('打卡','到活动点位附近，点「到场打卡」。每站首打卡得该站造型，集齐全部点位，解锁限定造型。')}
-    ${row('饲料','喂食消耗 1 包，心情 +25；心情随时间下降。')}
-    ${row('赚饲料','开启计步，页面开着走路即计步：500 步 = 1 包，每日上限 15 包。到场打卡每站 +3 包，集齐 +8 包。')}
-    ${row('连击','每天首次喂食计 1 天。3 / 7 / 14 / 30 天各奖 5 包。')}
-    ${row('摸头','每日前 3 次免费，第 4、5 次各耗 1 包。')}
-    ${row('现场','拍照发到现场，他人可评论；被评论时你会收到提醒。')}
-    ${row('到店凭证','启用凭证的活动，打卡获得 6 位核销码，出示给商家领取权益。')}
-    ${row('活动方','「我的」页开启活动方模式：发布活动（走到点位旁点「用我的位置」）、设计装扮、上传宣传照、核销凭证。')}
+    ${row('领养','输入名字，完成领养。')}
+    ${row('打卡','走到点位附近。点「到场打卡」。每个点位首次打卡，得该点位造型。集齐全部点位，解锁限定造型。')}
+    ${row('饲料','每次喂食消耗 1 包饲料。宠物心情 +25。心情随时间下降。')}
+    ${row('赚饲料','点「开启计步」。开着页面走路，即记录步数。500 步换 1 包饲料。每日最多 15 包。每个点位打卡 +3 包饲料。集齐全部点位，再 +8 包。')}
+    ${row('连续喂食','每天首次喂食，连续天数 +1。第 3 / 7 / 14 / 30 天，各得 5 包饲料。')}
+    ${row('摸头','每日前 3 次免费。第 4、5 次各消耗 1 包饲料。')}
+    ${row('现场','在现场拍照，发布到「现场」。其他用户可以评论。有人评论时，你收到提醒。')}
+    ${row('到店凭证','部分活动启用凭证。到点位打卡，获得 6 位核销码。向商家出示核销码。商家核销后，你领取权益。')}
+    ${row('活动方','在「我的」页开启活动方模式。然后：发布活动：走到点位旁，点「用我的位置」。设计造型。上传宣传照。核销凭证。')}
   </section>
   <section class="panel help-panel"><h3 class="help-h">常见问题</h3>
-    ${row('定位失败','点地图右上角「刷新」；室内或地下请移到开阔处。')}
-    ${row('没有饲料','开启计步走路，或去现场打卡。')}
-    ${row('更换设备','登录后宠物与收藏跟随账号。')}
+    ${row('定位失败','点地图右上角「刷新」。在室内或地下，移到开阔处。')}
+    ${row('没有饲料','开启计步，走路赚饲料。或到点位打卡赚饲料。')}
+    ${row('更换设备','登录同一账号。宠物和收藏自动恢复。')}
   </section>
   <div class="modal-actions"><button type="button" class="btn btn-dark" style="width:auto" data-action="nav" data-view="pet">返回</button></div>`;
 }
@@ -1089,7 +1089,7 @@ function progressMarkup(){
 }
 function goalMarkup(){
   const n=count(),complete=n===SPOTS.length;
-  const heading=state.evolved?'限定造型已解锁':complete?'全部地点，已经集齐':n===0?`今天有 ${SPOTS.length} 个地点`:`已打卡 ${n} / ${SPOTS.length}`;
+  const heading=state.evolved?'限定造型已解锁':complete?'全部地点，已经集齐':n===0?`${SPOTS.length} 个点位待打卡`:`已打卡 ${n} / ${SPOTS.length}`;
   const action=complete&&!state.evolved?{act:'evolve-prompt',label:'解锁限定造型'}:{act:'nav',label:n===0?'去拿新造型':state.evolved?'去哪儿看看':'继续打卡'};
   return `<section class="goal-panel panel"><h2>${heading}</h2>${progressMarkup()}<button class="btn ${complete&&!state.evolved?'btn-primary':'btn-dark'}" type="button" data-action="${action.act}" ${action.act==='nav'?'data-view="explore"':''}>${action.label}</button><button type="button" class="text-btn" style="width:auto;margin-left:10px" data-action="nav" data-view="help">玩法说明</button></section>`;
 }
