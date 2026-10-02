@@ -292,6 +292,11 @@ a.btn{text-decoration:none}
 .toast{position:fixed;bottom:30px;left:50%;transform:translate(-50%,15px);opacity:0;pointer-events:none;z-index:40;background:var(--ink);color:var(--paper);border:2px solid var(--paper);outline:2px solid var(--ink);padding:12px 18px;font-size:12px;letter-spacing:.04em;transition:opacity .15s steps(2,end),transform .15s steps(2,end);max-width:calc(100% - 32px);text-align:center}
 .toast.visible{opacity:1;transform:translate(-50%,0)}
 .cmt-dot{position:absolute;top:4px;right:6px;width:8px;height:8px;background:var(--accent,#a3463c);border:2px solid var(--paper);z-index:2}
+.help-panel .help-row{display:flex;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line)}
+.help-panel .help-row:last-child{border-bottom:0}
+.help-key{flex:none;width:64px;font-weight:700;color:var(--accent,#a3463c)}
+.help-panel p{margin:0;font-size:12px;line-height:1.9;color:var(--ink)}
+.help-h{margin:0 0 4px}
 .cmt-chip{position:absolute;left:6px;bottom:6px;background:#26241c;color:#efecdf;font-size:9px;padding:2px 5px;z-index:2}
 .confetti{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:3}
 .confetti i{position:absolute;top:-16px;left:var(--x);width:8px;height:8px;background:var(--c);animation:confetti-drop 1.3s steps(14,end) var(--d) both}
@@ -460,7 +465,7 @@ let mode='offline',eventData=null,devSkipGeo=false,pet=null,pendingEvolution=fal
 let pastCollection=[];
 let svgId=0,storageOK=true,toastTimer=null,flashNext=false;
 let state=blankState();
-const VIEWS=['pet','explore','event','mine'];
+const VIEWS=['pet','explore','event','mine','help'];
 function viewFromHash(){
   const raw=(location.hash||'').replace(/^#\/?/,'');
   return VIEWS.includes(raw)?raw:'pet';
@@ -1027,6 +1032,28 @@ const NAV_ITEMS=[['pet','我的宠物'],['explore','去哪儿'],['event','活动
 function navMarkup(){
   return NAV_ITEMS.map(([id,label])=>`<button type="button" class="nav-btn" data-action="nav" data-view="${id}" ${view===id?'aria-current="page"':''}>${label}</button>`).join('');
 }
+/* ---------- 玩法说明书：全部规则集中在此，主界面只留状态 ---------- */
+function renderHelp(){
+  const row=(k,v)=>`<div class="help-row"><span class="help-key mono">${k}</span><p>${v}</p></div>`;
+  return `<div class="page-intro"><div><h1>玩法说明</h1></div><span class="intro-mark mono">MANUAL</span></div>
+  <section class="panel help-panel">
+    ${row('领养','起一个名字，它就是你的化身。')}
+    ${row('打卡','到活动点位附近，点「到场打卡」。每站首打卡得该站造型，集齐全部点位解锁限定形态。')}
+    ${row('饲料','喂食消耗 1 包，心情 +25；心情随时间下降。')}
+    ${row('赚饲料','开启计步，页面开着走路即计步：500 步 = 1 包，每日上限 15 包。到场打卡每站 +3 包，集齐 +8 包。')}
+    ${row('连击','每天首次喂食计 1 天。3 / 7 / 14 / 30 天各奖 5 包。')}
+    ${row('摸头','每日前 3 次免费，第 4、5 次各耗 1 包。')}
+    ${row('现场','拍照发到现场，他人可评论；被评论时你会收到提醒。')}
+    ${row('到店凭证','启用凭证的活动，打卡获得 6 位核销码，出示给商家领取权益。')}
+    ${row('活动方','「我的」页开启活动方模式：发布活动（走到点位旁点「用我的位置」）、设计装扮、上传宣传照、核销凭证。')}
+  </section>
+  <section class="panel help-panel"><h3 class="help-h">常见问题</h3>
+    ${row('定位失败','点地图右上角「刷新」；室内或地下请移到开阔处。')}
+    ${row('没有饲料','开启计步走路，或去现场打卡。')}
+    ${row('更换设备','登录后宠物与收藏跟随账号。')}
+  </section>
+  <div class="modal-actions"><button type="button" class="btn btn-dark" style="width:auto" data-action="nav" data-view="pet">返回</button></div>`;
+}
 function offlineNote(){
   return `<p class="offline-note mono">离线模式 · 连接后可用<button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:6px 10px;display:inline-flex;margin-left:10px" data-action="reconnect">重试</button></p>`;
 }
@@ -1035,7 +1062,7 @@ function render(){
   document.getElementById('storage-warning').hidden=storageOK;
   for(const id of ['desktop-nav','mobile-nav']){const nav=document.getElementById(id);nav.hidden=false;nav.innerHTML=navMarkup();}
   document.getElementById('footer-local').textContent=eventKeyText();
-  main.innerHTML=(view==='pet'&&!state.name)?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='event'?renderEventPage():view==='mine'?renderMinePage():renderWelcome();
+  main.innerHTML=(view==='pet'&&!state.name)?renderWelcome():view==='pet'?renderPetPage():view==='explore'?renderExplore():view==='event'?renderEventPage():view==='mine'?renderMinePage():view==='help'?renderHelp():renderWelcome();
   if(view==='mine'){updateAccountState();(minePhotos?renderMineGrid():loadMinePhotos());loadMyVouchers();if(devMode)renderWorkbench();}
   updateAccountHeader();
   if(view==='explore'){initExploreMap();}
@@ -1055,7 +1082,7 @@ function hero(welcome=false){
 }
 function renderWelcome(){
   const modeNote=mode==='api'?'':'<p class="form-foot">离线演示：进度只存在本机。</p>';
-  return `<div class="page-intro"><div><h1>到现场打卡，收集造型</h1></div></div><div class="main-grid welcome-grid">${hero(true)}<div class="side-stack"><section class="panel adopt-panel"><h2>给它起个名字</h2><form id="adopt-form"><label class="name-label" for="pet-name">宠物名字<span>最多 12 字</span></label><input id="pet-name" class="name-input" name="petName" value="" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="name-error" placeholder="例如：MOMO"><div class="input-error" id="name-error" role="alert"></div><button type="submit" class="btn btn-primary" id="adopt-button">领养</button></form>${modeNote}</section></div></div>`;
+  return `<div class="page-intro"><div><h1>到现场打卡，收集造型</h1></div></div><div class="main-grid welcome-grid">${hero(true)}<div class="side-stack"><section class="panel adopt-panel"><h2>给它起个名字</h2><form id="adopt-form"><label class="name-label" for="pet-name">宠物名字<span>最多 12 字</span></label><input id="pet-name" class="name-input" name="petName" value="" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="name-error" placeholder="例如：MOMO"><div class="input-error" id="name-error" role="alert"></div><button type="submit" class="btn btn-primary" id="adopt-button">领养</button></form>${modeNote}</section><div style="text-align:center;margin-top:10px"><button type="button" class="text-btn" style="width:auto" data-action="nav" data-view="help">玩法说明</button></div></div></div>`;
 }
 function progressMarkup(){
   return `<div class="progress-row"><div class="stamp-track" aria-label="已收集 ${count()} 个地点，共 ${SPOTS.length} 个">${SPOTS.map((s,i)=>`${i?`<span class="track-line ${state.rewards[s.id]?'done':''}" aria-hidden="true"></span>`:''}<span class="stamp ${state.rewards[s.id]?'done':''}" title="${s.zone}${state.rewards[s.id]?'：已打卡':'：未打卡'}">${pixIcon(s.icon)}</span>`).join('')}</div><span class="count" role="img" aria-label="${count()} / ${SPOTS.length}">${pixText(count()+'/'+SPOTS.length,3)}</span></div>`;
@@ -1063,9 +1090,8 @@ function progressMarkup(){
 function goalMarkup(){
   const n=count(),complete=n===SPOTS.length;
   const heading=state.evolved?'限定形态已解锁':complete?'全部地点，已经集齐':n===0?`今天有 ${SPOTS.length} 个地点`:`已收集 ${n} 个地点`;
-  const copy=state.evolved?'':complete?'可以解锁活动限定形态了。':'每站打卡得一套造型，集齐解锁限定形态。';
   const action=complete&&!state.evolved?{act:'evolve-prompt',label:'解锁限定形态'}:{act:'nav',label:n===0?'去拿新造型':state.evolved?'去哪儿看看':'继续打卡'};
-  return `<section class="goal-panel panel"><h2>${heading}</h2>${copy?`<p class="goal-copy">${copy}</p>`:''}${progressMarkup()}<button class="btn ${complete&&!state.evolved?'btn-primary':'btn-dark'}" type="button" data-action="${action.act}" ${action.act==='nav'?'data-view="explore"':''}>${action.label}</button></section>`;
+  return `<section class="goal-panel panel"><h2>${heading}</h2>${progressMarkup()}<button class="btn ${complete&&!state.evolved?'btn-primary':'btn-dark'}" type="button" data-action="${action.act}" ${action.act==='nav'?'data-view="explore"':''}>${action.label}</button><button type="button" class="text-btn" style="width:auto;margin-left:10px" data-action="nav" data-view="help">玩法说明</button></section>`;
 }
 function pastCollectionMarkup(){
   const currentKey=eventData&&eventData.key;
@@ -1150,11 +1176,6 @@ function enablePedometer(){
   }else start();
 }
 /* ---------- 养成：喂食消耗饲料，心情随时间衰减 ---------- */
-function nextMilestoneText(streak){
-  const M=[3,7,14,30,60,100];
-  const next=M.find(m=>m>streak);
-  return next?` · 再连 ${next-streak} 天奖 5 包`:'';
-}
 function feedMarkup(){
   if(mode!=='api'||!state.name||!pet)return '';
   const mood=moodOf();
@@ -1175,8 +1196,8 @@ function feedMarkup(){
     ?`<button type="button" class="btn ${mood<70?'btn-primary':'btn-dark'}" style="width:auto;min-height:0;padding:9px 18px" data-action="feed">喂食（-1 包）</button>`
     :'<span class="about-list mono" style="margin:0">没饲料了 · 走路赚</span>';
   const tierText=mood<20?'饿扁了':mood<40?'饿了':mood<70?'有点馋':'状态不错';
-  const earnNote=earnLeft<=0?' · 今日饲料已领满 15 包':carry>0?` · 再走${toNext}步=1包`:' · 500步=1包';
-  return `<section class="panel feed-panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span class="about-list mono" style="margin:0">饲料 x${tokens} · 今日 ${localSteps} 步${earnNote}</span>${pedo}</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px"><span class="about-list mono" style="margin:0">${tierText}（心情 ${mood}）${streak>0?` · 连喂 ${streak} 天`:''}${nextMilestoneText(streak)}</span>${feedBtn}</div></section>`;
+  const earnNote=earnLeft<=0?' · 今日已领满 15 包':carry>0?` · 再走${toNext}步+1包`:'';
+  return `<section class="panel feed-panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span class="about-list mono" style="margin:0">饲料 x${tokens} · 今日 ${localSteps} 步${earnNote}</span>${pedo}</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px"><span class="about-list mono" style="margin:0">${tierText}（心情 ${mood}）${streak>0?` · 连喂 ${streak} 天`:''}</span>${feedBtn}</div></section>`;
 }
 function renderFeedPanelLive(){
   const panel=document.querySelector('.feed-panel');
@@ -2203,7 +2224,7 @@ function renderMinePage(){
     :'';
     const soundOff=(function(){try{return localStorage.getItem('outie.mute')==='1';}catch(e){return false;}})();
     const about=mode==='api'
-    ?`<p class="about-list">地图引擎：${mapEngine().label} · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="map-engine-toggle">切换</button></p><p class="about-list">音效：${soundOff?'关':'开'} · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="sound-toggle">${soundOff?'打开':'关闭'}</button></p>`
+    ?`<p class="about-list">地图引擎：${mapEngine().label} · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="map-engine-toggle">切换</button></p><p class="about-list">音效：${soundOff?'关':'开'} · <button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="sound-toggle">${soundOff?'打开':'关闭'}</button></p><p class="about-list"><button type="button" style="background:none;padding:0;text-decoration:underline;text-underline-offset:3px;font:inherit;color:inherit" data-action="nav" data-view="help">玩法说明</button></p>`
     :`<p class="about-list">离线模式，进度只存在本机。</p>`;
   const accountCard=mode==='api'
     ?`<div class="setting-section" style="border-top:0;margin-top:0;padding-top:0"><h3>账号</h3><div id="account-card"><p class="about-list">正在查询…</p></div></div>`
