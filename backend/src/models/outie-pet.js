@@ -25,6 +25,8 @@ const outiePetSchema = new mongoose.Schema({
   stepsCarry: { type: Number, default: 0 },
   stepsDay: { type: Number, default: 0 },
   stepsDayKey: { type: String, default: '' },
+  wxCreditedDay: { type: Number, default: 0 },
+  wxCreditedKey: { type: String, default: '' },
   // 旧字段：仅保留兼容历史数据（读入时惰性迁移到 rewards/evolvedEvents）
   eventKey: { type: String, default: '' },
   evolved: { type: Boolean, default: false },

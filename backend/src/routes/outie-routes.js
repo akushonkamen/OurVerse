@@ -8,6 +8,10 @@ const {
   checkin,
   feedPet,
   touchPet,
+  wxSession,
+  wxBind,
+  wxWerun,
+  bindCode,
   commentActivity,
   myVouchers,
   redeemVoucher,
@@ -41,6 +45,10 @@ router.post('/pet/feed', optionalAuth, feedPet);
 router.post('/pet/touch', optionalAuth, touchPet);
 router.post('/steps/sync', optionalAuth, syncSteps);
 router.get('/comments/activity', optionalAuth, commentActivity);
+router.post('/wx/session', wxSession);
+router.post('/wx/bind', optionalAuth, wxBind);
+router.post('/wx/werun', wxWerun);
+router.get('/wx/bindcode', optionalAuth, bindCode);
 router.get('/vouchers/mine', optionalAuth, myVouchers);
 router.post('/vouchers/redeem', optionalAuth, redeemVoucher);
 router.get('/me', optionalAuth, getMe);

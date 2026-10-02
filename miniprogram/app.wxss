@@ -1,0 +1,7 @@
+page { background: #efecdf; font-family: ui-monospace, Menlo, monospace; color: #26241c; }
+.card { background: #faf8ee; border: 3px solid #26241c; margin: 16px; padding: 18px; }
+.mono { font-family: ui-monospace, Menlo, monospace; }
+.big { font-size: 40px; font-weight: 700; letter-spacing: 4px; }
+.muted { color: #7c7867; font-size: 12px; }
+button { background: #26241c; color: #efecdf; border-radius: 0; font-weight: 700; }
+button[disabled] { background: #c8c3ad; color: #efecdf; }

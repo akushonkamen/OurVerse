@@ -126,6 +126,10 @@ const config = {
   outie: {
     // 生产环境强制关闭定位旁路（防 curl 无坐标打卡刷奖励）
     devSkipGeo: process.env.NODE_ENV === 'production' ? false : process.env.OUTIE_DEV_SKIP_GEO === 'true',
+    wx: {
+      appid: process.env.WX_APPID || '',
+      secret: process.env.WX_SECRET || ''
+    },
     autoSeed: process.env.OUTIE_AUTOSEED === 'true'
   }
 };

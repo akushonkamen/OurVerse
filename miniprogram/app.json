@@ -1,0 +1,10 @@
+{
+  "pages": ["pages/index/index"],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#efecdf",
+    "navigationBarTitleText": "OUTIE 步数",
+    "navigationBarTextStyle": "black"
+  },
+  "style": "v2"
+}

@@ -1,0 +1,7 @@
+{
+  "appid": "填入你的小程序AppID",
+  "projectname": "outie-steps",
+  "compileType": "miniprogram",
+  "setting": { "urlCheck": true, "es6": true },
+  "libVersion": "latest"
+}

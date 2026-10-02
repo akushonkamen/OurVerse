@@ -185,6 +185,10 @@ const effectiveTokens = pet => (pet.feedTokens == null ? 3 : pet.feedTokens);
 // 上报本机计步：$inc 原子发放（防与喂食并发时的铸币竞态）；速率闸与日赚上限防刷；零头跨日保留
 const syncStepsForIdentity = async (req, stepsInput) => {
   const identityKey = requireIdentity(req);
+  const WxLink = require('../models/wxlink');
+  if (await WxLink.findOne({ identityKey })) {
+    throw new SE(400, '已绑定微信步数：以微信运动为准，无需页面同步');
+  }
   await maybeMigrateAnonymousPet(req);
   const pet = await findLatestPet(identityKey);
   if (!pet) throw new ServiceError(400, '先领养一只宠物，步数才有用处');
@@ -455,7 +459,9 @@ const getPetState = async req => {
     return { pet: null };
   }
   const event = await findActiveEvent();
-  return { pet: serializePet(pet, event), collection: await collectionOf(pet) };
+  const WxLink = require('../models/wxlink');
+  const wxLinked = Boolean(await WxLink.findOne({ identityKey: pet.identityKey }));
+  return { pet: serializePet(pet, event), collection: await collectionOf(pet), wxLinked };
 };
 
 const checkinAtSpot = async req => {

@@ -1,4 +1,5 @@
 const outieService = require('../services/outie-service');
+const wxService = require('../services/wx-service');
 const config = require('../config/env');
 
 const handleError = (res, error, fallbackMessage) => {
@@ -108,6 +109,40 @@ const redeemVoucher = async (req, res) => {
   }
 };
 
+const wxSession = async (req, res) => {
+  try {
+    res.json(await wxService.session(String((req.body || {}).code || '')));
+  } catch (error) {
+    handleError(res, error, '微信登录失败');
+  }
+};
+
+const wxBind = async (req, res) => {
+  try {
+    res.json(await wxService.bind(String((req.body || {}).wxToken || ''), String((req.body || {}).code || '')));
+  } catch (error) {
+    handleError(res, error, '绑定失败');
+  }
+};
+
+const wxWerun = async (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json(await wxService.creditWeRun(String(b.wxToken || ''), String(b.encryptedData || ''), String(b.iv || '')));
+  } catch (error) {
+    handleError(res, error, '步数同步失败');
+  }
+};
+
+const bindCode = async (req, res) => {
+  try {
+    const identityKey = req.userId ? `u:${req.userId}` : `a:${req.anonymousId || ''}`;
+    res.json(wxService.genBindCode({ identityKey, anonymousId: req.anonymousId || '' }));
+  } catch (error) {
+    handleError(res, error, '生成绑定码失败');
+  }
+};
+
 const commentActivity = async (req, res) => {
   try {
     res.json(await outieService.myCommentActivity(req));
@@ -209,6 +244,10 @@ module.exports = {
   checkin,
   feedPet,
   touchPet,
+  wxSession,
+  wxBind,
+  wxWerun,
+  bindCode,
   commentActivity,
   myVouchers,
   redeemVoucher,
