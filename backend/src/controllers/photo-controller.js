@@ -125,7 +125,7 @@ const uploadPhoto = async (req, res) => {
 
       distanceToUser = calculateDistance(parsedUserLat, parsedUserLng, photoLat, photoLng);
       if (distanceToUser > config.maxDistanceVerification) {
-        return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
+        return res.status(400).json({ error: `你距拍照地点 ${Math.round(distanceToUser)} 米。请到拍照地点附近，再上传。` });
       }
     } else if (['amap', 'gps', 'ip'].includes(locationSource)) {
       // 接受定位链路产出的真实坐标：amap=高德SDK，gps=浏览器定位，ip=服务端IP定位（website.html 的 IP 链路同此）
@@ -501,7 +501,7 @@ const addPhotoComment = async (req, res) => {
     const who = String(req.userId || req.anonymousId || req.ip);
     const now = Date.now();
     const last = commentRateLimiter.get(who) || 0;
-    if (now - last < 10000) return res.status(429).json({ error: '评论发太快了，歇一下' });
+    if (now - last < 10000) return res.status(429).json({ error: '评论发送过快。请稍后再试。' });
     commentRateLimiter.set(who, now);
   }
   try {
@@ -677,7 +677,7 @@ const uploadAnonymousPhoto = async (req, res) => {
 
       distanceToUser = calculateDistance(parsedUserLat, parsedUserLng, photoLat, photoLng);
       if (distanceToUser > config.maxDistanceVerification) {
-        return res.status(400).json({ error: `照片拍摄位置与您当前所在位置相距过远 (${Math.round(distanceToUser)}米)，请确认您在照片拍摄地点附近` });
+        return res.status(400).json({ error: `你距拍照地点 ${Math.round(distanceToUser)} 米。请到拍照地点附近，再上传。` });
       }
     } else if (['amap', 'gps', 'ip'].includes(locationSource)) {
       if (!hasUserCoords) {

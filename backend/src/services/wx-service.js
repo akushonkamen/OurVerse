@@ -52,7 +52,7 @@ const bind = async (wxToken, code) => {
     throw new SE(401, '小程序会话过期，请重新打开小程序');
   }
   const rec = takeBindCode(code);
-  if (!rec) throw new SE(400, '绑定码不对或已过期，请在 OUTIE 页面重新生成');
+  if (!rec) throw new SE(400, '绑定码错误或已过期。请在 OUTIE 网页重新生成。');
   await WxLink.updateOne(
     { openid: payload.openid },
     { openid: payload.openid, identityKey: rec.identityKey, anonymousId: rec.anonymousId },
@@ -93,7 +93,7 @@ const creditWeRun = async (wxToken, encryptedData, iv) => {
   });
   const realSteps = todayEntry ? todayEntry.step : 0;
   const pet = await OutiePet.findOne({ identityKey: link.identityKey }).sort({ createdAt: -1 });
-  if (!pet) throw new SE(400, '该账号还没有宠物');
+  if (!pet) throw new SE(400, '还未领养宠物。请在 OUTIE 网页领养。');
   const sameDay = pet.stepsDayKey === today;
   const prevReal = sameDay ? (pet.wxCreditedDay || 0) : 0;
   const delta = Math.max(0, Math.min(realSteps - prevReal, 60000));

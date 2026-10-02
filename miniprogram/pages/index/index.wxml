@@ -1,16 +1,16 @@
 <view class="card">
-  <view class="mono muted">OUTIE 步数桥梁</view>
+  <view class="mono muted">OUTIE 步数同步</view>
   <view class="big mono">{{steps}}</view>
-  <view class="mono muted">今日步数 · 饲料 x{{tokens}} · {{petName || '未绑定'}} 心情 {{mood}}</view>
+  <view class="mono muted">今日步数 · 饲料 {{tokens}} 包 · {{petName || '未绑定'}} 心情 {{mood}}</view>
 </view>
 <view class="card" wx:if="{{!bound}}">
   <view class="mono">① 在 OUTIE 网页「我的」页点「绑定微信步数」</view>
-  <view class="mono">② 把 6 位绑定码输到这里</view>
+  <view class="mono">② 输入 6 位绑定码</view>
   <input placeholder="6 位绑定码" bindinput="onBindInput" style="border:3px solid #26241c;padding:12px;margin:12px 0" />
   <button bindtap="doBind">绑定</button>
 </view>
 <view class="card" wx:if="{{bound}}">
   <button bindtap="syncSteps">同步微信运动步数</button>
-  <view class="muted mono" style="margin-top:12px">每天打开一次小程序即可同步。步数按 500 步 = 1 包饲料入账，与页面内计步共用每日上限。</view>
+  <view class="muted mono" style="margin-top:12px">每天打开一次小程序，即可同步。500 步换 1 包饲料。与网页计步共用每日上限。</view>
 </view>
 <view class="card"><view class="mono muted">{{log}}</view></view>

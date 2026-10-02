@@ -157,14 +157,14 @@ const escapeHtml = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '
 app.get('/s/:photoId', async (req, res) => {
   try {
     const photo = await Photo.findById(req.params.photoId).catch(() => null);
-    if (!photo) return res.status(404).send('Not found');
+    if (!photo) return res.status(404).type('html').send('<body style="background:#efecdf;font-family:monospace;padding:24px"><p>照片不存在或已删除。</p><a href="/" style="color:#26241c">返回 OUTIE</a></body>');
     const origin = `${req.protocol}://${req.get('host')}`;
     const img = photo.url.startsWith('http') ? photo.url : origin + photo.url;
     const caption = escapeHtml(String(photo.caption || '').trim().slice(0, 60) || '现场照片');
     const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${caption} · OUTIE</title>
-<meta property="og:title" content="${caption} · OUTIE 到现场打卡，收集造型">
-<meta property="og:description" content="我在 OUTIE 现场拍下了这一刻——来看看，然后领养你的宠物去打卡。">
+<meta property="og:title" content="${caption} · OUTIE">
+<meta property="og:description" content="我在 OUTIE 现场拍了照片。领养宠物，去现场打卡。">
 <meta property="og:image" content="${escapeHtml(img)}">
 <meta name="twitter:card" content="summary_large_image">
 <style>body{margin:0;background:#efecdf;font-family:ui-monospace,monospace;display:flex;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px}img{max-width:min(92vw,560px);border:3px solid #26241c;image-rendering:auto}p{color:#26241c;font-size:13px;margin:0}a{background:#26241c;color:#efecdf;text-decoration:none;padding:12px 22px;font-weight:700;font-size:14px;border:2px solid #26241c}</style></head>
@@ -172,7 +172,7 @@ app.get('/s/:photoId', async (req, res) => {
     res.set('Cache-Control', 'public, max-age=3600');
     res.type('html').send(html);
   } catch (e) {
-    res.status(500).send('Error');
+    res.status(500).type('html').send('<body style="background:#efecdf;font-family:monospace;padding:24px"><p>服务暂不可用。请稍后重试。</p></body>');
   }
 });
 
@@ -196,7 +196,7 @@ app.get('/health', (req, res) => {
 app.use((err, req, res, next) => {
   console.error('[app] unhandled error:', err && err.message);
   if (req.path.startsWith('/api') || req.headers.accept?.includes('application/json')) {
-    return res.status(err.status || 500).json({ error: err.status ? err.message : '服务开小差了，请稍后重试' });
+    return res.status(err.status || 500).json({ error: err.status ? err.message : '服务暂不可用。请稍后重试。' });
   }
   res.status(500).send('Internal Server Error');
 });

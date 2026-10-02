@@ -191,15 +191,15 @@ const syncStepsForIdentity = async (req, stepsInput) => {
   }
   await maybeMigrateAnonymousPet(req);
   const pet = await findLatestPet(identityKey);
-  if (!pet) throw new ServiceError(400, '先领养一只宠物，步数才有用处');
+  if (!pet) throw new ServiceError(400, '请先领养宠物。');
   let steps = Math.floor(Number(stepsInput));
-  if (!Number.isFinite(steps) || steps <= 0) throw new ServiceError(400, '步数不对');
+  if (!Number.isFinite(steps) || steps <= 0) throw new ServiceError(400, '步数数据无效。请重新同步。');
   steps = Math.min(steps, 600);
   // 速率闸：步行生理上限约 150 步/分，超速部分按 150 步/分折算
   const now = Date.now();
   const lastAt = pet.lastStepSyncAt ? new Date(pet.lastStepSyncAt).getTime() : 0;
   const gapMin = lastAt ? Math.min(Math.max((now - lastAt) / 60000, 0.5), 1440) : 1440;
-  if (now - lastAt < 15000) throw new ServiceError(429, '步数同步太频繁，稍等一下');
+  if (now - lastAt < 15000) throw new ServiceError(429, '同步过于频繁。请稍后再试。');
   const maxByRate = Math.ceil(gapMin * 150);
   const credited = Math.min(steps, maxByRate);
 
@@ -311,7 +311,7 @@ const feedPetForIdentity = async req => {
   const identityKey = requireIdentity(req);
   await maybeMigrateAnonymousPet(req);
   const pet = await findLatestPet(identityKey);
-  if (!pet) throw new ServiceError(400, '先领养一只宠物，才能喂它');
+  if (!pet) throw new ServiceError(400, '请先领养宠物。');
   const today = dayKeyOf();
   const startingTokens = effectiveTokens(pet);
   if (startingTokens < 1) {
@@ -502,7 +502,7 @@ const checkinAtSpot = async req => {
     const radius = Math.max(spot.radiusMeters || DEFAULT_SPOT_RADIUS_METERS, claimedAcc * 1.5);
     const distance = calculateDistance(viewerLat, viewerLng, spot.lat, spot.lng);
     if (distance > radius) {
-      throw new ServiceError(400, `距离 ${spot.name} ${Math.round(distance)} 米，需靠近 ${radius} 米内才能打卡`, {
+      throw new ServiceError(400, `距点位 ${spot.name} ${Math.round(distance)} 米。需到点位 ${radius} 米内，再打卡。`, {
         distanceMeters: Math.round(distance)
       });
     }
@@ -571,7 +571,7 @@ const checkinAtSpot = async req => {
   let visitorNames = [];
   if (spotVisitors > 1) {
     const visitorPets = await OutiePet.find({ [spotPath]: { $exists: true } }, { name: 1 }).sort({ updatedAt: -1, createdAt: -1 }).limit(5);
-    visitorNames = visitorPets.map(vp => vp.name || '神秘训练家').filter(n => n && n !== (petAfter.name || ''));
+    visitorNames = visitorPets.map(vp => vp.name || '未命名').filter(n => n && n !== (petAfter.name || ''));
   }
   const petFinal = petAfter;
 
@@ -752,7 +752,7 @@ const getEventByKey = async key => {
     const path = `rewards.${event.key}.${sp.key}`;
     const pets = await OutiePet.find({ [path]: { $exists: true } }, { name: 1 }).sort({ [path]: -1 }).limit(6);
     const visitors = await OutiePet.countDocuments({ [path]: { $exists: true } });
-    return { key: sp.key, visitors, names: pets.map(x => x.name || '神秘训练家') };
+    return { key: sp.key, visitors, names: pets.map(x => x.name || '未命名') };
   }));
   return {
     event: serializeEvent(event),

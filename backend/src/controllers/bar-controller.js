@@ -20,7 +20,7 @@ const checkinAtBar = async (req, res) => {
     if (Number.isFinite(viewerLng) && Number.isFinite(viewerLat)) {
       const distance = calculateDistance(viewerLat, viewerLng, barLat, barLng);
       if (distance > MAX_CHECKIN_DISTANCE_METERS) {
-        return res.status(400).json({ error: `距离 ${Math.round(distance)} 米，需靠近 ${MAX_CHECKIN_DISTANCE_METERS} 米内才能打卡` });
+        return res.status(400).json({ error: `距点位 ${Math.round(distance)} 米。需到点位 ${MAX_CHECKIN_DISTANCE_METERS} 米内，再打卡。` });
       }
     }
 
