@@ -315,7 +315,7 @@ const feedPetForIdentity = async req => {
   const today = dayKeyOf();
   const startingTokens = effectiveTokens(pet);
   if (startingTokens < 1) {
-    throw new ServiceError(400, '饲料不够了：开着 OUTIE 走路，500 步换 1 包');
+    throw new ServiceError(400, '饲料不够了');
   }
   const firstToday = pet.lastFeedDay !== today;
   const yesterday = dayKeyOf(new Date(Date.now() - 86400000));
@@ -328,7 +328,7 @@ const feedPetForIdentity = async req => {
     { $inc: { feedTokens: -1 + (milestoneHit ? 5 : 0), feedTotal: 1 }, $set: { lastFeedDay: today, lastFedAt: new Date(), feedStreak: streakNext } },
     { new: true }
   );
-  if (!updated) throw new ServiceError(400, '饲料不够了：开着 OUTIE 走路，500 步换 1 包');
+  if (!updated) throw new ServiceError(400, '饲料不够了');
   const event = await findActiveEvent();
   return { pet: serializePet(updated, event), alreadyFed: !firstToday, firstToday, milestone: milestoneHit };
 };

@@ -1161,7 +1161,7 @@ async function syncSteps(){
 }
 function enablePedometer(){
   const D=window.DeviceMotionEvent;
-  if(!D){pedometerState='unsupported';try{localStorage.setItem('outie.pedometer','unsupported');}catch(e){}render();toast('这台设备不支持计步，去现场打卡也能赚饲料。');return;}
+  if(!D){pedometerState='unsupported';try{localStorage.setItem('outie.pedometer','unsupported');}catch(e){}render();toast('本设备不支持计步');return;}
   const start=()=>{
     window.addEventListener('devicemotion',onMotion);
     pedometerState='on';
@@ -1204,13 +1204,13 @@ function feedMarkup(){
   const toNext=Math.max(1,500-carry);
   const earnLeft=Math.max(0,15-earned);
   const pedo=pedometerState==='unsupported'
-    ?'<span class="about-list mono" style="margin:0">本设备不支持计步 · 去现场打卡也能赚</span>'
+    ?'<span class="about-list mono" style="margin:0">本设备不支持计步</span>'
     :pedometerState==='on'
     ?'<span class="about-list mono" style="margin:0">计步中（开着页面走才算）</span>'
     :`<button type="button" class="live-status-btn" data-action="pedometer">${pedometerState==='denied'?'重开计步':'开启计步'}</button>`;
   const feedBtn=tokens>0
     ?`<button type="button" class="btn ${mood<70?'btn-primary':'btn-dark'}" style="width:auto;min-height:0;padding:9px 18px" data-action="feed">喂食（-1 包）</button>`
-    :'<span class="about-list mono" style="margin:0">没饲料了 · 走路赚</span>';
+    :'<span class="about-list mono" style="margin:0">没饲料了</span>';
   const tierText=mood<20?'饿扁了':mood<40?'饿了':mood<70?'有点馋':'状态不错';
   const earnNote=earnLeft<=0?' · 今日已领满 15 包':carry>0?` · 再走${toNext}步+1包`:'';
   return `<section class="panel feed-panel"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><span class="about-list mono" style="margin:0">饲料 x${tokens} · 今日 ${localSteps} 步${earnNote}</span>${pedo}</div><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:6px"><span class="about-list mono" style="margin:0">${tierText}（心情 ${mood}）${streak>0?` · 连喂 ${streak} 天`:''}</span>${feedBtn}</div></section>`;
