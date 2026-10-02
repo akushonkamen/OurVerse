@@ -462,7 +462,7 @@ rebuildLooks();
 const ACC={base:'#a3463c',music:'#41597e',art:'#a3463c',market:'#a8842e',evolved:'#4a6c46'};
 const ACC2={base:'#a3463c',music:'#41597e',art:'#41597e',market:'#a3463c',evolved:'#a8842e'};
 let mode='offline',eventData=null,devSkipGeo=false,pet=null,pendingEvolution=false;
-let pastCollection=[];
+let pastCollection=[],wxLinked=false,wxBindCode=null;
 let svgId=0,storageOK=true,toastTimer=null,flashNext=false;
 let state=blankState();
 const VIEWS=['pet','explore','event','mine','help'];
@@ -1175,6 +1175,22 @@ function enablePedometer(){
     }).catch(()=>toast('计步开启失败，再试一次。'));
   }else start();
 }
+/* ---------- 微信步数绑定（伴生小程序） ---------- */
+async function genWxBindCode(){
+  try{
+    const d=await apiFetch('/outie/wx/bindcode');
+    wxBindCode=d.code;
+    render();
+  }catch(e){toast(errText(e));}
+}
+function wxCard(){
+  if(mode!=='api'||!state.name||!pet)return '';
+  if(wxLinked)return `<section class="panel feed-panel"><span class="about-list mono" style="margin:0">微信步数：已绑定 · 每日打开小程序同步即可</span></section>`;
+  const body=wxBindCode
+    ?`<span class="about-list mono" style="margin:0">绑定码 <strong style="font-size:16px;letter-spacing:.15em">${wxBindCode}</strong>（10 分钟内有效）· 在微信小程序里输入</span>`
+    :`<span class="about-list mono" style="margin:0">绑定后用微信运动步数赚饲料（不再依赖开着页面）</span><button type="button" class="btn btn-dark" style="width:auto;min-height:0;padding:9px 14px" data-action="wx-bindcode">绑定微信步数</button>`;
+  return `<section class="panel feed-panel">${body}</section>`;
+}
 /* ---------- 养成：喂食消耗饲料，心情随时间衰减 ---------- */
 function feedMarkup(){
   if(mode!=='api'||!state.name||!pet)return '';
@@ -1209,7 +1225,7 @@ function renderFeedPanelLive(){
   panel.querySelectorAll('span').forEach((sp,i)=>{const ns=next.querySelectorAll('span')[i];if(ns&&sp.textContent!==ns.textContent)sp.textContent=ns.textContent;});
 }
 function renderPetPage(){
-  return `<div class="page-intro"><div><h1>我的宠物</h1></div><span class="intro-mark mono">${state.evolved?'FORM '+LOOKS.length+'/'+LOOKS.length:'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/'+LOOKS.length}</span></div><div class="main-grid">${hero()}<div class="side-stack">${feedMarkup()}${mode==='api'&&!eventData?`<section class="panel goal-panel"><h2>当前没有进行中的活动</h2></section>`:goalMarkup()}${collectionMarkup()}</div></div>`;
+  return `<div class="page-intro"><div><h1>我的宠物</h1></div><span class="intro-mark mono">${state.evolved?'FORM '+LOOKS.length+'/'+LOOKS.length:'FORM '+(LOOKS.filter(l=>unlocked(l.id)).length)+'/'+LOOKS.length}</span></div><div class="main-grid">${hero()}<div class="side-stack">${wxCard()}${feedMarkup()}${mode==='api'&&!eventData?`<section class="panel goal-panel"><h2>当前没有进行中的活动</h2></section>`:goalMarkup()}${collectionMarkup()}</div></div>`;
 }
 /* ---------- pixel city map (去哪儿) ---------- */
 function mapProject(lng,lat){
@@ -2172,7 +2188,8 @@ async function refreshAuthState(){
     const me=await apiFetch('/outie/me');
     pet=me&&me.pet?me.pet:null;
     pastCollection=me&&Array.isArray(me.collection)?me.collection:[];
-  }catch(e){pet=null;pastCollection=[];}
+    wxLinked=Boolean(me&&me.wxLinked);
+  }catch(e){pet=null;pastCollection=[];wxLinked=false;}
   state=pet?stateFromPet(pet):blankState();
 }
 async function updateAccountState(){
@@ -2570,6 +2587,7 @@ function handleAction(button){
       if(wbSpots&&wbSpots.length>1){wbSpots.splice(i,1);renderWorkbench();}
       break;
     }
+    case 'wx-bindcode':genWxBindCode();break;
     case 'pedometer':enablePedometer();break;
     case 'share-moment':{
       const lk=lookFor(state.equipped==='evolved'?'evolved':state.equipped);
