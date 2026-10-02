@@ -2522,11 +2522,11 @@ function handleAction(button){
       }catch(error){button.disabled=false;toast(errText(error));}
     })();break;
     case 'voucher-retry':loadMyVouchers();break;
-    case 'wb-redeem':{
+    case 'wb-redeem':(async()=>{
       const ev=button.dataset.event;
       const input=document.getElementById('redeem-'+ev);
       const code=input?input.value:'';
-      if(!code){toast('先输入客人出示的核销码。');break;}
+      if(!code){toast('先输入客人出示的核销码。');return;}
       button.disabled=true;
       try{
         const d=await apiFetch('/outie/vouchers/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
@@ -2534,8 +2534,7 @@ function handleAction(button){
         if(input)input.value='';
         loadMyEventsList(true);
       }catch(error){button.disabled=false;toast(errText(error));}
-      break;
-    }
+    })();break;
     case 'wb-add':{
       ensureWbSpots();
       if(wbSpots.length>=10){toast('最多 10 个点位。');break;}
