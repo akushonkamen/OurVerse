@@ -1530,6 +1530,7 @@ function startLocate(){
     loadNearEvents(true);
     const acc=Math.round(geo.accuracy||0);
     toast('已定位'+(acc>0?' · 精度 '+acc+' 米':''));
+    startGeoWatch();
   }).catch(async err=>{
     if(mode!=='api')return;
     // 旧官网同款：GPS 均失败 → 服务端 IP 定位（城市级，服务端发起，不依赖浏览器权限）
@@ -1557,6 +1558,50 @@ function startLocate(){
     toast(err&&String(err.message).includes('PERMISSION_DENIED')?'定位权限未开启。开启后点「刷新」':'定位失败。点「刷新」重试');
   });
 }
+/* ---------- 位置监听：位移超阈值自动刷新附近内容 ---------- */
+let geoWatchId=null;
+let lastRefreshPos=null;   // 上次触发刷新时的坐标（GCJ-02）
+let lastRefreshTime=0;     // 上次触发刷新的时间戳
+const REFRESH_MOVE_METERS=100;    // 位移阈值（GPS 抖动通常 ±5-20 米，100 米=真正的位置变化）
+const REFRESH_COOLDOWN_MS=30000;  // 最短刷新间隔
+
+function stopGeoWatch(){
+  if(geoWatchId!==null&&navigator.geolocation){
+    navigator.geolocation.clearWatch(geoWatchId);
+    geoWatchId=null;
+  }
+}
+
+function startGeoWatch(){
+  if(mode!=='api'||geoWatchId!==null||!navigator.geolocation)return;
+  lastRefreshPos=geo.coords?{...geo.coords}:null;
+  lastRefreshTime=Date.now();
+  geoWatchId=navigator.geolocation.watchPosition(pos=>{
+    const g=wgs84togcj02(pos.coords.longitude,pos.coords.latitude);
+    const accuracy=pos.coords.accuracy||0;
+    // 忽略精度太差的读数（>500 米可能是 WiFi 三角测量而非 GPS）
+    if(accuracy>500)return;
+    const newPos={lng:g.lng,lat:g.lat};
+    if(!geo.coords){geo.coords=newPos;geo.accuracy=Math.max(accuracy,50);geo.state='ok';geo.via='gps';return;}
+    const moved=haversineMeters(geo.coords,newPos);
+    // 位移 ≥100 米才刷新（过滤 GPS 抖动）
+    if(moved>=REFRESH_MOVE_METERS){
+      geo.coords=newPos;
+      geo.accuracy=Math.max(accuracy,50);
+      const now=Date.now();
+      if(now-lastRefreshTime>=REFRESH_COOLDOWN_MS){
+        lastRefreshPos={...newPos};
+        lastRefreshTime=now;
+        updateExploreDynamic();
+        loadNearStream(true);
+        loadNearEvents(true);
+        updateWbLocTexts();
+        render();
+      }
+    }
+  },()=>{},{enableHighAccuracy:true,timeout:30000,maximumAge:60000});
+}
+
 /* 地图常驻：进入页面即初始化；定位/点位/照片标记随时叠加 */
 let mapMarkers=[];
 function watchMapSize(handle,container,ms){
@@ -2630,7 +2675,7 @@ function handleAction(button){
       shareMomentCard(lk.id,lk.spec,eventKeyText(),(state.name||'')+' 的限定造型 · '+new Date().toLocaleDateString('zh-CN'),ph);
       break;
     }
-    case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';mapRealFailed=false;destroyRealMap();render();startLocate();break;
+    case 'map-refresh':geo.state='idle';nearPhotos=null;nearStatus='idle';mapRealFailed=false;stopGeoWatch();destroyRealMap();render();startLocate();break;
     case 'photo-new':{let pe=null;try{pe=button.dataset.event?JSON.parse(button.dataset.event):null;}catch(e){}startPhotoPost(pe);break;}
     case 'dev-toggle':devMode=!devMode;try{localStorage.setItem('outie.dev-mode',devMode?'on':'off');}catch(e){}render();toast(devMode?'活动方模式已开启。':'活动方模式已关闭。');break;
     case 'wb-use-loc':{
