@@ -293,6 +293,13 @@ a.btn{text-decoration:none}
 .toast.visible{opacity:1;transform:translate(-50%,0)}
 .lang-btn{background:none;border:2px solid var(--ink);color:var(--ink);font-weight:700;font-size:11px;padding:5px 8px;min-width:34px;text-align:center;cursor:pointer}
 .lang-btn:hover{background:var(--faint)}
+.lang-wrap{position:relative}
+.lang-menu{position:absolute;top:100%;right:0;background:var(--panel);border:2px solid var(--ink);z-index:50;min-width:130px;display:flex;flex-direction:column}
+.lang-menu[hidden]{display:none}
+.lang-opt{background:none;border:0;border-bottom:1px solid var(--line);padding:9px 14px;font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;text-align:left;font-family:inherit}
+.lang-opt:last-child{border-bottom:0}
+.lang-opt:hover{background:var(--faint)}
+.lang-opt.cur{background:var(--accent,#a3463c);color:#fff}
 .cmt-dot{position:absolute;top:4px;right:6px;width:8px;height:8px;background:var(--accent,#a3463c);border:2px solid var(--paper);z-index:2}
 .help-panel .help-row{display:flex;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line)}
 .help-panel .help-row:last-child{border-bottom:0}
@@ -429,7 +436,7 @@ window.__OUTIE_I18N_PATTERNS__={"en":[["饲料\ ([^<>「」：·。，]+)\ 包",
       <span class="brand-caption mono">GO OUT. COLLECT.<br>EVOLVE. / 线下打卡收集</span>
     </button>
     <nav class="desktop-nav" id="desktop-nav" aria-label="主导航" hidden></nav>
-    <div class="header-end"><button class="corner-badge dev mono" id="dev-badge" data-action="dev-info" type="button" hidden>DEV</button><button class="lang-btn mono" id="lang-btn" data-action="lang-toggle" type="button" aria-label="切换语言">${}</button><span id="header-account"></span></div>
+    <div class="header-end"><button class="corner-badge dev mono" id="dev-badge" data-action="dev-info" type="button" hidden>DEV</button><span class="lang-wrap"><button class="lang-btn mono" id="lang-btn" data-action="lang-menu" type="button" aria-label="切换语言"></button><span class="lang-menu" id="lang-menu" hidden></span></span><span id="header-account"></span></div>
   </header>
   <div class="storage-warning" id="storage-warning" role="status" hidden>浏览器不允许保存进度。你仍可以体验，但关闭页面后进度不会保留。</div>
   <main id="main" tabindex="-1"></main>
@@ -580,6 +587,12 @@ function updateLangBtn(){
   if(!btn)return;
   const labels={zh:'中',en:'EN',fr:'FR',ja:'あ',de:'DE'};
   btn.textContent=labels[LANG]||'中';
+  const menu=document.getElementById('lang-menu');
+  if(menu&&!menu.hidden){
+    menu.innerHTML=Object.entries({zh:'中文',en:'English',fr:'Français',ja:'日本語',de:'Deutsch'}).map(([code,label])=>
+      `<button type="button" class="lang-opt${code===LANG?' cur':''}" data-action="set-lang" data-lang="${code}">${label}</button>`
+    ).join('');
+  }
 }
 function setLang(lang){
   try{localStorage.setItem('outie.lang',lang);}catch(e){}
@@ -2647,10 +2660,10 @@ function handleAction(button){
       }catch(error){button.disabled=false;toast(errText(error));}
     })();break;
     case 'set-lang':setLang(button.dataset.lang);break;
-    case 'lang-toggle':{
-      const order=['zh','en','fr','ja','de'];
-      const next=order[(order.indexOf(LANG)+1)%order.length];
-      setLang(next);
+    case 'lang-menu':{
+      const menu=document.getElementById('lang-menu');
+      if(menu)menu.hidden=!menu.hidden;
+      if(!menu.hidden)updateLangBtn();
       break;
     }
     case 'voucher-retry':loadMyVouchers();break;
@@ -2792,7 +2805,11 @@ document.addEventListener('input',event=>{
     return;
   }
 });
-document.addEventListener('click',event=>{const button=event.target.closest('button[data-action]');if(button&&!button.disabled)handleAction(button);});
+document.addEventListener('click',event=>{
+  const lm=document.getElementById('lang-menu');
+  if(lm&&!lm.hidden&&!event.target.closest('.lang-wrap'))lm.hidden=true;
+  const button=event.target.closest('button[data-action]');if(button&&!button.disabled)handleAction(button);
+});
 document.addEventListener('submit',async event=>{
   if(event.target.id==='adopt-form'){
     event.preventDefault();const input=document.getElementById('pet-name');const name=trimName(input.value);
